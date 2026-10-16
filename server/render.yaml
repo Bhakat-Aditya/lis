@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: lis-middleman-server
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    rootDir: server
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CACHE_TTL_SECONDS
+        value: 86400
+      - key: LAB_PATH
+        value: lifecare
+      - key: LAB_DATABASE_INIT
+        value: lifecare
+      - key: LAB_DOMAIN
+        value: https://lis.newlifecaremidnapore.com
+      - key: LAB_WEBSITE
+        value: https://lis.newlifecaremidnapore.com
+      - key: LAB_COOKIE_NAME
+        value: lifecareauth
+      - key: UPSTREAM_DEFAULT_USER
+        value: sandip
+      - key: UPSTREAM_DEFAULT_PASS
+        value: Life
+      - key: CLIENT_URL
+        value: https://your-lis-frontend.vercel.app
