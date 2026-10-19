@@ -49,22 +49,70 @@ function numberToWordsINR(amount) {
 
 export const generateBill = async (req, res, next) => {
   try {
-    const { patientId } = req.body;
+    const { patientId, amount, paymentMode = 'CASH', date, info } = req.body;
     if (!patientId) {
       return res.status(400).json({ STATUS: 'FAILED', Message: 'patientId is required' });
     }
 
-    const upstreamData = await upstreamService.post('BILLGENERATE', { patientId }, null, req.user?.upstreamSid);
+    // Determine amount to pay
+    let amtToPay = Number(amount);
+    if (!amtToPay || amtToPay <= 0) {
+      // Look up current summary
+      const currentSummary = await upstreamService.getBillingSummary(patientId, req.user?.upstreamSid);
+      if (currentSummary && currentSummary.due > 0) {
+        amtToPay = currentSummary.due;
+      } else {
+        const pReport = await upstreamService.get('GETPATIENTREPORT', { patientId }, req.user?.upstreamSid);
+        amtToPay = Number(pReport?.payLoadJSON?.patient?.totalBill) || 0;
+      }
+    }
+
+    const today = new Date();
+    const d = String(today.getDate()).padStart(2, '0');
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const y = today.getFullYear();
+    const formattedDate = date || `${d}/${m}/${y}`;
+    const mode = (paymentMode || '').toUpperCase().includes('UPI') ? 'OFFLINE_UPI' : 'CASH';
+
+    // 1. Post real payment to BillingServlet
+    if (amtToPay > 0) {
+      await upstreamService.postBilling(
+        {
+          patientId,
+          action: 'addpayment',
+          date: formattedDate,
+          amt: amtToPay.toFixed(2),
+          paymentMode: mode,
+          info: info || '',
+        },
+        req.user?.upstreamSid
+      );
+    }
+
+    // 2. Trigger BILLGENERATE to sync internal state
+    let upstreamData = null;
+    try {
+      upstreamData = await upstreamService.post('BILLGENERATE', { patientId }, null, req.user?.upstreamSid);
+    } catch (e) {
+      console.warn('[Billing] BILLGENERATE sync note:', e.message);
+    }
+
+    // 3. Fetch fresh summary
+    const summary = await upstreamService.getBillingSummary(patientId, req.user?.upstreamSid);
+
     return res.json({
-      STATUS: upstreamData?.STATUS || 'SUCCESS',
-      StatusCode: upstreamData?.StatusCode || '0000',
-      Message: upstreamData?.Message || 'Bill generated successfully',
+      STATUS: 'SUCCESS',
+      StatusCode: '0000',
+      Message: `Deposit of ₹${amtToPay} recorded successfully`,
       data: upstreamData,
+      summary,
     });
   } catch (err) {
     next(err);
   }
 };
+
+export const recordDeposit = generateBill;
 
 export const getInvoice = async (req, res, next) => {
   try {
@@ -94,11 +142,16 @@ export const getInvoice = async (req, res, next) => {
       amount: Number(r.rate) || 0,
     }));
 
-    const totalAmount = testItems.reduce((acc, curr) => acc + curr.amount, 0) || Number(patient.totalBill) || 0;
-    const discount = 0;
+    // Fetch real-time billing ledger summary from upstream
+    const summary = await upstreamService.getBillingSummary(patientId, req.user?.upstreamSid);
+
+    const testTotal = testItems.reduce((acc, curr) => acc + curr.amount, 0);
+    const totalAmount = summary?.total || (testTotal > 0 ? testTotal : Number(patient.totalBill)) || 0;
+    const discount = summary?.discount || Number(patient.discount || 0);
     const netAmount = Math.max(0, totalAmount - discount);
-    const deposited = patient.billPayStatus === 2 ? netAmount : 0;
-    const due = Math.max(0, netAmount - deposited);
+    const isExplicitPaid = (patient.billPayStatus === 2 || patient.billPayStatus === '2') || summary?.isPaid;
+    const deposited = summary ? summary.paid : (isExplicitPaid ? netAmount : Number(patient.paidBill || 0));
+    const due = summary ? summary.due : (isExplicitPaid ? 0 : Math.max(0, netAmount - deposited));
 
     const invoiceData = {
       clinic: {
@@ -120,16 +173,22 @@ export const getInvoice = async (req, res, next) => {
         collectionDate: patient.sampleTime || patient.regDate || new Date().toLocaleString(),
         referredBy: patient.referedDr || 'Self',
         branch: patient.branch || '1',
+        billPayStatus: (isExplicitPaid || due <= 0) ? 2 : patient.billPayStatus,
       },
       items: testItems,
       financials: {
         totalAmount,
+        totalBill: totalAmount,
         discount,
         netAmount,
+        netBill: netAmount,
         deposited,
+        paidAmount: deposited,
         totalDue: due,
-        paymentMode: 'Cash',
+        dueAmount: due,
+        paymentMode: summary?.paymentLines?.[0]?.mode || 'Cash',
         amountInWords: numberToWordsINR(netAmount),
+        payments: summary?.paymentLines || [],
       },
       printedAt: new Date().toLocaleString(),
       printedBy: req.user?.name || 'Staff',

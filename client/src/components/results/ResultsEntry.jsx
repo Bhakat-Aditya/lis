@@ -2,14 +2,15 @@ import React, { useState } from 'react';
 import {
   Save,
   Calculator,
-  RotateCcw,
-  CheckCircle,
   AlertCircle,
-  FlaskConical,
-  Sparkles,
+  CheckCircle,
+  Info,
+  BookOpen,
 } from 'lucide-react';
 import api from '../../services/api';
 import { StatusBadge } from '../common/Badge.jsx';
+import ReferenceRangeGauge from '../common/ReferenceRangeGauge.jsx';
+import ClinicalGuideModal from '../common/ClinicalGuideModal.jsx';
 
 export default function ResultsEntry({
   patient,
@@ -30,8 +31,11 @@ export default function ResultsEntry({
   });
 
   const [savingId, setSavingId] = useState(null);
+  const [savingAll, setSavingAll] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [guideModalOpen, setGuideModalOpen] = useState(false);
+  const [guideSearchTerm, setGuideSearchTerm] = useState('');
 
   const handleInputChange = (reportId, field, val) => {
     setResultsState((prev) => ({
@@ -41,19 +45,6 @@ export default function ResultsEntry({
         [field]: val,
       },
     }));
-  };
-
-  // Evaluate if result is Normal, High, or Low based on reference range
-  const evaluateRange = (value, refRange = '') => {
-    if (!value || !refRange || refRange === '-' || !refRange.includes('-')) return null;
-    const parts = refRange.split('-').map((s) => parseFloat(s.trim()));
-    const num = parseFloat(value);
-    if (isNaN(num) || parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) return null;
-
-    const [low, high] = parts;
-    if (num < low) return { status: 'LOW', color: 'text-amber-600 bg-amber-50 border-amber-200' };
-    if (num > high) return { status: 'HIGH', color: 'text-rose-600 bg-rose-50 border-rose-200' };
-    return { status: 'NORMAL', color: 'text-emerald-600 bg-emerald-50 border-emerald-200' };
   };
 
   const saveSingleReport = async (report) => {
@@ -90,222 +81,227 @@ export default function ResultsEntry({
     }
   };
 
+  const handleSaveAll = async () => {
+    setSavingAll(true);
+    setSuccessMsg('');
+    setErrorMsg('');
+
+    try {
+      for (const report of reports) {
+        const current = resultsState[report.reportId] || {};
+        await api.post('/reports/update', {
+          reportId: report.reportId,
+          patientId: patient.patientId,
+          sampleId: report.sampleId || patient.slNo,
+          testName: report.testName,
+          rate: report.rate,
+          sampletype: report.sampleType,
+          method: report.method,
+          refRange: report.refRange,
+          unitref: report.unit,
+          resultData: current.resultData,
+          unit: report.unit,
+          comment: current.comment,
+          profileName: report.profileName || '',
+          deptName: report.deptName || 'D1',
+        });
+      }
+      setSuccessMsg('All test parameters saved successfully to laboratory database!');
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      setErrorMsg(err.response?.data?.Message || 'Failed to save all test results');
+    } finally {
+      setSavingAll(false);
+    }
+  };
+
   const handleCalculate = async (reportId) => {
     try {
       await api.post('/reports/calculate-result', {
         patientId: patient.patientId,
         reportId,
       });
-      setSuccessMsg('Result calculated by system formulas');
+      setSuccessMsg('Result automated calculation evaluated successfully');
       if (onRefresh) onRefresh();
     } catch (err) {
-      setErrorMsg('Calculation failed');
+      setErrorMsg('Failed to run automated calculation');
     }
   };
 
-  const handleSetDefault = async (reportId) => {
-    try {
-      await api.post('/reports/set-default-result', {
-        patientId: patient.patientId,
-        reportId,
-        resultVersion: 1,
-      });
-      setSuccessMsg('Default result values populated');
-      if (onRefresh) onRefresh();
-    } catch (err) {
-      setErrorMsg('Could not set default');
-    }
+  const openClinicalGuide = (name) => {
+    setGuideSearchTerm(name);
+    setGuideModalOpen(true);
   };
 
   return (
     <div className="space-y-4">
-      {/* Alert Banners */}
-      {successMsg && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-xs flex items-center justify-between">
+      {/* Workstation Header */}
+      <div className="bg-white p-4.5 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+        <div>
           <div className="flex items-center gap-2">
-            <CheckCircle className="w-4 h-4 text-emerald-600" />
-            <span>{successMsg}</span>
+            <h2 className="text-sm font-bold text-slate-900 tracking-tight">
+              Test Result Entry & Analyzer Correlation
+            </h2>
+            <span className="text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full">
+              PID #{patient.patientId || patient.slNo}
+            </span>
           </div>
-          <button onClick={() => setSuccessMsg('')} className="text-emerald-600 text-xs font-bold">×</button>
+          <p className="text-xs text-slate-500">
+            {patient.name} ({patient.gender || '-'} / {patient.age || '-'} Y) • Ref By: {patient.referedDr || 'Self'}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          <button
+            onClick={() => setGuideModalOpen(true)}
+            className="flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer"
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span>Clinical Guide</span>
+          </button>
+
+          <button
+            onClick={handleSaveAll}
+            disabled={savingAll}
+            className="flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-50"
+          >
+            <Save className="w-3.5 h-3.5" />
+            <span>{savingAll ? 'Saving All...' : 'Save All Results'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Alert Messages */}
+      {successMsg && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs flex items-center gap-2 font-medium">
+          <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>{successMsg}</span>
         </div>
       )}
 
       {errorMsg && (
-        <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 text-xs flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-rose-600" />
-            <span>{errorMsg}</span>
-          </div>
-          <button onClick={() => setErrorMsg('')} className="text-rose-600 text-xs font-bold">×</button>
+        <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center gap-2 font-medium">
+          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+          <span>{errorMsg}</span>
         </div>
       )}
 
-      {/* Routine Tests Result Entry Table */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <FlaskConical className="w-4 h-4 text-indigo-600" />
-            <h3 className="font-semibold text-xs text-slate-800 uppercase tracking-wider">
-              Diagnostic Test Results ({reports.length})
-            </h3>
-          </div>
-          <span className="text-[11px] text-slate-500 font-medium">
-            Patient: <strong className="text-slate-800">{patient.name}</strong> ({patient.patientId})
-          </span>
-        </div>
+      {/* Tests Entry List */}
+      <div className="space-y-4">
+        {reports.map((report, idx) => {
+          const current = resultsState[report.reportId] || {};
+          const isSaving = savingId === report.reportId;
+          const enteredVal = current.resultData;
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="bg-slate-100/70 border-b border-slate-200 text-slate-600 font-bold text-[11px]">
-                <th className="py-2.5 px-3">Test Name / Dept</th>
-                <th className="py-2.5 px-3">Sample Type</th>
-                <th className="py-2.5 px-3">Reference Range</th>
-                <th className="py-2.5 px-3">Unit</th>
-                <th className="py-2.5 px-3 w-40">Result Value</th>
-                <th className="py-2.5 px-3">Range Flag</th>
-                <th className="py-2.5 px-3 w-44">Comments / Remarks</th>
-                <th className="py-2.5 px-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {reports.map((r) => {
-                const current = resultsState[r.reportId] || {};
-                const flag = evaluateRange(current.resultData, r.refRange);
-
-                return (
-                  <tr key={r.reportId} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3 px-3">
-                      <div className="font-bold text-slate-900">{r.testName}</div>
-                      <div className="text-[10px] text-slate-400">
-                        Method: {r.method || 'Standard'} | Dept: {r.deptName || 'D1'}
-                      </div>
-                    </td>
-
-                    <td className="py-3 px-3 text-slate-600">
-                      {r.sampleType || 'Serum'}
-                    </td>
-
-                    <td className="py-3 px-3 font-mono text-slate-700">
-                      {r.refRange || '-'}
-                    </td>
-
-                    <td className="py-3 px-3 text-slate-500">
-                      {r.unit || '-'}
-                    </td>
-
-                    <td className="py-3 px-3">
-                      <input
-                        type="text"
-                        placeholder="Enter value"
-                        value={current.resultData || ''}
-                        onChange={(e) => handleInputChange(r.reportId, 'resultData', e.target.value)}
-                        className="w-full px-2.5 py-1.5 text-xs font-semibold bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      />
-                    </td>
-
-                    <td className="py-3 px-3">
-                      {flag ? (
-                        <span className={`inline-block px-2 py-0.5 text-[10px] font-bold border rounded-md uppercase ${flag.color}`}>
-                          {flag.status}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400 text-[11px]">-</span>
-                      )}
-                    </td>
-
-                    <td className="py-3 px-3">
-                      <input
-                        type="text"
-                        placeholder="Optional comment"
-                        value={current.comment || ''}
-                        onChange={(e) => handleInputChange(r.reportId, 'comment', e.target.value)}
-                        className="w-full px-2 py-1 text-xs bg-slate-50 border border-slate-200 rounded-md focus:bg-white focus:outline-none"
-                      />
-                    </td>
-
-                    <td className="py-3 px-3 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() => handleSetDefault(r.reportId)}
-                          title="Set Default Value"
-                          className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
-                        >
-                          <Sparkles className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleCalculate(r.reportId)}
-                          title="Auto Calculate Result"
-                          className="p-1.5 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded transition-colors"
-                        >
-                          <Calculator className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => saveSingleReport(r)}
-                          disabled={savingId === r.reportId}
-                          className="flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-2.5 py-1.5 rounded-lg shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-                        >
-                          <Save className="w-3.5 h-3.5" />
-                          <span>{savingId === r.reportId ? 'Saving...' : 'Save'}</span>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Template Reports (Culture Sensitivity, Fluid Analysis) */}
-      {templates.length > 0 && (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-4 space-y-4">
-          <h3 className="font-bold text-xs uppercase tracking-wider text-slate-800 flex items-center gap-2">
-            <span>Special Template Reports</span>
-            <span className="text-indigo-600">({templates.length})</span>
-          </h3>
-
-          {templates.map((tpl, tIndex) => {
-            const parsed = tpl.resultJsonParsed || {};
-            const examList = parsed?.Exam?.Exam || [];
-
-            return (
-              <div key={tpl.reportId || tIndex} className="border border-slate-200 rounded-lg p-4 bg-slate-50/50 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-xs text-slate-900">
-                    {tpl.name || 'Culture & Sensitivity Report'} ({tpl.reportId})
-                  </h4>
-                  <StatusBadge status={tpl.status || 'SAVED'} />
+          return (
+            <div
+              key={report.reportId || idx}
+              className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-4 sm:p-5 space-y-3 transition-shadow hover:shadow-md"
+            >
+              {/* Header: Test Name, Department & Clinical Info Button */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="font-mono text-slate-400 font-bold text-xs">#{idx + 1}</span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-bold text-sm text-slate-900">{report.testName}</h4>
+                      <button
+                        onClick={() => openClinicalGuide(report.testName)}
+                        title="View clinical significance, high/low interpretations, and indications"
+                        className="p-1 text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors cursor-pointer inline-flex items-center gap-1 text-[11px] font-semibold"
+                      >
+                        <Info className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Clinical Meaning</span>
+                      </button>
+                    </div>
+                    <span className="text-[11px] text-slate-400">
+                      Dept: {report.deptName || 'Biochemistry / Hematology'} • Method: {report.method || 'Automated Spectrophotometry / Laser Flow'}
+                    </span>
+                  </div>
                 </div>
 
-                {examList.length > 0 && (
-                  <div className="overflow-x-auto bg-white rounded-lg border border-slate-200">
-                    <table className="w-full text-left text-xs">
-                      <thead>
-                        <tr className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
-                          <th className="py-2 px-3">Antibiotic Name</th>
-                          <th className="py-2 px-3 w-28 text-center">Zone (mm)</th>
-                          <th className="py-2 px-3 w-28 text-center">Value / Sensitivity</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {examList.slice(0, 10).map((ex, exIdx) => (
-                          <tr key={exIdx}>
-                            <td className="py-1.5 px-3 font-medium text-slate-800">{ex.Name || `Antibiotic ${exIdx + 1}`}</td>
-                            <td className="py-1.5 px-3 text-center font-mono">{ex.Zone || '-'}</td>
-                            <td className="py-1.5 px-3 text-center font-semibold text-indigo-700">{ex.Value || 'Sensitive'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-mono font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md">
+                    Ref: {report.refRange || 'Normal Range'} {report.unit || ''}
+                  </span>
+                  <StatusBadge status={report.status || 'SAVED'} />
+                </div>
               </div>
-            );
-          })}
-        </div>
-      )}
+
+              {/* Input Grid: Result Value, Visual Reference Range Gauge & Actions */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+                {/* Result Input (4 cols) */}
+                <div className="lg:col-span-4 space-y-1">
+                  <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
+                    Observed Patient Value
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="e.g. 14.5"
+                      value={current.resultData}
+                      onChange={(e) => handleInputChange(report.reportId, 'resultData', e.target.value)}
+                      className="w-full pl-3 pr-14 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600 focus:bg-white"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-400">
+                      {report.unit || ''}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Visual Medical Range Gauge (6 cols) */}
+                <div className="lg:col-span-6 bg-slate-50/70 p-3 rounded-xl border border-slate-200/80">
+                  <ReferenceRangeGauge
+                    value={enteredVal}
+                    refRange={report.refRange}
+                    unit={report.unit}
+                    testName={report.testName}
+                  />
+                </div>
+
+                {/* Action Buttons (2 cols) */}
+                <div className="lg:col-span-2 flex lg:flex-col items-center justify-end gap-1.5">
+                  <button
+                    onClick={() => saveSingleReport(report)}
+                    disabled={isSaving}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{isSaving ? 'Saving...' : 'Update'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleCalculate(report.reportId)}
+                    title="Calculate index automatically"
+                    className="w-full flex items-center justify-center gap-1 px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 font-semibold text-[11px] rounded-xl transition-colors cursor-pointer shadow-2xs"
+                  >
+                    <Calculator className="w-3 h-3 text-blue-600" />
+                    <span>Calculate</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Technician Clinical Comment Field */}
+              <div className="pt-2 border-t border-slate-100">
+                <input
+                  type="text"
+                  placeholder="Optional pathologist / technician comment or specimen observation (e.g. Slightly hemolyzed, verified on dilution)..."
+                  value={current.comment || ''}
+                  onChange={(e) => handleInputChange(report.reportId, 'comment', e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs bg-slate-50/60 border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:bg-white focus:border-slate-300"
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Clinical Reference Guide Modal */}
+      <ClinicalGuideModal
+        isOpen={guideModalOpen}
+        onClose={() => setGuideModalOpen(false)}
+        initialSearch={guideSearchTerm}
+      />
     </div>
   );
 }

@@ -34,12 +34,28 @@ export const getPatientReport = async (req, res, next) => {
       return { ...t, resultJsonParsed: parsed };
     });
 
+    let billing = null;
+    try {
+      billing = await upstreamService.getBillingSummary(patientId, req.user?.upstreamSid);
+    } catch (e) {}
+
+    const patientWithBilling = patient
+      ? {
+          ...patient,
+          totalBill: billing?.total || Number(patient.totalBill || 0),
+          paidBill: billing ? billing.paid : (patient.billPayStatus === 2 ? Number(patient.totalBill || 0) : Number(patient.paidBill || 0)),
+          balance: billing ? billing.due : (patient.billPayStatus === 2 ? 0 : Number(patient.totalBill || 0)),
+          billPayStatus: (billing?.isPaid || patient.billPayStatus === 2 || patient.billPayStatus === '2' || (billing && billing.due <= 0)) ? 2 : patient.billPayStatus,
+        }
+      : null;
+
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
       StatusCode: upstreamData?.StatusCode || '0000',
-      patient,
+      patient: patientWithBilling,
       reports,
       templates,
+      billing,
     });
   } catch (err) {
     next(err);

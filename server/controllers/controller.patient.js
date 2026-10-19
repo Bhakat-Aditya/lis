@@ -14,13 +14,18 @@ const formatDate = (date = new Date()) => {
 export const getPatients = async (req, res, next) => {
   try {
     const today = formatDate();
-    const fromDate = req.query.fromDate || today;
-    const toDate = req.query.toDate || today;
-    const search = req.query.search?.toLowerCase() || '';
+    const explicitFrom = req.query.fromDate;
+    const explicitTo = req.query.toDate;
+    const search = req.query.search?.toLowerCase().trim() || '';
     const branch = req.query.branch || '';
     const status = req.query.status || '';
+    const allDates = req.query.allDates === 'true';
 
-    const upstreamData = await upstreamService.get(
+    // If searching without explicit dates or allDates is requested, search wide window
+    let fromDate = explicitFrom || (search || allDates ? '2026-01-01' : today);
+    let toDate = explicitTo || (search || allDates ? '2026-12-31' : today);
+
+    let upstreamData = await upstreamService.get(
       'GETPATIENTLIST',
       { fromDate, toDate },
       req.user?.upstreamSid
@@ -28,14 +33,44 @@ export const getPatients = async (req, res, next) => {
 
     let patients = upstreamData?.payLoadJSON?.patients || [];
 
-    // Filter in-memory if query parameters provided
+    // If searched within a specific date range and no results, try searching broad date range
+    if (search && patients.length === 0 && explicitFrom) {
+      const broadData = await upstreamService.get(
+        'GETPATIENTLIST',
+        { fromDate: '2026-01-01', toDate: '2026-12-31' },
+        req.user?.upstreamSid
+      );
+      if (broadData?.payLoadJSON?.patients?.length > 0) {
+        patients = broadData.payLoadJSON.patients;
+      }
+    }
+
+    // If no explicit date was requested and today has 0 records, load recent records
+    if (!explicitFrom && !search && !allDates && patients.length === 0) {
+      const broadData = await upstreamService.get(
+        'GETPATIENTLIST',
+        { fromDate: '2026-01-01', toDate: '2026-12-31' },
+        req.user?.upstreamSid
+      );
+      if (broadData?.payLoadJSON?.patients?.length > 0) {
+        patients = broadData.payLoadJSON.patients;
+      }
+    }
+
+    // Filter in-memory with safe string casting
     if (search) {
       patients = patients.filter((p) => {
+        const name = String(p.name || '').toLowerCase();
+        const pid = String(p.patientId || '').toLowerCase();
+        const mobile = String(p.mobile || '').toLowerCase();
+        const slNo = String(p.slNo || '').toLowerCase();
+        const dr = String(p.referedDr || '').toLowerCase();
         return (
-          p.name?.toLowerCase().includes(search) ||
-          p.patientId?.toLowerCase().includes(search) ||
-          p.mobile?.includes(search) ||
-          p.slNo?.includes(search)
+          name.includes(search) ||
+          pid.includes(search) ||
+          mobile.includes(search) ||
+          slNo.includes(search) ||
+          dr.includes(search)
         );
       });
     }
@@ -45,7 +80,26 @@ export const getPatients = async (req, res, next) => {
     }
 
     if (status) {
-      patients = patients.filter((p) => p.status?.toLowerCase() === status.toLowerCase());
+      patients = patients.filter((p) => String(p.status || '').toLowerCase() === status.toLowerCase());
+    }
+
+    // Always sort patients so most recent date and newest PID are at the top
+    patients.sort((a, b) => {
+      const dateA = a.regDate ? new Date(a.regDate).getTime() : 0;
+      const dateB = b.regDate ? new Date(b.regDate).getTime() : 0;
+      if (dateB !== dateA) return dateB - dateA;
+      const numA = parseInt(String(a.patientId || a.slNo || '').replace(/\D/g, ''), 10) || 0;
+      const numB = parseInt(String(b.patientId || b.slNo || '').replace(/\D/g, ''), 10) || 0;
+      return numB - numA;
+    });
+
+    // Detect the latest registration date available
+    let latestDate = null;
+    if (patients.length > 0 && patients[0].regDate) {
+      const d = new Date(patients[0].regDate);
+      if (!isNaN(d.getTime())) {
+        latestDate = formatDate(d);
+      }
     }
 
     return res.json({
@@ -53,6 +107,7 @@ export const getPatients = async (req, res, next) => {
       StatusCode: upstreamData?.StatusCode || '0000',
       fromDate,
       toDate,
+      latestDate: latestDate || today,
       total: patients.length,
       patients,
     });
@@ -105,13 +160,24 @@ export const addPatient = async (req, res, next) => {
 
     const upstreamData = await upstreamService.post('ADDPATIENT', params, null, req.user?.upstreamSid);
 
+    let patientId = upstreamData?.payLoadJSON?.patientId || upstreamData?.patientId;
+    if (!patientId && upstreamData?.redirectURL) {
+      const match = upstreamData.redirectURL.match(/patientId=([^&]+)/i);
+      if (match) patientId = match[1];
+    }
+    if (!patientId && typeof upstreamData?.Message === 'string') {
+      const match = upstreamData.Message.match(/P\d+/i);
+      if (match) patientId = match[0];
+    }
+
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
       StatusCode: upstreamData?.StatusCode || '0000',
       Message: upstreamData?.Message || 'Patient registered successfully',
       redirectURL: upstreamData?.redirectURL,
+      patientId: patientId || null,
       sid: upstreamData?.sid,
-      patient: params,
+      patient: { ...params, patientId: patientId || params.slNo },
     });
   } catch (err) {
     next(err);

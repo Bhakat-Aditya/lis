@@ -117,9 +117,16 @@ class UpstreamService {
         timeout: 15000,
       });
 
-      // If session expired on upstream, try re-login and retry once
-      if (res.data?.StatusCode === '1001' || res.data?.Message?.toLowerCase().includes('session')) {
-        console.warn('[Upstream] Session expired on GET, refreshing master sid...');
+      // If session expired on upstream (1001, 1201, 1002), try re-login and retry once with master session
+      const isSessionError =
+        res.data?.StatusCode === '1001' ||
+        res.data?.StatusCode === '1201' ||
+        res.data?.StatusCode === '1002' ||
+        res.data?.Message?.toLowerCase().includes('session') ||
+        (sid && res.data?.STATUS === 'FAILED');
+
+      if (isSessionError) {
+        console.warn(`[Upstream] Session error (${res.data?.StatusCode || 'FAILED'}) on GET, refreshing master sid...`);
         const newSid = await this.ensureMasterSession(true);
         const retryUrl = `${this.baseUrl}/GetAPIServlet;jsessionid=${newSid}?${query}`;
         const retryRes = await axios.get(retryUrl, {
@@ -153,9 +160,16 @@ class UpstreamService {
         timeout: 15000,
       });
 
-      // If session expired on upstream, try re-login and retry once
-      if (res.data?.StatusCode === '1001' || res.data?.Message?.toLowerCase().includes('session')) {
-        console.warn('[Upstream] Session expired on POST, refreshing master sid...');
+      // If session expired on upstream (1001, 1201, 1002), try re-login and retry once with master session
+      const isSessionError =
+        res.data?.StatusCode === '1001' ||
+        res.data?.StatusCode === '1201' ||
+        res.data?.StatusCode === '1002' ||
+        res.data?.Message?.toLowerCase().includes('session') ||
+        (sid && res.data?.STATUS === 'FAILED' && res.data?.StatusCode !== '0000');
+
+      if (isSessionError) {
+        console.warn(`[Upstream] Session error (${res.data?.StatusCode || 'FAILED'}) on POST, refreshing master sid...`);
         const newSid = await this.ensureMasterSession(true);
         const retryUrl = `${this.baseUrl}/APIServlet;jsessionid=${newSid}?${query}`;
         const retryRes = await axios.post(retryUrl, body, {
@@ -172,6 +186,89 @@ class UpstreamService {
     } catch (err) {
       console.error(`[Upstream] POST ${apiName} failed:`, err.message);
       throw err;
+    }
+  }
+
+  /**
+   * Post payment transaction to BillingServlet
+   */
+  async postBilling(params = {}, sid = null) {
+    const activeSid = sid || await this.ensureMasterSession();
+    const url = `${this.baseUrl}/BillingServlet;jsessionid=${activeSid}`;
+    const formParams = new URLSearchParams(params);
+
+    try {
+      const res = await axios.post(url, formParams.toString(), {
+        headers: {
+          'Cookie': `JSESSIONID=${activeSid}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        timeout: 15000,
+      });
+
+      return { STATUS: 'SUCCESS', data: res.data };
+    } catch (err) {
+      console.error(`[Upstream] BillingServlet failed:`, err.message);
+      throw err;
+    }
+  }
+
+  /**
+   * Scrape and parse real-time billing summary from billing.jsp
+   */
+  async getBillingSummary(patientId, sid = null) {
+    if (!patientId) return null;
+    const activeSid = sid || await this.ensureMasterSession();
+    const url = `${this.baseUrl}/billing.jsp;jsessionid=${activeSid}?patientId=${encodeURIComponent(patientId)}`;
+
+    try {
+      const res = await axios.get(url, {
+        headers: {
+          'Cookie': `JSESSIONID=${activeSid}`,
+        },
+        timeout: 15000,
+      });
+      const html = res.data || '';
+
+      const containerIdx = html.lastIndexOf('billing-summary-container');
+      const containerHtml = containerIdx !== -1 ? html.substring(containerIdx, containerIdx + 3000) : html;
+
+      const isPaid = containerHtml.includes('paid-stamp') || containerHtml.includes('status-stamp paid-stamp');
+
+      const payMatch = containerHtml.match(/total-payment-row[\s\S]*?<span class="value">([^<]+)<\/span>/i);
+      const paid = payMatch ? parseFloat(payMatch[1].replace(/[^0-9.]/g, '')) || 0 : 0;
+
+      const outMatch = containerHtml.match(/total-outstanding-row[\s\S]*?<span class="value">([^<]+)<\/span>/i);
+      const due = outMatch ? parseFloat(outMatch[1].replace(/[^0-9.]/g, '')) || 0 : 0;
+
+      const billMatch = containerHtml.match(/total-bill-row[\s\S]*?<span class="value">([^<]+)<\/span>/i);
+      const total = billMatch ? parseFloat(billMatch[1].replace(/[^0-9.]/g, '')) || 0 : 0;
+
+      const discMatch = containerHtml.match(/Discount Amount[\s\S]*?<span class="value">([^<]+)<\/span>/i);
+      const discount = discMatch ? parseFloat(discMatch[1].replace(/[^0-9.]/g, '')) || 0 : 0;
+
+      const paymentLines = [];
+      const lineRegex = /<div class="payment-sub-line">[\s\S]*?<span class="sub-label">[^A-Z]*([A-Z_]+)\s*<small>\(([^)]+)\)<\/small><\/span>[\s\S]*?<span class="sub-value">([^<]+)<\/span>/gi;
+      let match;
+      while ((match = lineRegex.exec(containerHtml)) !== null) {
+        paymentLines.push({
+          mode: match[1].trim(),
+          date: match[2].trim(),
+          amount: parseFloat(match[3].replace(/[^0-9.]/g, '')) || 0,
+        });
+      }
+
+      return {
+        isPaid,
+        total,
+        discount,
+        paid,
+        due,
+        paymentLines,
+      };
+    } catch (err) {
+      console.warn(`[Upstream] Could not fetch billing.jsp for ${patientId}:`, err.message);
+      return null;
     }
   }
 }

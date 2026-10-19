@@ -82,7 +82,7 @@ export default function MasterDataManager() {
         <button
           onClick={() => handleRefresh(null)}
           disabled={refreshing || loadingMaster}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs py-2 px-4 rounded-lg shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${refreshing || loadingMaster ? 'animate-spin' : ''}`} />
           <span>{refreshing ? 'Syncing...' : 'Sync All From AWS'}</span>
@@ -131,8 +131,18 @@ export default function MasterDataManager() {
               placeholder={`Search ${activeTab}...`}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-8 pr-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="w-full pl-8 pr-7 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
             />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
+                title="Clear search"
+              >
+                &times;
+              </button>
+            )}
           </div>
         </div>
 
@@ -154,7 +164,15 @@ export default function MasterDataManager() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {tests
-                  .filter((t) => t.Name?.toLowerCase().includes(searchTerm.toLowerCase()))
+                  .filter((t) => {
+                    if (!searchTerm) return true;
+                    const q = searchTerm.toLowerCase().trim();
+                    const name = String(t.Name || t.name || '').toLowerCase();
+                    const id = String(t['Test Id'] || '').toLowerCase();
+                    const shortName = String(t['Short Name'] || '').toLowerCase();
+                    const dept = String(t['Dept Id'] || '').toLowerCase();
+                    return name.includes(q) || id.includes(q) || shortName.includes(q) || dept.includes(q);
+                  })
                   .map((t) => (
                     <tr key={t['Test Id']} className="hover:bg-slate-50">
                       <td className="py-2 px-4 font-mono font-bold text-indigo-600">{t['Test Id']}</td>
@@ -189,7 +207,14 @@ export default function MasterDataManager() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {profiles
-                  .filter((p) => p.Name?.toLowerCase().includes(searchTerm.toLowerCase()))
+                  .filter((p) => {
+                    if (!searchTerm) return true;
+                    const q = searchTerm.toLowerCase().trim();
+                    const name = String(p.Name || p.name || '').toLowerCase();
+                    const id = String(p['Profile Id'] || '').toLowerCase();
+                    const dept = String(p['Dept Id'] || '').toLowerCase();
+                    return name.includes(q) || id.includes(q) || dept.includes(q);
+                  })
                   .map((p) => (
                     <tr key={p['Profile Id']} className="hover:bg-slate-50">
                       <td className="py-2 px-4 font-mono font-bold text-indigo-600">{p['Profile Id']}</td>
@@ -221,7 +246,15 @@ export default function MasterDataManager() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {doctors
-                  .filter((d) => d.Name?.toLowerCase().includes(searchTerm.toLowerCase()))
+                  .filter((d) => {
+                    if (!searchTerm) return true;
+                    const q = searchTerm.toLowerCase().trim();
+                    const name = String(d.Name || d.name || '').toLowerCase();
+                    const id = String(d['Doct Id'] || '').toLowerCase();
+                    const deg = String(d.Deg || '').toLowerCase();
+                    const contact = String(d.Contact || '').toLowerCase();
+                    return name.includes(q) || id.includes(q) || deg.includes(q) || contact.includes(q);
+                  })
                   .map((d) => (
                     <tr key={d['Doct Id']} className="hover:bg-slate-50">
                       <td className="py-2 px-4 font-mono font-bold text-indigo-600">{d['Doct Id']}</td>
@@ -251,7 +284,14 @@ export default function MasterDataManager() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {departments
-                  .filter((dept) => dept.Name?.toLowerCase().includes(searchTerm.toLowerCase()))
+                  .filter((dept) => {
+                    if (!searchTerm) return true;
+                    const q = searchTerm.toLowerCase().trim();
+                    const name = String(dept.Name || dept.name || '').toLowerCase();
+                    const id = String(dept['Dept Id'] || '').toLowerCase();
+                    const shortName = String(dept['Short Name'] || '').toLowerCase();
+                    return name.includes(q) || id.includes(q) || shortName.includes(q);
+                  })
                   .map((dept) => (
                     <tr key={dept['Dept Id']} className="hover:bg-slate-50">
                       <td className="py-2 px-4 font-mono font-bold text-indigo-600">{dept['Dept Id']}</td>
@@ -282,7 +322,17 @@ export default function MasterDataManager() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {users.map((u) => {
+                {users
+                  .filter((u) => {
+                    if (!searchTerm) return true;
+                    const q = searchTerm.toLowerCase().trim();
+                    const name = String(u.name || '').toLowerCase();
+                    const loginId = String(u.loginId || '').toLowerCase();
+                    const mobile = String(u.mobile || '').toLowerCase();
+                    const userId = String(u.userId || '').toLowerCase();
+                    return name.includes(q) || loginId.includes(q) || mobile.includes(q) || userId.includes(q);
+                  })
+                  .map((u) => {
                   let access = u.accessPermissionJson;
                   try {
                     const parsed = typeof access === 'string' ? JSON.parse(access) : access;

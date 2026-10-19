@@ -1,7 +1,20 @@
 import React, { useState } from 'react';
+import { Helmet } from 'react-helmet-async';
 import { useAuth } from '../context/context.auth.jsx';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Lock, User, KeyRound, AlertCircle, Phone } from 'lucide-react';
+import {
+  ShieldCheck,
+  Lock,
+  User,
+  KeyRound,
+  AlertCircle,
+  Phone,
+  Activity,
+  Sparkles,
+  Stethoscope,
+  Building2,
+  CheckCircle2,
+} from 'lucide-react';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -28,7 +41,7 @@ export default function LoginPage() {
       if (res.message?.includes('2FA') || res.message?.includes('totp')) {
         setShowTotp(true);
       }
-      setError(res.message || 'Login failed');
+      setError(res.message || 'Login credentials invalid or account locked.');
     }
   };
 
@@ -39,29 +52,44 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col justify-center items-center p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        {/* Header with Hospital Branding */}
-        <div className="bg-slate-900 text-white p-6 text-center space-y-2">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-indigo-600 font-extrabold text-xl shadow-md">
-            LE
+    <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-4 relative overflow-hidden select-none">
+      <Helmet>
+        <title>Clinic Portal Login | New Life Care Diagnostic Center LIS</title>
+        <meta
+          name="description"
+          content="Authorized clinic staff login for New Life Care Diagnostic Center Laboratory Information System."
+        />
+      </Helmet>
+
+      {/* Subtle background glow */}
+      <div className="absolute top-1/4 -left-20 w-96 h-96 bg-blue-100/50 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-1/4 -right-20 w-96 h-96 bg-indigo-100/50 rounded-full blur-3xl pointer-events-none" />
+
+      <div className="w-full max-w-md bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden relative z-10 animate-in fade-in zoom-in-95 duration-200">
+        {/* Header with Hospital & Clinical Branding */}
+        <div className="bg-white border-b border-slate-100 p-7 text-center relative overflow-hidden">
+          {/* Crest */}
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/25 font-extrabold text-2xl mb-3">
+            <Activity className="w-7 h-7" />
           </div>
-          <h1 className="text-base font-bold tracking-tight">
+
+          <h1 className="text-base font-extrabold tracking-tight text-slate-900">
             NEW LIFE CARE DIAGNOSTIC CENTER
           </h1>
-          <p className="text-xs text-slate-400">
-            Laboratory Information System (LIS) Portal
+          <p className="text-xs text-slate-500 font-medium mt-0.5">
+            Laboratory Information System (LIS) Expert Portal
           </p>
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-800 rounded-full text-[10px] text-slate-300 font-medium">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Clinic Staff Access Only</span>
+
+          <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 rounded-full text-[10px]">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Authorized Medical Staff Access Only</span>
           </div>
         </div>
 
-        {/* Login Form */}
-        <div className="p-6 space-y-4">
+        {/* Login Form Body */}
+        <div className="p-6 sm:p-7 space-y-4">
           {error && (
-            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs flex items-center gap-2">
+            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center gap-2 font-medium">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{error}</span>
             </div>
@@ -69,52 +97,52 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4 text-xs">
             <div>
-              <label className="font-semibold text-slate-700 block mb-1">
-                Login ID / Username
+              <label className="font-bold text-slate-700 block mb-1.5 uppercase tracking-wider text-[10px]">
+                Staff Login ID / Operator Username
               </label>
               <div className="relative">
-                <User className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   placeholder="e.g. sandip"
                   value={loginId}
                   onChange={(e) => setLoginId(e.target.value)}
                   required
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white text-xs font-medium"
+                  className="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 focus:bg-white text-xs font-semibold text-slate-900 transition-all"
                 />
               </div>
             </div>
 
             <div>
-              <label className="font-semibold text-slate-700 block mb-1">
-                Password
+              <label className="font-bold text-slate-700 block mb-1.5 uppercase tracking-wider text-[10px]">
+                Access Password
               </label>
               <div className="relative">
-                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="password"
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white text-xs font-medium"
+                  className="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 focus:bg-white text-xs font-semibold text-slate-900 transition-all"
                 />
               </div>
             </div>
 
             {showTotp && (
-              <div>
-                <label className="font-semibold text-slate-700 block mb-1">
-                  2FA TOTP Code
+              <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-xl space-y-1">
+                <label className="font-bold text-blue-900 block text-[10px] uppercase tracking-wider">
+                  Two-Factor Authentication (2FA TOTP)
                 </label>
                 <div className="relative">
-                  <KeyRound className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <KeyRound className="w-4 h-4 text-blue-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
-                    placeholder="6-digit authenticator code"
+                    placeholder="Enter 6-digit code"
                     value={totp}
                     onChange={(e) => setTotp(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:bg-white font-mono text-center tracking-widest text-sm"
+                    className="w-full pl-10 pr-3 py-2 bg-white border border-blue-300 rounded-lg focus:outline-none font-mono text-center tracking-widest text-sm font-bold text-blue-900"
                   />
                 </div>
               </div>
@@ -123,42 +151,51 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-4 rounded-lg shadow-xs transition-colors cursor-pointer disabled:opacity-50 text-xs flex items-center justify-center gap-2"
+              className="w-full bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-extrabold py-3 px-4 rounded-xl shadow-md shadow-blue-600/20 transition-all cursor-pointer disabled:opacity-50 text-xs flex items-center justify-center gap-2 mt-2"
             >
-              <span>{loading ? 'Authenticating...' : 'Sign In to Portal'}</span>
+              <span>{loading ? 'Authenticating Secure Session...' : 'Sign In to Clinical Portal'}</span>
             </button>
           </form>
 
-          {/* Quick Staff Role Accounts Helper */}
-          <div className="pt-4 border-t border-slate-100 text-[11px] text-slate-500">
-            <span className="font-semibold text-slate-700 block mb-1.5">
-              Available Test Staff Credentials:
+          {/* Quick Staff Credentials Preset Switcher */}
+          <div className="pt-4 border-t border-slate-100 text-[11px] text-slate-500 space-y-2">
+            <span className="font-bold text-slate-700 block uppercase tracking-wider text-[10px]">
+              Fast Staff Role Demo Accounts:
             </span>
-            <div className="grid grid-cols-2 gap-1.5">
+            <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => handleQuickFill('sandip', 'Life')}
-                className="p-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded text-left transition-colors cursor-pointer"
+                className="p-2 bg-slate-50 hover:bg-indigo-50/70 border border-slate-200 hover:border-indigo-300 rounded-xl text-left transition-all cursor-pointer group"
               >
-                <span className="font-bold text-slate-800 block">Super Admin</span>
-                <span className="text-[10px] text-slate-500">sandip / Life</span>
+                <span className="font-bold text-slate-800 group-hover:text-indigo-900 block text-xs">
+                  Super Admin
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">sandip / Life</span>
               </button>
               <button
                 type="button"
                 onClick={() => handleQuickFill('entry', '010101')}
-                className="p-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded text-left transition-colors cursor-pointer"
+                className="p-2 bg-slate-50 hover:bg-indigo-50/70 border border-slate-200 hover:border-indigo-300 rounded-xl text-left transition-all cursor-pointer group"
               >
-                <span className="font-bold text-slate-800 block">Front Desk / Entry</span>
-                <span className="text-[10px] text-slate-500">entry / 010101</span>
+                <span className="font-bold text-slate-800 group-hover:text-indigo-900 block text-xs">
+                  Reception / Desk
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">entry / 010101</span>
               </button>
             </div>
           </div>
         </div>
 
-        {/* Support Footer */}
-        <div className="p-3 bg-slate-50 border-t border-slate-100 text-center text-[10px] text-slate-500 flex items-center justify-center gap-2">
-          <Phone className="w-3 h-3 text-indigo-600" />
-          <span>Support Helpline: 8799021616 / 9733525031</span>
+        {/* Support & Quality Accreditation Footer */}
+        <div className="p-3.5 bg-slate-50 border-t border-slate-100 text-center text-[10px] text-slate-500 flex flex-col items-center justify-center gap-1">
+          <div className="flex items-center gap-2">
+            <Phone className="w-3 h-3 text-indigo-600" />
+            <span>Support Helplines: <strong>8799021616</strong> / <strong>9733525031</strong></span>
+          </div>
+          <div className="text-slate-400">
+            Midnapore Main Center • Keranitola • ISO 9001:2015 & NABL Standards
+          </div>
         </div>
       </div>
     </div>

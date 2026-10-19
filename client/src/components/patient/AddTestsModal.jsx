@@ -57,20 +57,30 @@ export default function AddTestsModal({ isOpen, onClose, patient, onTestsAdded }
     }
   };
 
-  const filteredTests = tests.filter((t) =>
-    t.Name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    t['Test Id']?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredTests = tests.filter((t) => {
+    if (!searchTerm) return true;
+    const q = searchTerm.toLowerCase().trim();
+    const name = String(t.Name || t.name || '').toLowerCase();
+    const id = String(t['Test Id'] || '').toLowerCase();
+    const shortName = String(t['Short Name'] || '').toLowerCase();
+    return name.includes(q) || id.includes(q) || shortName.includes(q);
+  });
 
-  const filteredProfiles = profiles.filter((p) =>
-    p.Name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p['Profile Id']?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredProfiles = profiles.filter((p) => {
+    if (!searchTerm) return true;
+    const q = searchTerm.toLowerCase().trim();
+    const name = String(p.Name || p.name || '').toLowerCase();
+    const id = String(p['Profile Id'] || '').toLowerCase();
+    return name.includes(q) || id.includes(q);
+  });
 
-  const filteredPackages = packages.filter((pkg) =>
-    pkg.Name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    pkg['Package Id']?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredPackages = packages.filter((pkg) => {
+    if (!searchTerm) return true;
+    const q = searchTerm.toLowerCase().trim();
+    const name = String(pkg.Name || pkg.name || '').toLowerCase();
+    const id = String(pkg['Package Id'] || '').toLowerCase();
+    return name.includes(q) || id.includes(q);
+  });
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={`Add Tests - ${patient.name} (${patient.patientId})`} maxWidth="max-w-3xl">

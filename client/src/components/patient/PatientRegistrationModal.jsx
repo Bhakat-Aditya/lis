@@ -3,6 +3,7 @@ import Modal from '../common/Modal.jsx';
 import api from '../../services/api';
 import { useMaster } from '../../context/context.master.jsx';
 import { UserPlus, Check } from 'lucide-react';
+import { getLocalDateString } from '../../utils/dateUtils.js';
 
 export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdded }) {
   const { doctors, branches, references } = useMaster();
@@ -12,7 +13,7 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
     title: 'Mr',
     name: '',
     mobile: '',
-    regDate: new Date().toISOString().split('T')[0],
+    regDate: getLocalDateString(),
     gender: 'Male',
     age: '28',
     age_unit: 'Years',
@@ -238,19 +239,19 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
           </div>
         </div>
 
-        {/* Action Buttons */}
+        {/* Action Buttons with Vibrant Colors */}
         <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 border border-slate-300 hover:bg-slate-100 rounded-lg font-medium text-slate-700 cursor-pointer"
+            className="px-4 py-2 border border-slate-300 hover:bg-slate-50 rounded-xl font-semibold text-slate-700 cursor-pointer transition-colors shadow-2xs"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={loading}
-            className="flex items-center gap-1.5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold shadow-xs cursor-pointer disabled:opacity-50"
+            className="flex items-center gap-1.5 px-5 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl font-bold shadow-xs cursor-pointer disabled:opacity-50 transition-all"
           >
             <UserPlus className="w-4 h-4" />
             <span>{loading ? 'Registering...' : 'Register Patient'}</span>
