@@ -47,9 +47,14 @@ export default function TestSelectionView({
     : existingTestsTotal;
   const discount = Number(patient?.discount || 0);
   const totalAmount = Math.max(0, subtotal - discount);
-  const isPaid = (patient?.billPayStatus === 2 || patient?.billPayStatus === '2') && totalAmount > 0;
-  const totalDeposits = isPaid ? totalAmount : Number(patient?.paidBill || 0);
-  const balanceDue = isPaid ? 0 : Math.max(0, totalAmount - totalDeposits);
+  const totalDeposits = Number(patient?.paidBill || 0);
+  const explicitDue = (patient?.balance !== undefined && patient?.balance !== null)
+    ? Number(patient.balance)
+    : (patient?.dueAmount !== undefined ? Number(patient.dueAmount) : null);
+  const balanceDue = totalAmount > 0
+    ? (explicitDue !== null && selectedTests.length === 0 ? explicitDue : Math.max(0, totalAmount - totalDeposits))
+    : 0;
+  const isPaid = totalAmount > 0 && balanceDue <= 0 && (totalDeposits > 0 || patient?.billPayStatus === 2 || patient?.billPayStatus === '2');
 
   const [showSuggestions, setShowSuggestions] = useState(false);
 

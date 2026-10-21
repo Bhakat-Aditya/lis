@@ -42,10 +42,16 @@ export const getPatientReport = async (req, res, next) => {
     const patientWithBilling = patient
       ? {
           ...patient,
-          totalBill: billing?.total || Number(patient.totalBill || 0),
-          paidBill: billing ? billing.paid : (patient.billPayStatus === 2 ? Number(patient.totalBill || 0) : Number(patient.paidBill || 0)),
-          balance: billing ? billing.due : (patient.billPayStatus === 2 ? 0 : Number(patient.totalBill || 0)),
-          billPayStatus: (billing?.isPaid || patient.billPayStatus === 2 || patient.billPayStatus === '2' || (billing && billing.due <= 0)) ? 2 : patient.billPayStatus,
+          totalBill: (billing?.total && billing.total > 0) ? billing.total : Number(patient.totalBill || 0),
+          paidBill: billing ? billing.paid : Number(patient.paidBill || 0),
+          balance: billing
+            ? billing.due
+            : (patient.billPayStatus === 2 || patient.billPayStatus === '2' ? 0 : Math.max(0, Number(patient.totalBill || 0) - Number(patient.paidBill || 0))),
+          billPayStatus: billing
+            ? (billing.total > 0 && billing.due <= 0 && billing.paid >= billing.total ? 2 : (billing.paid > 0 ? 1 : 0))
+            : (patient.billPayStatus === 2 || patient.billPayStatus === '2' ? 2 : (Number(patient.paidBill) > 0 ? 1 : 0)),
+          paymentLines: billing?.paymentLines || [],
+          payments: billing?.paymentLines || [],
         }
       : null;
 

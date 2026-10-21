@@ -32,7 +32,7 @@ export default function BillingPage() {
   const fetchBillingList = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/patients/list', { params: { allDates: 'true' } });
+      const res = await api.get('/patients/list', { params: { allDates: 'true', withBilling: 'true' } });
       setPatients(res.data?.patients || []);
     } catch (err) {
       console.warn('Billing list error:', err.message);
@@ -67,7 +67,11 @@ export default function BillingPage() {
 
   const filtered = sortPatientsByRecent(
     patients.filter((p) => {
-      const isPaid = p.billPayStatus === 2 || p.billPayStatus === '2';
+      const billTotal = Number(p.totalBill || 0);
+      const billPaid = Number(p.paidBill || 0);
+      const billDue = Number(p.balance ?? Math.max(0, billTotal - billPaid));
+      const isPaid = billTotal > 0 && billDue <= 0 && (p.billPayStatus === 2 || p.billPayStatus === '2' || billPaid >= billTotal);
+
       if (statusFilter === 'PAID' && !isPaid) return false;
       if (statusFilter === 'DUE' && isPaid) return false;
 
@@ -91,10 +95,8 @@ export default function BillingPage() {
 
   // Financial aggregates
   const totalInvoiced = patients.reduce((acc, p) => acc + (Number(p.totalBill) || 0), 0);
-  const totalDue = patients
-    .filter((p) => p.billPayStatus !== 2 && p.billPayStatus !== '2')
-    .reduce((acc, p) => acc + (Number(p.totalBill) || 0), 0);
-  const totalCollected = Math.max(0, totalInvoiced - totalDue);
+  const totalCollected = patients.reduce((acc, p) => acc + (Number(p.paidBill) || (p.billPayStatus === 2 ? Number(p.totalBill) : 0)), 0);
+  const totalDue = Math.max(0, totalInvoiced - totalCollected);
 
   return (
     <section className="space-y-5">
@@ -259,14 +261,21 @@ export default function BillingPage() {
                 <th className="py-3 px-4">Patient Name</th>
                 <th className="py-3 px-4 text-slate-500">Date</th>
                 <th className="py-3 px-4 text-slate-500">Mobile</th>
-                <th className="py-3 px-4">Payment Status</th>
                 <th className="py-3 px-4 text-right">Total Bill</th>
+                <th className="py-3 px-4 text-right">Deposited</th>
+                <th className="py-3 px-4 text-right">Balance Due</th>
+                <th className="py-3 px-4 text-center">Status</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filtered.map((p) => {
-                const isPaid = p.billPayStatus === 2 || p.billPayStatus === '2';
+                const billTotal = Number(p.totalBill || 0);
+                const billPaid = Number(p.paidBill || 0);
+                const billDue = Number(p.balance !== undefined ? p.balance : Math.max(0, billTotal - billPaid));
+                const isPaid = billTotal > 0 && billDue <= 0 && (p.billPayStatus === 2 || p.billPayStatus === '2' || billPaid >= billTotal);
+                const isPartial = billTotal > 0 && billPaid > 0 && billDue > 0;
+
                 return (
                   <tr key={p.patientId} className="hover:bg-slate-50/70 transition-colors">
                     <td className="py-3 px-4 font-mono font-bold text-blue-700">
@@ -281,22 +290,45 @@ export default function BillingPage() {
                     <td className="py-3 px-4 font-mono text-slate-600">
                       {p.mobile || '-'}
                     </td>
-                    <td className="py-3 px-4">
-                      <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
-                        isPaid ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-800 border-amber-300'
-                      }`}>
-                        {isPaid ? 'Settled (Paid)' : 'Balance Due'}
-                      </span>
+                    <td className="py-3 px-4 text-right font-extrabold text-slate-900 text-xs font-mono">
+                      ₹{billTotal.toLocaleString('en-IN')}
                     </td>
-                    <td className="py-3 px-4 text-right font-extrabold text-slate-900 text-sm">
-                      ₹{Number(p.totalBill || 0).toLocaleString('en-IN')}
+                    <td className="py-3 px-4 text-right font-extrabold text-emerald-700 text-xs font-mono">
+                      ₹{billPaid.toLocaleString('en-IN')}
+                    </td>
+                    <td className="py-3 px-4 text-right font-extrabold text-xs font-mono">
+                      {billDue > 0 ? (
+                        <span className="text-rose-600 font-bold">₹{billDue.toLocaleString('en-IN')}</span>
+                      ) : (
+                        <span className="text-slate-400">₹0</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                        isPaid
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : isPartial
+                          ? 'bg-amber-50 text-amber-800 border-amber-300'
+                          : billTotal > 0
+                          ? 'bg-rose-50 text-rose-700 border-rose-300'
+                          : 'bg-slate-100 text-slate-500 border-slate-200'
+                      }`}>
+                        {isPaid
+                          ? 'Settled (Paid)'
+                          : isPartial
+                          ? `Partial (₹${billDue} Due)`
+                          : billTotal > 0
+                          ? `Unpaid (₹${billDue} Due)`
+                          : 'Unbilled'}
+                      </span>
                     </td>
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={() => {
                             setDepositPatient(p);
-                            setAmount(p.totalBill ? String(p.totalBill) : '500');
+                            const dueVal = Number(p.balance !== undefined ? p.balance : Math.max(0, (p.totalBill || 0) - (p.paidBill || 0)));
+                            setAmount(dueVal > 0 ? String(dueVal) : (p.totalBill ? String(p.totalBill) : '500'));
                           }}
                           className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs py-1.5 px-3 rounded-xl shadow-xs cursor-pointer transition-all"
                         >
@@ -327,6 +359,29 @@ export default function BillingPage() {
         title={`Receive Diagnostic Payment — ${depositPatient?.name}`}
       >
         <div className="space-y-4 text-xs">
+          {depositPatient && (
+            <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl flex items-center justify-between text-xs">
+              <div>
+                <span className="text-slate-500 block text-[10px] font-bold uppercase">Total Bill</span>
+                <span className="font-extrabold text-slate-800 font-mono">
+                  ₹{Number(depositPatient.totalBill || 0).toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500 block text-[10px] font-bold uppercase">Already Deposited</span>
+                <span className="font-extrabold text-emerald-700 font-mono">
+                  ₹{Number(depositPatient.paidBill || 0).toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500 block text-[10px] font-bold uppercase">Remaining Due</span>
+                <span className="font-extrabold text-rose-700 font-mono">
+                  ₹{Number(depositPatient.balance !== undefined ? depositPatient.balance : Math.max(0, (depositPatient.totalBill || 0) - (depositPatient.paidBill || 0))).toLocaleString('en-IN')}
+                </span>
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="font-bold text-slate-700 block mb-1">Payment Amount (₹)</label>
             <input

@@ -102,6 +102,41 @@ export const getPatients = async (req, res, next) => {
       }
     }
 
+    // Proactively pre-fetch billing summaries for top recent patients who have a total bill
+    if (req.query.withBilling === 'true' || allDates) {
+      const needsBilling = patients
+        .slice(0, 20)
+        .filter((p) => Number(p.totalBill) > 0 && !upstreamService.getCachedBilling(p.patientId || p.slNo));
+      if (needsBilling.length > 0) {
+        await Promise.allSettled(
+          needsBilling.map((p) =>
+            upstreamService.getBillingSummary(p.patientId || p.slNo, req.user?.upstreamSid)
+          )
+        );
+      }
+    }
+
+    // Enrich patients with latest billing summaries
+    patients = patients.map((p) => {
+      const pid = p.patientId || p.slNo;
+      const cached = upstreamService.getCachedBilling(pid);
+      if (cached) {
+        const total = (cached.total && cached.total > 0) ? cached.total : Number(p.totalBill || 0);
+        const paid = cached.paid || 0;
+        const due = cached.due !== undefined ? cached.due : Math.max(0, total - paid);
+        const isPaid = total > 0 && due <= 0 && paid >= total;
+        return {
+          ...p,
+          totalBill: total,
+          paidBill: paid,
+          balance: due,
+          dueAmount: due,
+          billPayStatus: isPaid ? 2 : (paid > 0 ? 1 : 0),
+        };
+      }
+      return p;
+    });
+
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
       StatusCode: upstreamData?.StatusCode || '0000',

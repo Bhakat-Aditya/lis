@@ -151,9 +151,10 @@ export default function PatientsPage({ onOpenNewPatient }) {
   const displayPatients = sortPatientsByRecent(
     patients.filter((p) => {
       if (filterType === 'due') {
-        const due = Number(p.balance || p.dueAmount || 0);
-        const isPaid = p.billPayStatus === 2 || p.billPayStatus === '2';
-        if (due <= 0 && isPaid) return false;
+        const billTotal = Number(p.totalBill || 0);
+        const billPaid = Number(p.paidBill || 0);
+        const due = Number(p.balance ?? Math.max(0, billTotal - billPaid));
+        if (due <= 0) return false;
       }
       if (searchTerm) {
         const term = searchTerm.toLowerCase().trim();
@@ -344,7 +345,7 @@ export default function PatientsPage({ onOpenNewPatient }) {
                   const billPaid = Number(p.paidBill || 0);
                   const billBalance = Number(p.balance ?? Math.max(0, billTotal - billPaid));
                   const isBilled = billTotal > 0;
-                  const isPaid = isBilled && (p.billPayStatus === 2 || p.billPayStatus === '2' || (billPaid >= billTotal && billTotal > 0));
+                  const isPaid = isBilled && billBalance <= 0 && (p.billPayStatus === 2 || p.billPayStatus === '2' || (billPaid >= billTotal && billTotal > 0));
                   const isReady = ['APPROVED', 'PRINTING', 'RELEASED', 'READY', 'REPORT READY'].includes(
                     String(p.status || '').toUpperCase()
                   );

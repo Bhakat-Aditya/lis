@@ -7,6 +7,7 @@ class UpstreamService {
     this.masterSid = null;
     this.masterCookie = null;
     this.lastLoginTime = null;
+    this.billingCache = new Map();
   }
 
   /**
@@ -218,8 +219,9 @@ class UpstreamService {
    */
   async getBillingSummary(patientId, sid = null) {
     if (!patientId) return null;
+    const cleanId = String(patientId).trim();
     const activeSid = sid || await this.ensureMasterSession();
-    const url = `${this.baseUrl}/billing.jsp;jsessionid=${activeSid}?patientId=${encodeURIComponent(patientId)}`;
+    const url = `${this.baseUrl}/billing.jsp;jsessionid=${activeSid}?patientId=${encodeURIComponent(cleanId)}`;
 
     try {
       const res = await axios.get(url, {
@@ -233,8 +235,6 @@ class UpstreamService {
       const containerIdx = html.lastIndexOf('billing-summary-container');
       const containerHtml = containerIdx !== -1 ? html.substring(containerIdx, containerIdx + 3000) : html;
 
-      const isPaid = containerHtml.includes('paid-stamp') || containerHtml.includes('status-stamp paid-stamp');
-
       const payMatch = containerHtml.match(/total-payment-row[\s\S]*?<span class="value">([^<]+)<\/span>/i);
       const paid = payMatch ? parseFloat(payMatch[1].replace(/[^0-9.]/g, '')) || 0 : 0;
 
@@ -247,6 +247,11 @@ class UpstreamService {
       const discMatch = containerHtml.match(/Discount Amount[\s\S]*?<span class="value">([^<]+)<\/span>/i);
       const discount = discMatch ? parseFloat(discMatch[1].replace(/[^0-9.]/g, '')) || 0 : 0;
 
+      // Robust check: never mark as paid if due > 0 or if explicitly unpaid-stamp
+      const isExplicitUnpaid = containerHtml.includes('unpaid-stamp');
+      const isExplicitPaidStamp = !isExplicitUnpaid && (containerHtml.includes('status-stamp paid-stamp') || (containerHtml.includes('paid-stamp') && !containerHtml.includes('unpaid-stamp')));
+      const isPaid = (total > 0 && due <= 0 && paid >= total) || (isExplicitPaidStamp && due <= 0);
+
       const paymentLines = [];
       const lineRegex = /<div class="payment-sub-line">[\s\S]*?<span class="sub-label">[^A-Z]*([A-Z_]+)\s*<small>\(([^)]+)\)<\/small><\/span>[\s\S]*?<span class="sub-value">([^<]+)<\/span>/gi;
       let match;
@@ -258,18 +263,44 @@ class UpstreamService {
         });
       }
 
-      return {
+      const summary = {
+        patientId: cleanId,
         isPaid,
         total,
         discount,
         paid,
         due,
         paymentLines,
+        timestamp: Date.now(),
       };
+
+      // Store in memory cache
+      this.billingCache.set(cleanId.toUpperCase(), summary);
+
+      return summary;
     } catch (err) {
       console.warn(`[Upstream] Could not fetch billing.jsp for ${patientId}:`, err.message);
       return null;
     }
+  }
+
+  /**
+   * Get cached billing summary for a patient
+   */
+  getCachedBilling(patientId) {
+    if (!patientId) return null;
+    return this.billingCache.get(String(patientId).trim().toUpperCase()) || null;
+  }
+
+  /**
+   * Manually update or seed cached billing summary
+   */
+  setCachedBilling(patientId, summary) {
+    if (!patientId || !summary) return;
+    this.billingCache.set(String(patientId).trim().toUpperCase(), {
+      ...summary,
+      timestamp: Date.now(),
+    });
   }
 }
 

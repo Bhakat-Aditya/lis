@@ -50,10 +50,11 @@ export default function PrintableInvoice({
   const totalAmount = Number(financials.totalBill ?? financials.totalAmount ?? displayItems.reduce((acc, it) => acc + (Number(it.amount) || 0), 0));
   const discount = Number(financials.discount || 0);
   const netAmount = Number(financials.netBill ?? financials.netAmount ?? (totalAmount - discount));
-  const isPaid = (patient.billPayStatus === 2 || patient.billPayStatus === '2') && netAmount > 0;
   const rawPaid = Number(financials.paidAmount ?? financials.deposited ?? 0);
+  const rawDue = Number(financials.dueAmount ?? financials.totalDue ?? Math.max(0, netAmount - rawPaid));
+  const isPaid = netAmount > 0 && rawDue <= 0 && (rawPaid > 0 || patient.billPayStatus === 2 || patient.billPayStatus === '2');
   const depositedCash = (isPaid && rawPaid <= 0) ? netAmount : rawPaid;
-  const totalDue = isPaid ? 0 : Number(financials.dueAmount ?? financials.totalDue ?? Math.max(0, netAmount - depositedCash));
+  const totalDue = isPaid ? 0 : rawDue;
 
   const btnBase =
     'w-full flex items-center gap-2 font-bold text-xs py-2 px-3 rounded-xl shadow-xs transition-all cursor-pointer whitespace-nowrap justify-start text-white active:scale-95';

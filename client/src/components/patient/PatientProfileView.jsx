@@ -47,19 +47,20 @@ export default function PatientProfileView({
   const reportsTotal = hasReports
     ? reports.reduce((acc, r) => acc + (Number(r.rate) || 0), 0)
     : 0;
-  const testsTotal = hasReports ? reportsTotal : Number(patient.totalBill || 0);
+  const testsTotal = Number(patient.totalBill) > 0 ? Number(patient.totalBill) : (hasReports ? reportsTotal : 0);
   const isBilled = testsTotal > 0;
   const discountAmount = Number(patient.discount || 0);
   const netDue = Math.max(0, testsTotal - discountAmount);
-  const isExplicitPaid = (patient.billPayStatus === 2 || patient.billPayStatus === '2') && isBilled;
-  const depositsAmount = isExplicitPaid
-    ? netDue
-    : Number(patient.paidBill || 0);
-  const advanceAmount = Number(patient.advance || 0);
+  const depositsAmount = Number(patient.paidBill || 0);
+  const explicitDue = (patient.balance !== undefined && patient.balance !== null)
+    ? Number(patient.balance)
+    : (patient.dueAmount !== undefined ? Number(patient.dueAmount) : null);
   const balanceDue = isBilled
-    ? Math.max(0, netDue - depositsAmount)
+    ? (explicitDue !== null ? explicitDue : Math.max(0, netDue - depositsAmount))
     : 0;
-  const isPaid = isBilled && (isExplicitPaid || (depositsAmount >= netDue && netDue > 0));
+  const isPaid = isBilled && balanceDue <= 0 && (depositsAmount >= netDue || patient.billPayStatus === 2 || patient.billPayStatus === '2');
+  const advanceAmount = Number(patient.advance || 0);
+  const paymentLines = patient.paymentLines || patient.payments || [];
 
   // Status percentage
   const statusStr = String(patient.status || '').toUpperCase();
@@ -319,15 +320,23 @@ export default function PatientProfileView({
               <div className="text-[11px] font-semibold text-slate-500">Deposits</div>
             </div>
 
-            {/* Advance (soft green card) */}
-            <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-lg text-center space-y-1">
-              <div className="flex justify-center text-emerald-600">
+            {/* Balance Due (Outstanding) */}
+            <div className={`p-3 border rounded-lg text-center space-y-1 ${
+              balanceDue > 0 ? 'bg-amber-50/70 border-amber-300' : 'bg-emerald-50/70 border-emerald-200'
+            }`}>
+              <div className={`flex justify-center ${balanceDue > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
                 <Banknote className="w-5 h-5" />
               </div>
-              <div className="text-base font-extrabold text-emerald-700 font-mono">
-                ₹{advanceAmount.toFixed(2)}
+              <div className={`text-base font-extrabold font-mono ${
+                balanceDue > 0 ? 'text-rose-700' : 'text-emerald-700'
+              }`}>
+                ₹{balanceDue.toFixed(2)}
               </div>
-              <div className="text-[11px] font-semibold text-slate-600">Advance</div>
+              <div className={`text-[11px] font-bold ${
+                balanceDue > 0 ? 'text-amber-900' : 'text-emerald-800'
+              }`}>
+                {balanceDue > 0 ? 'Balance Due' : 'Fully Settled'}
+              </div>
             </div>
           </div>
         </div>
@@ -454,10 +463,29 @@ export default function PatientProfileView({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-800">
-                  {depositsAmount > 0 ? (
+                  {paymentLines.length > 0 ? (
+                    paymentLines.map((line, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50">
+                        <td className="py-2.5 px-3 font-mono text-slate-500">{idx + 1}</td>
+                        <td className="py-2.5 px-3 font-semibold text-slate-800 flex items-center gap-1.5">
+                          <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>{line.mode || 'CASH'} (Counter Receipt)</span>
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-500 font-mono">
+                          {line.date || formatDisplayDate(patient.regDate)}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-700">
+                          ₹{Number(line.amount || 0).toFixed(2)}
+                        </td>
+                      </tr>
+                    ))
+                  ) : depositsAmount > 0 ? (
                     <tr className="hover:bg-slate-50">
                       <td className="py-2.5 px-3 font-mono text-slate-500">1</td>
-                      <td className="py-2.5 px-3 font-semibold">Cash (Counter Desk Deposit)</td>
+                      <td className="py-2.5 px-3 font-semibold text-slate-800 flex items-center gap-1.5">
+                        <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Cash (Counter Receipt)</span>
+                      </td>
                       <td className="py-2.5 px-3 text-slate-500 font-mono">
                         {formatDisplayDate(patient.collectionDate || patient.regDate)}
                       </td>
@@ -473,6 +501,28 @@ export default function PatientProfileView({
                     </tr>
                   )}
                 </tbody>
+                {depositsAmount > 0 && (
+                  <tfoot>
+                    <tr className="border-t-2 border-slate-200 bg-slate-50/70 font-bold text-xs">
+                      <td colSpan="3" className="py-2 px-3 text-right text-slate-600">
+                        Total Deposited:
+                      </td>
+                      <td className="py-2 px-3 text-right font-mono text-emerald-700 font-extrabold">
+                        ₹{depositsAmount.toFixed(2)}
+                      </td>
+                    </tr>
+                    {balanceDue > 0 && (
+                      <tr className="bg-amber-50/50 font-bold text-xs">
+                        <td colSpan="3" className="py-2 px-3 text-right text-amber-800">
+                          Remaining Balance Due:
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono text-rose-700 font-extrabold">
+                          ₹{balanceDue.toFixed(2)}
+                        </td>
+                      </tr>
+                    )}
+                  </tfoot>
+                )}
               </table>
             </div>
           )}
