@@ -1,4 +1,5 @@
 import { upstreamService } from '../services/service.upstream.js';
+import { cacheService, CACHE_KEYS } from '../services/service.cache.js';
 
 /**
  * Format date to YYYY-MM-DD
@@ -308,21 +309,144 @@ export const addMultipleTests = async (req, res, next) => {
       return res.status(400).json({
         STATUS: 'FAILED',
         StatusCode: '400',
-        Message: 'patientId and selectedTestIds are required (e.g. TEST|T1,PROF|11,PKG|3)',
+        Message: 'patientId and selectedTestIds are required (e.g. TEST|T1,PROF|P1,PKG|K1)',
       });
     }
 
+    // Fetch master catalogs to validate & auto-resolve tokens
+    let testList = [];
+    let profList = [];
+    let pkgList = [];
+    try {
+      const [tRes, pRes, kRes] = await Promise.all([
+        cacheService.getList(CACHE_KEYS.TEST_LIST),
+        cacheService.getList(CACHE_KEYS.PROFILE_LIST),
+        cacheService.getList(CACHE_KEYS.PKG_LIST),
+      ]);
+      testList = tRes?.data || [];
+      profList = pRes?.data || [];
+      pkgList = kRes?.data || [];
+    } catch (e) {
+      console.warn('[AddTests] Could not fetch master lists for validation:', e.message);
+    }
+
+    // Parse and sanitize incoming tokens
+    const rawTokens = String(selectedTestIds).split(',').map((s) => s.trim()).filter(Boolean);
+    const validTokens = [];
+
+    for (const token of rawTokens) {
+      const parts = token.split('|');
+      const prefix = (parts[0] || 'TEST').toUpperCase();
+      const val = (parts[1] || '').trim();
+      if (!val) continue;
+
+      if (prefix === 'TEST') {
+        // 1. Direct valid test ID match (e.g. T1, T0, T75)
+        const matchById = testList.find((t) => String(t['Test Id']).toUpperCase() === val.toUpperCase());
+        if (matchById) {
+          validTokens.push(`TEST|${matchById['Test Id']}`);
+          continue;
+        }
+
+        // 2. Direct valid profile ID match (e.g. P1, P2)
+        const matchByProfId = profList.find((p) => String(p['Profile Id']).toUpperCase() === val.toUpperCase());
+        if (matchByProfId) {
+          validTokens.push(`PROF|${matchByProfId['Profile Id']}`);
+          continue;
+        }
+
+        // 3. Match by test name or short name
+        const matchByName = testList.find((t) => {
+          const n = String(t.Name || '').toLowerCase();
+          const s = String(t['Short Name'] || '').toLowerCase();
+          const q = val.toLowerCase();
+          return n === q || s === q || n.includes(q);
+        });
+        if (matchByName) {
+          validTokens.push(`TEST|${matchByName['Test Id']}`);
+          continue;
+        }
+
+        // 4. Match by profile name
+        const matchByProfName = profList.find((p) => {
+          const n = String(p.Name || '').toLowerCase();
+          const q = val.toLowerCase();
+          return n === q || n.includes(q);
+        });
+        if (matchByProfName) {
+          validTokens.push(`PROF|${matchByProfName['Profile Id']}`);
+          continue;
+        }
+
+        // If it starts with 'T' and has digits, assume valid test ID
+        if (/^T\d+$/i.test(val)) {
+          validTokens.push(`TEST|${val.toUpperCase()}`);
+          continue;
+        }
+      } else if (prefix === 'PROF') {
+        const cleanProfId = val.startsWith('P') ? val.toUpperCase() : `P${val}`;
+        const match = profList.find((p) => String(p['Profile Id']).toUpperCase() === cleanProfId);
+        if (match) {
+          validTokens.push(`PROF|${match['Profile Id']}`);
+          continue;
+        }
+        if (/^P\d+$/i.test(cleanProfId)) {
+          validTokens.push(`PROF|${cleanProfId}`);
+          continue;
+        }
+      } else if (prefix === 'PKG') {
+        const cleanPkgId = val.startsWith('K') ? val.toUpperCase() : `K${val}`;
+        const match = pkgList.find((pkg) => String(pkg['Package Id']).toUpperCase() === cleanPkgId);
+        if (match) {
+          validTokens.push(`PKG|${match['Package Id']}`);
+          continue;
+        }
+        if (/^K\d+$/i.test(cleanPkgId)) {
+          validTokens.push(`PKG|${cleanPkgId}`);
+          continue;
+        }
+      }
+    }
+
+    const uniqueValidTokens = Array.from(new Set(validTokens));
+
+    if (uniqueValidTokens.length === 0) {
+      return res.status(400).json({
+        STATUS: 'FAILED',
+        StatusCode: '400',
+        Message: 'No valid diagnostic tests or profiles recognized. Please select tests from the catalog suggestions.',
+      });
+    }
+
+    const sanitizedTestIds = uniqueValidTokens.join(',');
+    console.log(`[AddTests] Ordering ${uniqueValidTokens.length} test(s) for patient ${patientId}: ${sanitizedTestIds}`);
+
     const params = {
       patientId,
-      selectedTestIds,
+      selectedTestIds: sanitizedTestIds,
     };
 
     const upstreamData = await upstreamService.post('ADDTESTMULTIPLE', params, null, req.user?.upstreamSid);
+
+    if (upstreamData?.StatusCode === '1211' || upstreamData?.STATUS === 'FAILED') {
+      return res.status(400).json({
+        STATUS: 'FAILED',
+        StatusCode: upstreamData.StatusCode || '1211',
+        Message: upstreamData.Message || 'Upstream server was unable to add test (1211)',
+        data: upstreamData,
+      });
+    }
+
+    // Refresh billing summary in background so patient dues update immediately
+    upstreamService.getBillingSummary(patientId, req.user?.upstreamSid).catch((e) => {
+      console.warn('[AddTests] Billing summary refresh note:', e.message);
+    });
 
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
       StatusCode: upstreamData?.StatusCode || '0000',
       Message: upstreamData?.Message || 'Tests added successfully',
+      selectedTestIds: sanitizedTestIds,
       data: upstreamData,
     });
   } catch (err) {

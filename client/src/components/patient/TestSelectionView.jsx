@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Plus,
   Trash2,
@@ -23,14 +23,16 @@ export default function TestSelectionView({
   onFillResults,
   onMakePayment,
 }) {
-  const { tests: catalogTests } = useMaster();
+  const { tests: catalogTests = [], profiles: catalogProfiles = [], packages: catalogPackages = [] } = useMaster();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTests, setSelectedTests] = useState(() => {
     if (reports && reports.length > 0) {
       return reports.map((r, idx) => ({
-        id: r.reportId || idx + 1,
+        id: `EXISTING_${r.reportId || idx + 1}`,
+        reportId: r.reportId,
         name: r.testName || r.profileName,
         amount: Number(r.rate) || 0,
+        isNew: false,
       }));
     }
     return [];
@@ -39,6 +41,51 @@ export default function TestSelectionView({
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState('');
   const [saveError, setSaveError] = useState('');
+
+  // Combine tests, profiles, and packages into unified catalog with correct upstream prefix
+  const allCatalogItems = useMemo(() => {
+    const items = [];
+    (catalogTests || []).forEach((t) => {
+      if (t['Test Id']) {
+        items.push({
+          type: 'TEST',
+          id: String(t['Test Id']).trim(),
+          testId: String(t['Test Id']).trim(),
+          name: t.Name || t.name,
+          shortName: t['Short Name'] || '',
+          rate: Number(t.Rate) || 0,
+          category: 'Test',
+        });
+      }
+    });
+    (catalogProfiles || []).forEach((p) => {
+      if (p['Profile Id']) {
+        items.push({
+          type: 'PROF',
+          id: String(p['Profile Id']).trim(),
+          testId: String(p['Profile Id']).trim(),
+          name: p.Name || p.name,
+          shortName: '',
+          rate: Number(p.Rate) || 0,
+          category: 'Profile',
+        });
+      }
+    });
+    (catalogPackages || []).forEach((pkg) => {
+      if (pkg['Package Id']) {
+        items.push({
+          type: 'PKG',
+          id: String(pkg['Package Id']).trim(),
+          testId: String(pkg['Package Id']).trim(),
+          name: pkg.Name || pkg.name,
+          shortName: '',
+          rate: Number(pkg.Rate) || 0,
+          category: 'Package',
+        });
+      }
+    });
+    return items;
+  }, [catalogTests, catalogProfiles, catalogPackages]);
 
   // Financial calculations
   const existingTestsTotal = reports?.reduce((sum, r) => sum + (Number(r.rate) || 0), 0) || Number(patient?.totalBill) || 0;
@@ -58,47 +105,50 @@ export default function TestSelectionView({
 
   const [showSuggestions, setShowSuggestions] = useState(false);
 
-  const matchedSuggestions = searchTerm.trim().length >= 1
-    ? catalogTests
-        .filter((t) => {
-          const name = String(t.Name || t.name || t.testName || '').toLowerCase();
-          const code = String(t['Test Id'] || t['Short Name'] || '').toLowerCase();
-          const q = searchTerm.toLowerCase();
-          return name.includes(q) || code.includes(q);
-        })
-        .slice(0, 8)
-    : [];
+  const matchedSuggestions = useMemo(() => {
+    if (!searchTerm.trim()) return [];
+    const q = searchTerm.toLowerCase().trim();
+    return allCatalogItems
+      .filter((it) => {
+        const n = String(it.name || '').toLowerCase();
+        const s = String(it.shortName || '').toLowerCase();
+        const id = String(it.id || '').toLowerCase();
+        return n.includes(q) || s.includes(q) || id === q;
+      })
+      .slice(0, 10);
+  }, [searchTerm, allCatalogItems]);
 
-  const handleAddTest = (testToAdd = null) => {
-    const query = testToAdd ? (testToAdd.Name || testToAdd.name || testToAdd.testName) : searchTerm.trim();
-    if (!query) return;
-
-    let matched = testToAdd;
-    if (!matched) {
-      matched = catalogTests.find((t) => {
-        const n = String(t.Name || t.name || t.testName || '').toLowerCase();
-        const code = String(t['Test Id'] || t['Short Name'] || '').toLowerCase();
-        return n.includes(searchTerm.toLowerCase()) || code === searchTerm.toLowerCase();
+  const handleAddTest = (itemToAdd = null) => {
+    let item = itemToAdd;
+    if (!item && searchTerm.trim()) {
+      const q = searchTerm.toLowerCase().trim();
+      item = allCatalogItems.find((it) => {
+        const n = String(it.name || '').toLowerCase();
+        const s = String(it.shortName || '').toLowerCase();
+        const id = String(it.id || '').toLowerCase();
+        return n === q || s === q || id === q || n.includes(q);
       });
     }
 
-    const testName = matched ? (matched.Name || matched.name || matched.testName) : query.toUpperCase();
-    const testId = matched ? (matched['Test Id'] || matched.id || matched['Short Name'] || testName) : testName;
-    const rate = matched ? Number(matched.Rate || matched.rate || 0) : 0;
+    if (!item) {
+      setSaveError('Please select a valid test, profile, or package from the suggestions dropdown.');
+      return;
+    }
 
     // Prevent duplicate additions
-    if (selectedTests.some((t) => t.name.toLowerCase() === testName.toLowerCase())) {
+    if (selectedTests.some((t) => t.testId === item.testId && t.type === item.type)) {
       setSearchTerm('');
       setShowSuggestions(false);
       return;
     }
 
     const newTest = {
-      id: testId || Date.now() + Math.random(),
-      testId: testId,
-      type: 'TEST',
-      name: testName,
-      amount: rate,
+      id: `${item.type}|${item.id}`,
+      testId: item.id,
+      type: item.type,
+      name: item.name,
+      amount: item.rate,
+      category: item.category,
       isNew: true,
     };
 
@@ -106,6 +156,7 @@ export default function TestSelectionView({
     setSearchTerm('');
     setShowSuggestions(false);
     setSaveSuccess('');
+    setSaveError('');
   };
 
   const handleRemoveTest = (id) => {
@@ -113,15 +164,19 @@ export default function TestSelectionView({
   };
 
   const handleClear = () => {
-    setSelectedTests([]);
+    // Keep existing reports, clear newly added tests
+    setSelectedTests((prev) => prev.filter((t) => !t.isNew));
     setSearchTerm('');
     setSaveSuccess('');
     setSaveError('');
   };
 
   const handleSaveTests = async () => {
-    if (selectedTests.length === 0) {
-      setSaveError('Please add at least one test from the catalog.');
+    // ONLY send newly added tests with valid catalog IDs!
+    const newTests = selectedTests.filter((t) => t.isNew && t.testId);
+
+    if (newTests.length === 0) {
+      setSaveError('No new tests selected. Please search and select tests from the catalog.');
       return;
     }
 
@@ -130,12 +185,8 @@ export default function TestSelectionView({
     setSaveSuccess('');
 
     try {
-      const formattedIds = selectedTests
-        .map((t) => {
-          const tid = t.testId || t.id;
-          const type = t.type || 'TEST';
-          return `${type}|${tid}`;
-        })
+      const formattedIds = newTests
+        .map((t) => `${t.type || 'TEST'}|${t.testId}`)
         .join(',');
 
       const res = await api.post('/patients/add-tests', {
@@ -144,7 +195,9 @@ export default function TestSelectionView({
       });
 
       if (res.data?.STATUS === 'SUCCESS' || res.data?.StatusCode === '0000') {
-        setSaveSuccess('Tests ordered successfully! You can now record payment or print invoice.');
+        setSaveSuccess(`Added ${newTests.length} investigation(s) successfully!`);
+        // Mark as existing
+        setSelectedTests((prev) => prev.map((t) => ({ ...t, isNew: false })));
         if (onRefresh) onRefresh();
       } else {
         setSaveError(res.data?.Message || 'Failed to order tests');
@@ -222,9 +275,10 @@ export default function TestSelectionView({
               {showSuggestions && matchedSuggestions.length > 0 && (
                 <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-50 max-h-56 overflow-y-auto divide-y divide-slate-100 animate-in fade-in zoom-in-95 duration-100">
                   {matchedSuggestions.map((t, idx) => {
-                    const testName = t.Name || t.name || t.testName;
-                    const testCode = t['Test Id'] || t['Short Name'] || '';
-                    const rate = t.Rate || t.rate || '350';
+                    const testName = t.name;
+                    const testCode = t.id || '';
+                    const rate = t.rate || 0;
+                    const category = t.category || 'Test';
                     return (
                       <div
                         key={testCode + idx}
@@ -232,7 +286,18 @@ export default function TestSelectionView({
                         className="p-2.5 hover:bg-indigo-50 flex items-center justify-between cursor-pointer transition-colors"
                       >
                         <div>
-                          <div className="font-bold text-slate-800 text-xs">{testName}</div>
+                          <div className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                            <span>{testName}</span>
+                            <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                              category === 'Profile'
+                                ? 'bg-purple-100 text-purple-700'
+                                : category === 'Package'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-blue-100 text-blue-700'
+                            }`}>
+                              {category}
+                            </span>
+                          </div>
                           {testCode && <div className="text-[10px] text-slate-400 font-mono">Code: {testCode}</div>}
                         </div>
                         <div className="text-right">
@@ -326,18 +391,29 @@ export default function TestSelectionView({
                   {selectedTests.length > 0 ? (
                     selectedTests.map((t) => (
                       <tr key={t.id} className="hover:bg-slate-50">
-                        <td className="py-2.5 px-3 font-semibold uppercase">{t.name}</td>
+                        <td className="py-2.5 px-3 font-semibold uppercase flex items-center gap-2">
+                          <span>{t.name}</span>
+                          {t.isNew ? (
+                            <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">New</span>
+                          ) : (
+                            <span className="text-[9px] bg-slate-100 text-slate-500 font-medium px-1.5 py-0.5 rounded">Existing</span>
+                          )}
+                        </td>
                         <td className="py-2.5 px-3 text-right font-mono font-bold">
                           ₹{t.amount}
                         </td>
                         <td className="py-2.5 px-3 text-center">
-                          <button
-                            onClick={() => handleRemoveTest(t.id)}
-                            className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded transition-colors cursor-pointer"
-                            title="Remove Test"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {t.isNew ? (
+                            <button
+                              onClick={() => handleRemoveTest(t.id)}
+                              className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                              title="Remove New Test"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          ) : (
+                            <span className="text-slate-300 text-xs" title="Already booked in clinic ledger">—</span>
+                          )}
                         </td>
                       </tr>
                     ))
