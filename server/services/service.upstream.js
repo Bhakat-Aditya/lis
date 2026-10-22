@@ -56,7 +56,7 @@ class UpstreamService {
 
   /**
    * User login via upstream APIServlet
-   */
+   */ 
   async userLogin(loginId, password, totp = null) {
     try {
       let apiAction = 'LOGIN';
@@ -102,12 +102,22 @@ class UpstreamService {
     }
   }
 
+  _sanitizeParams(params = {}) {
+    const clean = {};
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== null && v !== 'undefined') {
+        clean[k] = v;
+      }
+    }
+    return clean;
+  }
+
   /**
    * Generic GET call to GetAPIServlet
    */
   async get(apiName, params = {}, sid = null) {
     const activeSid = sid || await this.ensureMasterSession();
-    const query = new URLSearchParams({ api: apiName, ...params }).toString();
+    const query = new URLSearchParams({ api: apiName, ...this._sanitizeParams(params) }).toString();
     const url = `${this.baseUrl}/GetAPIServlet;jsessionid=${activeSid}?${query}`;
 
     try {
@@ -149,11 +159,11 @@ class UpstreamService {
    */
   async post(apiName, params = {}, body = null, sid = null) {
     const activeSid = sid || await this.ensureMasterSession();
-    const query = new URLSearchParams({ api: apiName, ...params }).toString();
+    const query = new URLSearchParams({ api: apiName, ...this._sanitizeParams(params) }).toString();
     const url = `${this.baseUrl}/APIServlet;jsessionid=${activeSid}?${query}`;
 
     try {
-      const res = await axios.post(url, body, {
+      const res = await axios.post(url, body || query, {
         headers: {
           'Cookie': `JSESSIONID=${activeSid}`,
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -173,7 +183,7 @@ class UpstreamService {
         console.warn(`[Upstream] Session error (${res.data?.StatusCode || 'FAILED'}) on POST, refreshing master sid...`);
         const newSid = await this.ensureMasterSession(true);
         const retryUrl = `${this.baseUrl}/APIServlet;jsessionid=${newSid}?${query}`;
-        const retryRes = await axios.post(retryUrl, body, {
+        const retryRes = await axios.post(retryUrl, body || query, {
           headers: {
             'Cookie': `JSESSIONID=${newSid}`,
             'Content-Type': 'application/x-www-form-urlencoded',
@@ -215,12 +225,59 @@ class UpstreamService {
   }
 
   /**
-   * Scrape and parse real-time billing summary from billing.jsp
+   * Fetch real-time billing summary (uses native GETBILLJSON first, fallbacks to billing.jsp)
    */
   async getBillingSummary(patientId, sid = null) {
     if (!patientId) return null;
     const cleanId = String(patientId).trim();
     const activeSid = sid || await this.ensureMasterSession();
+
+    // 1. Try native GETBILLJSON (accurate, structured JSON from upstream database)
+    try {
+      const billData = await this.get('GETBILLJSON', { patientId: cleanId }, activeSid);
+      const b = billData?.payLoadJSON?.bill;
+      if (b && typeof b === 'object') {
+        const total = parseFloat(b['Total Bill']) || 0;
+        const gross = parseFloat(b['Total Amount']) || total;
+        const discount = parseFloat(b['Discount Amount']) || 0;
+        const roundoff = parseFloat(b['Round Off']) || 0;
+        const paid = parseFloat(b['Total Payment']) || 0;
+        const due = parseFloat(b['Total Outstanding']) || 0;
+        const isPaid = (total > 0 && due <= 0 && paid >= total) || (total === 0 && paid === 0 && due === 0);
+
+        const paymentLines = (b['Payment List'] || []).map((p) => ({
+          mode: p['Payment Mode'] || 'CASH',
+          amount: parseFloat(p['Amount']) || 0,
+          date: p['Payment Date'] || '',
+          info: p['Info'] || '',
+        }));
+
+        const summary = {
+          patientId: cleanId,
+          isPaid,
+          total,
+          gross,
+          discount,
+          roundoff,
+          paid,
+          due,
+          paymentLines,
+          testList: b['Test List'] || [],
+          billUrl: billData?.payLoadJSON?.billUrl || '',
+          timestamp: Date.now(),
+        };
+
+        const uId = cleanId.toUpperCase();
+        const altId = uId.startsWith('P') ? uId.slice(1) : `P${uId}`;
+        this.billingCache.set(uId, summary);
+        this.billingCache.set(altId, summary);
+        return summary;
+      }
+    } catch (e) {
+      console.warn(`[Upstream] GETBILLJSON failed for ${cleanId}, falling back to billing.jsp:`, e.message);
+    }
+
+    // 2. Fallback to billing.jsp scraping
     const url = `${this.baseUrl}/billing.jsp;jsessionid=${activeSid}?patientId=${encodeURIComponent(cleanId)}`;
 
     try {
@@ -289,7 +346,13 @@ class UpstreamService {
    */
   getCachedBilling(patientId) {
     if (!patientId) return null;
-    return this.billingCache.get(String(patientId).trim().toUpperCase()) || null;
+    const clean = String(patientId).trim().toUpperCase();
+    const entry = this.billingCache.get(clean);
+    if (entry && Date.now() - entry.timestamp < 30000) return entry;
+    const alt = clean.startsWith('P') ? clean.slice(1) : `P${clean}`;
+    const altEntry = this.billingCache.get(alt);
+    if (altEntry && Date.now() - altEntry.timestamp < 30000) return altEntry;
+    return null;
   }
 
   /**
@@ -297,10 +360,14 @@ class UpstreamService {
    */
   setCachedBilling(patientId, summary) {
     if (!patientId || !summary) return;
-    this.billingCache.set(String(patientId).trim().toUpperCase(), {
+    const clean = String(patientId).trim().toUpperCase();
+    const alt = clean.startsWith('P') ? clean.slice(1) : `P${clean}`;
+    const entry = {
       ...summary,
       timestamp: Date.now(),
-    });
+    };
+    this.billingCache.set(clean, entry);
+    this.billingCache.set(alt, entry);
   }
 }
 

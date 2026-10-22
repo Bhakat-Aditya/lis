@@ -4,13 +4,28 @@ import api from '../../services/api';
 import { useMaster } from '../../context/context.master.jsx';
 import { Search, Plus, Check, Trash2, Layers } from 'lucide-react';
 
-export default function AddTestsModal({ isOpen, onClose, patient, onTestsAdded }) {
+export default function AddTestsModal({ isOpen, onClose, patient, reports = [], onTestsAdded }) {
   const { tests, profiles, packages } = useMaster();
   const [activeTab, setActiveTab] = useState('tests'); // tests, profiles, packages
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedItems, setSelectedItems] = useState([]); // { type: 'TEST'|'PROF'|'PKG', id, name, rate }
+  const [allowRepeat, setAllowRepeat] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const bookedKeys = React.useMemo(() => {
+    const set = new Set();
+    const list = Array.isArray(reports) && reports.length > 0 ? reports : (patient?.tests || []);
+    list.forEach((r) => {
+      const tid = String(r.testId || r.id || '').trim().toLowerCase();
+      if (tid) set.add(tid);
+      const pid = String(r.profileName || r.profileId || '').trim().toLowerCase();
+      if (pid) set.add(pid);
+      const pkg = String(r.packageName || r.packageId || '').trim().toLowerCase();
+      if (pkg) set.add(pkg);
+    });
+    return set;
+  }, [reports, patient]);
 
   if (!patient) return null;
 
@@ -38,14 +53,26 @@ export default function AddTestsModal({ isOpen, onClose, patient, onTestsAdded }
     setLoading(true);
     setError('');
 
+    const rawPid = patient?.patientId || patient?.slNo || '';
+    const cleanPid = rawPid
+      ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
+      : '';
+
+    if (!cleanPid) {
+      setError('Patient ID is missing. Please close and re-open.');
+      setLoading(false);
+      return;
+    }
+
     // Format string according to upstream API:
     // e.g. TEST|T1,TEST|T75,PROF|11,PKG|3
     const formattedIds = selectedItems.map((item) => `${item.type}|${item.id}`).join(',');
 
     try {
       await api.post('/patients/add-tests', {
-        patientId: patient.patientId,
+        patientId: cleanPid,
         selectedTestIds: formattedIds,
+        allowRepeat,
       });
 
       if (onTestsAdded) onTestsAdded();
@@ -133,10 +160,14 @@ export default function AddTestsModal({ isOpen, onClose, patient, onTestsAdded }
         </div>
 
         {/* Items Grid */}
-        <div className="border border-slate-200 rounded-lg h-64 overflow-y-auto divide-y divide-slate-100 bg-white">
+        <div
+          data-lenis-prevent="true"
+          className="border border-slate-200 rounded-lg h-64 overflow-y-auto divide-y divide-slate-100 bg-white"
+        >
           {activeTab === 'tests' && (
             filteredTests.map((t) => {
               const selected = isSelected('TEST', t['Test Id']);
+              const isBooked = bookedKeys.has(String(t['Test Id'] || '').toLowerCase());
               return (
                 <div
                   key={t['Test Id']}
@@ -152,8 +183,15 @@ export default function AddTestsModal({ isOpen, onClose, patient, onTestsAdded }
                       {selected && <Check className="w-3 h-3" />}
                     </div>
                     <div>
-                      <span className="font-semibold text-slate-800">{t.Name}</span>
-                      <span className="text-[10px] text-slate-400 ml-2">({t['Test Id']}) | {t['Sample Type'] || 'Serum'}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-slate-800">{t.Name}</span>
+                        {isBooked && (
+                          <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold border border-slate-200">
+                            Booked
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-slate-400">({t['Test Id']}) | {t['Sample Type'] || 'Serum'}</span>
                     </div>
                   </div>
                   <span className="font-bold text-slate-700">₹{t.Rate || '100'}</span>
@@ -165,6 +203,7 @@ export default function AddTestsModal({ isOpen, onClose, patient, onTestsAdded }
           {activeTab === 'profiles' && (
             filteredProfiles.map((p) => {
               const selected = isSelected('PROF', p['Profile Id']);
+              const isBooked = bookedKeys.has(String(p['Profile Id'] || '').toLowerCase());
               return (
                 <div
                   key={p['Profile Id']}
@@ -180,8 +219,15 @@ export default function AddTestsModal({ isOpen, onClose, patient, onTestsAdded }
                       {selected && <Check className="w-3 h-3" />}
                     </div>
                     <div>
-                      <span className="font-semibold text-slate-800">{p.Name}</span>
-                      <span className="text-[10px] text-slate-400 ml-2">Profile ({p['Profile Id']})</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-slate-800">{p.Name}</span>
+                        {isBooked && (
+                          <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold border border-slate-200">
+                            Booked
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-slate-400">Profile ({p['Profile Id']})</span>
                     </div>
                   </div>
                   <span className="font-bold text-slate-700">₹{p.Rate || '500'}</span>
@@ -193,6 +239,7 @@ export default function AddTestsModal({ isOpen, onClose, patient, onTestsAdded }
           {activeTab === 'packages' && (
             filteredPackages.map((pkg) => {
               const selected = isSelected('PKG', pkg['Package Id']);
+              const isBooked = bookedKeys.has(String(pkg['Package Id'] || '').toLowerCase());
               return (
                 <div
                   key={pkg['Package Id']}
@@ -208,8 +255,15 @@ export default function AddTestsModal({ isOpen, onClose, patient, onTestsAdded }
                       {selected && <Check className="w-3 h-3" />}
                     </div>
                     <div>
-                      <span className="font-semibold text-slate-800">{pkg.Name}</span>
-                      <span className="text-[10px] text-slate-400 ml-2">Package ({pkg['Package Id']})</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-slate-800">{pkg.Name}</span>
+                        {isBooked && (
+                          <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold border border-slate-200">
+                            Booked
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-slate-400">Package ({pkg['Package Id']})</span>
                     </div>
                   </div>
                   <span className="font-bold text-slate-700">₹{pkg.Rate || '1000'}</span>
@@ -220,16 +274,28 @@ export default function AddTestsModal({ isOpen, onClose, patient, onTestsAdded }
         </div>
 
         {/* Selected Items Tray */}
-        <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between">
+        <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Layers className="w-4 h-4 text-indigo-600" />
             <span className="font-medium text-slate-700">
               Selected ({selectedItems.length} items)
             </span>
           </div>
-          <div className="text-right">
-            <span className="text-slate-400 text-[11px] mr-1">Estimated Total:</span>
-            <span className="font-bold text-indigo-700 text-sm">₹{totalAmount.toFixed(2)}</span>
+
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-1.5 text-slate-600 cursor-pointer select-none text-[11px]">
+              <input
+                type="checkbox"
+                checked={allowRepeat}
+                onChange={(e) => setAllowRepeat(e.target.checked)}
+                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span>Allow repeat order (re-check)</span>
+            </label>
+            <div className="text-right">
+              <span className="text-slate-400 text-[11px] mr-1">Estimated Total:</span>
+              <span className="font-bold text-indigo-700 text-sm">₹{totalAmount.toFixed(2)}</span>
+            </div>
           </div>
         </div>
 

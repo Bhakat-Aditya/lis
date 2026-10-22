@@ -11,9 +11,14 @@ export const getPatientReport = async (req, res, next) => {
       });
     }
 
+    const rawPid = String(patientId).trim();
+    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+      ? `P${rawPid.replace(/^P+/i, '')}`
+      : `P${rawPid}`;
+
     const upstreamData = await upstreamService.get(
       'GETPATIENTREPORT',
-      { patientId },
+      { patientId: cleanPatientId },
       req.user?.upstreamSid
     );
 
@@ -36,22 +41,28 @@ export const getPatientReport = async (req, res, next) => {
 
     let billing = null;
     try {
-      billing = await upstreamService.getBillingSummary(patientId, req.user?.upstreamSid);
+      billing = await upstreamService.getBillingSummary(cleanPatientId, req.user?.upstreamSid);
     } catch (e) {}
 
     const patientWithBilling = patient
       ? {
           ...patient,
+          grossTotal: billing?.gross || (billing?.total && billing.total > 0 ? billing.total : Number(patient.totalBill || 0)),
           totalBill: (billing?.total && billing.total > 0) ? billing.total : Number(patient.totalBill || 0),
+          discount: billing?.discount || 0,
+          roundoff: billing?.roundoff || 0,
           paidBill: billing ? billing.paid : Number(patient.paidBill || 0),
           balance: billing
             ? billing.due
             : (patient.billPayStatus === 2 || patient.billPayStatus === '2' ? 0 : Math.max(0, Number(patient.totalBill || 0) - Number(patient.paidBill || 0))),
+          dueAmount: billing ? billing.due : 0,
           billPayStatus: billing
             ? (billing.total > 0 && billing.due <= 0 && billing.paid >= billing.total ? 2 : (billing.paid > 0 ? 1 : 0))
             : (patient.billPayStatus === 2 || patient.billPayStatus === '2' ? 2 : (Number(patient.paidBill) > 0 ? 1 : 0)),
           paymentLines: billing?.paymentLines || [],
           payments: billing?.paymentLines || [],
+          billUrl: billing?.billUrl || '',
+          testList: billing?.testList || [],
         }
       : null;
 
@@ -132,11 +143,17 @@ export const receiveSample = async (req, res, next) => {
       return res.status(400).json({ STATUS: 'FAILED', Message: 'patientId is required' });
     }
 
-    const upstreamData = await upstreamService.post('RECEIVESAMPLE', { patientId }, null, req.user?.upstreamSid);
+    const rawPid = String(patientId).trim();
+    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+      ? `P${rawPid.replace(/^P+/i, '')}`
+      : `P${rawPid}`;
+
+    const upstreamData = await upstreamService.post('RECEIVESAMPLE', { patientId: cleanPatientId }, null, req.user?.upstreamSid);
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
       StatusCode: upstreamData?.StatusCode || '0000',
       Message: upstreamData?.Message || 'Sample received successfully',
+      data: upstreamData,
     });
   } catch (err) {
     next(err);
@@ -146,11 +163,26 @@ export const receiveSample = async (req, res, next) => {
 export const verifyReport = async (req, res, next) => {
   try {
     const { patientId, reportId } = req.body;
-    const upstreamData = await upstreamService.post('REPORTVERIFY', { patientId, reportId }, null, req.user?.upstreamSid);
+    if (!patientId) {
+      return res.status(400).json({ STATUS: 'FAILED', Message: 'patientId is required' });
+    }
+
+    const rawPid = String(patientId).trim();
+    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+      ? `P${rawPid.replace(/^P+/i, '')}`
+      : `P${rawPid}`;
+
+    const params = { patientId: cleanPatientId };
+    if (reportId && String(reportId).trim() !== 'undefined') {
+      params.reportId = String(reportId).trim();
+    }
+
+    const upstreamData = await upstreamService.post('REPORTVERIFY', params, null, req.user?.upstreamSid);
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
       StatusCode: upstreamData?.StatusCode || '0000',
-      Message: upstreamData?.Message || 'Report verified',
+      Message: upstreamData?.Message || 'Report verified by pathologist',
+      data: upstreamData,
     });
   } catch (err) {
     next(err);
@@ -160,11 +192,26 @@ export const verifyReport = async (req, res, next) => {
 export const approveReport = async (req, res, next) => {
   try {
     const { patientId, reportId } = req.body;
-    const upstreamData = await upstreamService.post('REPORTAPPROVE', { patientId, reportId }, null, req.user?.upstreamSid);
+    if (!patientId) {
+      return res.status(400).json({ STATUS: 'FAILED', Message: 'patientId is required' });
+    }
+
+    const rawPid = String(patientId).trim();
+    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+      ? `P${rawPid.replace(/^P+/i, '')}`
+      : `P${rawPid}`;
+
+    const params = { patientId: cleanPatientId };
+    if (reportId && String(reportId).trim() !== 'undefined') {
+      params.reportId = String(reportId).trim();
+    }
+
+    const upstreamData = await upstreamService.post('REPORTAPPROVE', params, null, req.user?.upstreamSid);
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
       StatusCode: upstreamData?.StatusCode || '0000',
-      Message: upstreamData?.Message || 'Report approved',
+      Message: upstreamData?.Message || 'Report clinically approved and signed off by Doctor',
+      data: upstreamData,
     });
   } catch (err) {
     next(err);
@@ -174,11 +221,29 @@ export const approveReport = async (req, res, next) => {
 export const rejectReport = async (req, res, next) => {
   try {
     const { patientId, reportId, reason = '' } = req.body;
-    const upstreamData = await upstreamService.post('REPORTREJECT', { patientId, reportId, reason }, null, req.user?.upstreamSid);
+    if (!patientId) {
+      return res.status(400).json({ STATUS: 'FAILED', Message: 'patientId is required' });
+    }
+
+    const rawPid = String(patientId).trim();
+    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+      ? `P${rawPid.replace(/^P+/i, '')}`
+      : `P${rawPid}`;
+
+    const params = {
+      patientId: cleanPatientId,
+      reason: reason || 'Flagged for recollection / re-test',
+    };
+    if (reportId && String(reportId).trim() !== 'undefined') {
+      params.reportId = String(reportId).trim();
+    }
+
+    const upstreamData = await upstreamService.post('REPORTREJECT', params, null, req.user?.upstreamSid);
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
       StatusCode: upstreamData?.StatusCode || '0000',
-      Message: upstreamData?.Message || 'Report rejected',
+      Message: upstreamData?.Message || 'Report flagged for re-test / rejected',
+      data: upstreamData,
     });
   } catch (err) {
     next(err);
@@ -188,11 +253,21 @@ export const rejectReport = async (req, res, next) => {
 export const releaseReport = async (req, res, next) => {
   try {
     const { patientId } = req.body;
-    const upstreamData = await upstreamService.post('RELEASEREPORT', { patientId }, null, req.user?.upstreamSid);
+    if (!patientId) {
+      return res.status(400).json({ STATUS: 'FAILED', Message: 'patientId is required' });
+    }
+
+    const rawPid = String(patientId).trim();
+    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+      ? `P${rawPid.replace(/^P+/i, '')}`
+      : `P${rawPid}`;
+
+    const upstreamData = await upstreamService.post('RELEASEREPORT', { patientId: cleanPatientId }, null, req.user?.upstreamSid);
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
       StatusCode: upstreamData?.StatusCode || '0000',
-      Message: upstreamData?.Message || 'Report released for delivery/print',
+      Message: upstreamData?.Message || 'Report released for delivery and printing',
+      data: upstreamData,
     });
   } catch (err) {
     next(err);

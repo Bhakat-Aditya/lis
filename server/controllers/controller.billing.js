@@ -54,15 +54,20 @@ export const generateBill = async (req, res, next) => {
       return res.status(400).json({ STATUS: 'FAILED', Message: 'patientId is required' });
     }
 
+    const rawPid = String(patientId).trim();
+    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+      ? `P${rawPid.replace(/^P+/i, '')}`
+      : `P${rawPid}`;
+
     // Determine amount to pay
     let amtToPay = Number(amount);
     if (!amtToPay || amtToPay <= 0) {
       // Look up current summary
-      const currentSummary = await upstreamService.getBillingSummary(patientId, req.user?.upstreamSid);
+      const currentSummary = await upstreamService.getBillingSummary(cleanPatientId, req.user?.upstreamSid);
       if (currentSummary && currentSummary.due > 0) {
         amtToPay = currentSummary.due;
       } else {
-        const pReport = await upstreamService.get('GETPATIENTREPORT', { patientId }, req.user?.upstreamSid);
+        const pReport = await upstreamService.get('GETPATIENTREPORT', { patientId: cleanPatientId }, req.user?.upstreamSid);
         amtToPay = Number(pReport?.payLoadJSON?.patient?.totalBill) || 0;
       }
     }
@@ -74,31 +79,48 @@ export const generateBill = async (req, res, next) => {
     const formattedDate = date || `${d}/${m}/${y}`;
     const mode = (paymentMode || '').toUpperCase().includes('UPI') ? 'OFFLINE_UPI' : 'CASH';
 
-    // 1. Post real payment to BillingServlet
+    // 1. Post real payment using BILLPAYMENTUPDATE or fallback to BillingServlet
     if (amtToPay > 0) {
-      await upstreamService.postBilling(
-        {
-          patientId,
-          action: 'addpayment',
-          date: formattedDate,
-          amt: amtToPay.toFixed(2),
-          paymentMode: mode,
-          info: info || '',
-        },
-        req.user?.upstreamSid
-      );
+      try {
+        await upstreamService.post(
+          'BILLPAYMENTUPDATE',
+          {
+            patientId: cleanPatientId,
+            action: 'addpayment',
+            date: formattedDate,
+            amt: amtToPay.toFixed(2),
+            paymentMode: mode,
+            info: info || '',
+          },
+          null,
+          req.user?.upstreamSid
+        );
+      } catch (err) {
+        console.warn('[Billing] BILLPAYMENTUPDATE fallback to BillingServlet:', err.message);
+        await upstreamService.postBilling(
+          {
+            patientId: cleanPatientId,
+            action: 'addpayment',
+            date: formattedDate,
+            amt: amtToPay.toFixed(2),
+            paymentMode: mode,
+            info: info || '',
+          },
+          req.user?.upstreamSid
+        );
+      }
     }
 
     // 2. Trigger BILLGENERATE to sync internal state
     let upstreamData = null;
     try {
-      upstreamData = await upstreamService.post('BILLGENERATE', { patientId }, null, req.user?.upstreamSid);
+      upstreamData = await upstreamService.post('BILLGENERATE', { patientId: cleanPatientId }, null, req.user?.upstreamSid);
     } catch (e) {
       console.warn('[Billing] BILLGENERATE sync note:', e.message);
     }
 
     // 3. Fetch fresh summary
-    const summary = await upstreamService.getBillingSummary(patientId, req.user?.upstreamSid);
+    const summary = await upstreamService.getBillingSummary(cleanPatientId, req.user?.upstreamSid);
 
     return res.json({
       STATUS: 'SUCCESS',
@@ -114,6 +136,176 @@ export const generateBill = async (req, res, next) => {
 
 export const recordDeposit = generateBill;
 
+/**
+ * Apply clinical discount using upstream native BILLUPDATE API
+ */
+export const applyDiscount = async (req, res, next) => {
+  try {
+    const { patientId, discountType = 'flat', discountValue = 0, reason = '' } = req.body;
+    if (!patientId) {
+      return res.status(400).json({ STATUS: 'FAILED', Message: 'patientId is required' });
+    }
+
+    const rawPid = String(patientId).trim();
+    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+      ? `P${rawPid.replace(/^P+/i, '')}`
+      : `P${rawPid}`;
+
+    // 1. Fetch current bill JSON
+    let billJson = null;
+    try {
+      billJson = await upstreamService.get('GETBILLJSON', { patientId: cleanPatientId }, req.user?.upstreamSid);
+    } catch (e) {
+      console.warn('[Billing] GETBILLJSON failed, attempting GETPATIENTREPORT:', e.message);
+    }
+
+    let tests = billJson?.payLoadJSON?.bill?.['Test List'] || [];
+    let grossTotal = parseFloat(billJson?.payLoadJSON?.bill?.['Total Amount']) || 0;
+
+    // Fallback: if Test List is empty, get from GETPATIENTREPORT
+    if (tests.length === 0) {
+      const pReport = await upstreamService.get('GETPATIENTREPORT', { patientId: cleanPatientId }, req.user?.upstreamSid);
+      const reports = pReport?.payLoadJSON?.reports || [];
+      const pt = pReport?.payLoadJSON?.patient || {};
+      const today = new Date();
+      const d = String(today.getDate()).padStart(2, '0');
+      const m = String(today.getMonth() + 1).padStart(2, '0');
+      const y = today.getFullYear();
+      const formattedDate = `${d}/${m}/${y}`;
+
+      if (Array.isArray(pt?.testList) && pt.testList.length > 0) {
+        tests = pt.testList;
+        grossTotal = Number(pt.totalBill) || tests.reduce((acc, t) => acc + (parseFloat(t.Amount) || 0), 0);
+      } else {
+        // Group by package and profile to avoid unbundled sub-test rates
+        const seenPkg = new Set();
+        const seenProf = new Set();
+        reports.forEach((r, idx) => {
+          if (r.packageName) {
+            if (!seenPkg.has(r.packageName)) {
+              seenPkg.add(r.packageName);
+              tests.push({
+                'Bill Particulars': r.packageName,
+                Amount: String(Number(r.rate) || 0),
+                'Bill Date': formattedDate,
+              });
+            }
+          } else if (r.profileName) {
+            if (!seenProf.has(r.profileName)) {
+              seenProf.add(r.profileName);
+              tests.push({
+                'Bill Particulars': r.profileName,
+                Amount: String(Number(r.rate) || 0),
+                'Bill Date': formattedDate,
+              });
+            }
+          } else {
+            tests.push({
+              'Bill Particulars': r.testName || `Test ${idx + 1}`,
+              Amount: String(Number(r.rate) || 0),
+              'Bill Date': formattedDate,
+            });
+          }
+        });
+        grossTotal = Number(pt.totalBill) > 0 ? Number(pt.totalBill) : tests.reduce((acc, t) => acc + (parseFloat(t.Amount) || 0), 0);
+      }
+    }
+
+    if (grossTotal <= 0) {
+      return res.status(400).json({
+        STATUS: 'FAILED',
+        Message: 'Cannot apply discount on a bill with zero total amount',
+      });
+    }
+
+    const val = Number(discountValue) || 0;
+    let discamt = 0;
+    let discPerc = 0;
+
+    if (discountType === 'percent') {
+      discPerc = Math.min(100, Math.max(0, val));
+      discamt = Math.round(((grossTotal * discPerc) / 100) * 100) / 100;
+    } else {
+      discamt = Math.min(grossTotal, Math.max(0, val));
+      discPerc = grossTotal > 0 ? Math.round(((discamt / grossTotal) * 100) * 100) / 100 : 0;
+    }
+
+    const remainder = grossTotal - discamt;
+    const roundedRemainder = Math.round(remainder);
+    const roundoff = Math.round((remainder - roundedRemainder) * 100) / 100;
+    const finalBillAmount = Math.max(0, roundedRemainder);
+
+    const today = new Date();
+    const d = String(today.getDate()).padStart(2, '0');
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const y = today.getFullYear();
+    const formattedDate = `${d}/${m}/${y}`;
+
+    // Prepare params for BILLUPDATE
+    const params = {
+      patientId: cleanPatientId,
+      isNew: '0',
+      action: 'addbill',
+      billname: 'TAX/RECEIPT',
+      count: String(tests.length),
+      totalamt: grossTotal.toFixed(2),
+      disc: String(discPerc),
+      discamt: discamt.toFixed(2),
+      roundoff: (roundoff >= 0 ? roundoff : -roundoff).toFixed(2),
+      billamount: finalBillAmount.toFixed(2),
+    };
+
+    tests.forEach((t, i) => {
+      params[`name${i + 1}`] = t['Bill Particulars'] || `Test ${i + 1}`;
+      params[`date${i + 1}`] = t['Bill Date'] || formattedDate;
+      params[`amt${i + 1}`] = String(t.Amount || 0);
+    });
+
+    const updateRes = await upstreamService.post('BILLUPDATE', params, null, req.user?.upstreamSid);
+
+    // Refresh summary
+    const freshSummary = await upstreamService.getBillingSummary(cleanPatientId, req.user?.upstreamSid);
+
+    return res.json({
+      STATUS: 'SUCCESS',
+      StatusCode: '0000',
+      Message: `Discount of ₹${discamt} (${discPerc}%) applied successfully`,
+      data: updateRes,
+      summary: freshSummary,
+      financials: {
+        totalAmount: grossTotal,
+        discount: discamt,
+        discountPercent: discPerc,
+        roundoff: roundoff,
+        netBill: finalBillAmount,
+        reason,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Get native GETBILLJSON payload
+ */
+export const getBillJson = async (req, res, next) => {
+  try {
+    const { patientId } = req.query;
+    if (!patientId) {
+      return res.status(400).json({ STATUS: 'FAILED', Message: 'patientId is required' });
+    }
+    const rawPid = String(patientId).trim();
+    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+      ? `P${rawPid.replace(/^P+/i, '')}`
+      : `P${rawPid}`;
+    const data = await upstreamService.get('GETBILLJSON', { patientId: cleanPatientId }, req.user?.upstreamSid);
+    return res.json(data);
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const getInvoice = async (req, res, next) => {
   try {
     const { patientId } = req.query;
@@ -121,10 +313,15 @@ export const getInvoice = async (req, res, next) => {
       return res.status(400).json({ STATUS: 'FAILED', Message: 'patientId is required' });
     }
 
+    const rawPid = String(patientId).trim();
+    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+      ? `P${rawPid.replace(/^P+/i, '')}`
+      : `P${rawPid}`;
+
     // Get patient report & details
     const upstreamData = await upstreamService.get(
       'GETPATIENTREPORT',
-      { patientId },
+      { patientId: cleanPatientId },
       req.user?.upstreamSid
     );
 
@@ -132,23 +329,71 @@ export const getInvoice = async (req, res, next) => {
     const patient = payload.patient || {};
     const reports = payload.reports || [];
 
-    // Aggregate unique tests with rates
-    const testItems = reports.map((r, index) => ({
-      sn: index + 1,
-      name: r.testName || `Test ${index + 1}`,
-      sampleType: r.sampleType || 'Serum',
-      rate: Number(r.rate) || 0,
-      discount: 0,
-      amount: Number(r.rate) || 0,
-    }));
+    // Fetch real-time billing ledger summary from upstream (uses GETBILLJSON)
+    const summary = await upstreamService.getBillingSummary(cleanPatientId, req.user?.upstreamSid);
 
-    // Fetch real-time billing ledger summary from upstream
-    const summary = await upstreamService.getBillingSummary(patientId, req.user?.upstreamSid);
+    // Build invoice items from official bill lots (Packages, Profiles, Standalone Tests)
+    let testItems = [];
+    if (summary?.testList && summary.testList.length > 0) {
+      testItems = summary.testList.map((t, index) => ({
+        sn: index + 1,
+        testName: t['Bill Particulars'] || `Item ${index + 1}`,
+        name: t['Bill Particulars'] || `Item ${index + 1}`,
+        rate: Number(t.Amount || 0),
+        disc: 0,
+        discount: 0,
+        amount: Number(t.Amount || 0),
+      }));
+    } else {
+      // Fallback: group reports by package and profile
+      const seenPkg = new Set();
+      const seenProf = new Set();
+      reports.forEach((r, idx) => {
+        if (r.packageName) {
+          if (!seenPkg.has(r.packageName)) {
+            seenPkg.add(r.packageName);
+            testItems.push({
+              sn: testItems.length + 1,
+              testName: r.packageName,
+              name: r.packageName,
+              rate: Number(r.rate) || 0,
+              disc: 0,
+              discount: 0,
+              amount: Number(r.rate) || 0,
+            });
+          }
+        } else if (r.profileName) {
+          if (!seenProf.has(r.profileName)) {
+            seenProf.add(r.profileName);
+            testItems.push({
+              sn: testItems.length + 1,
+              testName: r.profileName,
+              name: r.profileName,
+              rate: Number(r.rate) || 0,
+              disc: 0,
+              discount: 0,
+              amount: Number(r.rate) || 0,
+            });
+          }
+        } else {
+          testItems.push({
+            sn: testItems.length + 1,
+            testName: r.testName || `Test ${idx + 1}`,
+            name: r.testName || `Test ${idx + 1}`,
+            rate: Number(r.rate) || 0,
+            disc: 0,
+            discount: 0,
+            amount: Number(r.rate) || 0,
+          });
+        }
+      });
+    }
 
     const testTotal = testItems.reduce((acc, curr) => acc + curr.amount, 0);
-    const totalAmount = summary?.total || (testTotal > 0 ? testTotal : Number(patient.totalBill)) || 0;
+    const grossAmount = summary?.gross || summary?.total || (testTotal > 0 ? testTotal : Number(patient.totalBill)) || 0;
     const discount = summary?.discount || Number(patient.discount || 0);
-    const netAmount = Math.max(0, totalAmount - discount);
+    const roundoff = summary?.roundoff || 0;
+    const netAmount = summary?.total || Math.max(0, grossAmount - discount - roundoff);
     const isExplicitPaid = (patient.billPayStatus === 2 || patient.billPayStatus === '2') || summary?.isPaid;
     const deposited = summary ? summary.paid : (isExplicitPaid ? netAmount : Number(patient.paidBill || 0));
     const due = summary ? summary.due : (isExplicitPaid ? 0 : Math.max(0, netAmount - deposited));
@@ -177,9 +422,11 @@ export const getInvoice = async (req, res, next) => {
       },
       items: testItems,
       financials: {
-        totalAmount,
-        totalBill: totalAmount,
+        grossAmount,
+        totalAmount: grossAmount,
+        totalBill: netAmount,
         discount,
+        roundoff,
         netAmount,
         netBill: netAmount,
         deposited,
@@ -189,6 +436,7 @@ export const getInvoice = async (req, res, next) => {
         paymentMode: summary?.paymentLines?.[0]?.mode || 'Cash',
         amountInWords: numberToWordsINR(netAmount),
         payments: summary?.paymentLines || [],
+        billUrl: summary?.billUrl || '',
       },
       printedAt: new Date().toLocaleString(),
       printedBy: req.user?.name || 'Staff',

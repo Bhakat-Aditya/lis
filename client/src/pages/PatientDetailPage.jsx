@@ -11,6 +11,8 @@ import BarcodeModal from '../components/patient/BarcodeModal.jsx';
 import DiscountModal from '../components/patient/DiscountModal.jsx';
 import DoctorApprovalModal from '../components/results/DoctorApprovalModal.jsx';
 import Modal from '../components/common/Modal.jsx';
+import { useMaster } from '../context/context.master.jsx';
+import { groupInvestigationsIntoLots } from '../utils/labTestUtils.js';
 import {
   ArrowLeft,
   RefreshCw,
@@ -21,6 +23,8 @@ import {
   User,
   CreditCard,
   Edit,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 import { formatDisplayDate, getLocalDateString } from '../utils/dateUtils.js';
 
@@ -29,6 +33,7 @@ export default function PatientDetailPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { activePatient, setActivePatient, activeModal, openModal, closeModal } = usePatientContext();
+  const { tests: catalogTests = [], profiles: catalogProfiles = [], packages: catalogPackages = [] } = useMaster();
 
   const activeTab = searchParams.get('tab') || 'profile'; // profile, tests, results, invoice
 
@@ -46,18 +51,52 @@ export default function PatientDetailPage() {
   const [depositAmount, setDepositAmount] = useState('');
   const [paymentMode, setPaymentMode] = useState('Cash');
   const [notification, setNotification] = useState('');
+  const [submittingDeposit, setSubmittingDeposit] = useState(false);
+  const [depositError, setDepositError] = useState('');
+
+  // Accurately calculate outstanding balance due for deposit modal
+  const calculateDueAmount = (pt = patient, repList = reports) => {
+    if (!pt) return 0;
+    const explicitDue =
+      pt.balance !== undefined && pt.balance !== null && pt.balance !== ''
+        ? Number(pt.balance)
+        : pt.dueAmount !== undefined && pt.dueAmount !== null && pt.dueAmount !== ''
+        ? Number(pt.dueAmount)
+        : null;
+
+    if (explicitDue !== null && !isNaN(explicitDue)) {
+      return Math.max(0, explicitDue);
+    }
+
+    const total = Number(pt.totalBill || 0);
+    const discount = Number(pt.discount || 0);
+    const paid = Number(pt.paidBill || 0);
+
+    if (total > 0) {
+      return Math.max(0, total - discount - paid);
+    }
+
+    if (Array.isArray(repList) && repList.length > 0) {
+      const lots = groupInvestigationsIntoLots(repList, pt, catalogProfiles, catalogPackages, catalogTests);
+      const lotsTotal = lots.reduce((acc, l) => acc + (Number(l.amount) || 0), 0);
+      return Math.max(0, lotsTotal - discount - paid);
+    }
+
+    return 0;
+  };
 
   // Listen to sidebar trigger
   useEffect(() => {
     if (activeModal === 'barcode') setShowBarcodeModal(true);
     if (activeModal === 'deposit') {
-      const due = patient?.balance ? Number(patient.balance) : (Number(patient?.totalBill) || 0);
+      const due = calculateDueAmount(patient, reports);
       setDepositAmount(due > 0 ? String(due) : '');
+      setDepositError('');
       setShowDepositModal(true);
     }
     if (activeModal === 'discount') setShowDiscountModal(true);
     if (activeModal) closeModal();
-  }, [activeModal, closeModal, patient]);
+  }, [activeModal, closeModal, patient, reports]);
 
   const fetchPatientData = async () => {
     setLoading(true);
@@ -123,21 +162,40 @@ export default function PatientDetailPage() {
   };
 
   const generateDemoInvoice = (p, rList = []) => {
-    const hasItems = rList && rList.length > 0;
-    const items = hasItems
-      ? rList.map((r, idx) => ({
-          slNo: idx + 1,
-          testName: r.testName || r.profileName || `Test ${idx + 1}`,
-          rate: Number(r.rate) || 0,
-          disc: 0,
-          amount: Number(r.rate) || 0,
-        }))
-      : [];
+    let items = [];
+    if (p?.testList && p.testList.length > 0) {
+      items = p.testList.map((t, idx) => ({
+        slNo: idx + 1,
+        testName: t['Bill Particulars'] || `Item ${idx + 1}`,
+        rate: Number(t.Amount || 0),
+        disc: 0,
+        amount: Number(t.Amount || 0),
+      }));
+    } else if (rList && rList.length > 0) {
+      const lots = groupInvestigationsIntoLots(rList, p, catalogProfiles, catalogPackages, catalogTests);
+      items = lots.map((lot, idx) => ({
+        slNo: idx + 1,
+        testName: lot.name,
+        rate: Number(lot.amount || 0),
+        disc: 0,
+        amount: Number(lot.amount || 0),
+      }));
+    }
 
-    const total = items.reduce((acc, it) => acc + it.amount, 0) || Number(p?.totalBill || 0);
-    const isPaid = (p?.billPayStatus === 2 || p?.billPayStatus === '2') && total > 0;
-    const paid = isPaid ? total : Number(p?.paidBill || 0);
-    const due = Math.max(0, total - paid);
+    const itemsSum = items.reduce((acc, it) => acc + it.amount, 0);
+    const grossTotal = Number(p?.grossTotal || p?.totalBill || 0) || itemsSum;
+    const discount = Number(p?.discount || 0);
+    const roundoff = Number(p?.roundoff || 0);
+    const netTotal = Math.max(0, grossTotal - discount - roundoff);
+    const isPaid = (p?.billPayStatus === 2 || p?.billPayStatus === '2') && netTotal > 0;
+    const paid = isPaid ? netTotal : Number(p?.paidBill || 0);
+    const explicitDue =
+      p?.balance !== undefined && p?.balance !== null && p?.balance !== ''
+        ? Number(p.balance)
+        : p?.dueAmount !== undefined && p?.dueAmount !== null && p?.dueAmount !== ''
+        ? Number(p.dueAmount)
+        : null;
+    const due = explicitDue !== null ? explicitDue : Math.max(0, netTotal - paid);
 
     return {
       clinic: {
@@ -159,9 +217,16 @@ export default function PatientDetailPage() {
       },
       items,
       financials: {
-        totalBill: total,
-        netBill: total,
+        grossAmount: grossTotal,
+        totalAmount: grossTotal,
+        totalBill: netTotal,
+        discount,
+        roundoff,
+        netAmount: netTotal,
+        netBill: netTotal,
+        deposited: paid,
         paidAmount: paid,
+        totalDue: due,
         dueAmount: due,
       },
     };
@@ -175,7 +240,11 @@ export default function PatientDetailPage() {
 
   const handleReceiveSample = async () => {
     try {
-      await api.post('/reports/receive-sample', { patientId: id });
+      const rawPid = patient?.patientId || id;
+      const cleanPid = rawPid
+        ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
+        : '';
+      await api.post('/reports/receive-sample', { patientId: cleanPid || rawPid });
       setNotification('Sample specimen received and verified!');
       fetchPatientData();
     } catch (err) {
@@ -184,33 +253,47 @@ export default function PatientDetailPage() {
   };
 
   const handleConfirmDeposit = async () => {
+    const amt = Number(depositAmount);
+    if (isNaN(amt) || amt <= 0) {
+      setDepositError('Please enter a valid deposit amount greater than ₹0');
+      return;
+    }
+
+    const rawPid = patient?.patientId || id;
+    const cleanPid = rawPid
+      ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
+      : '';
+
+    setSubmittingDeposit(true);
+    setDepositError('');
+
     try {
       await api.post('/billing/deposit', {
-        patientId: id,
-        amount: Number(depositAmount),
+        patientId: cleanPid || rawPid,
+        amount: amt,
         paymentMode,
       });
-      setNotification(`Deposit receipt of ₹${depositAmount} issued successfully!`);
+      setNotification(`Deposit receipt of ₹${amt} issued successfully!`);
       setShowDepositModal(false);
       fetchPatientData();
     } catch (err) {
-      alert('Failed to record deposit');
+      setDepositError(err.response?.data?.Message || 'Failed to record deposit');
+    } finally {
+      setSubmittingDeposit(false);
     }
   };
 
   const handleOpenDepositModal = () => {
-    const reportsTotal = (reports && reports.length > 0)
-      ? reports.reduce((acc, r) => acc + (Number(r.rate) || 0), 0)
-      : Number(patient?.totalBill || 0);
-    const paid = Number(patient?.paidBill || 0);
-    const due = Math.max(0, reportsTotal - paid);
-    setDepositAmount(due > 0 ? String(due) : (reportsTotal > 0 ? String(reportsTotal) : ''));
+    const due = calculateDueAmount(patient, reports);
+    setDepositAmount(due > 0 ? String(due) : '');
+    setDepositError('');
     setShowDepositModal(true);
   };
 
   const handleDiscountApplied = (data) => {
-    setNotification(`Clinical discount of ₹${data.value} applied successfully!`);
+    setNotification(data?.message || `Clinical discount of ₹${data.value} applied successfully!`);
     setShowDiscountModal(false);
+    fetchPatientData();
   };
 
   if (loading && !patient) {
@@ -399,25 +482,74 @@ export default function PatientDetailPage() {
         onClose={() => setShowApproval(false)}
         patient={patient}
         reports={reports}
-        onApproved={fetchPatientData}
+        onApproved={() => {
+          setNotification('Doctor review and approval status updated successfully!');
+          fetchPatientData();
+        }}
       />
 
       {/* Deposit Modal */}
       <Modal
         isOpen={showDepositModal}
-        onClose={() => setShowDepositModal(false)}
+        onClose={() => !submittingDeposit && setShowDepositModal(false)}
         title={`Add Diagnostic Fee Deposit — ${patient?.name}`}
       >
         <div className="space-y-4 text-xs">
+          {/* Financial context card */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 grid grid-cols-3 gap-2 text-center">
+            <div>
+              <span className="text-[10px] text-slate-500 font-semibold block">Total Billed</span>
+              <span className="font-mono font-bold text-slate-800 text-xs">
+                ₹{Number(patient?.totalBill || 0).toFixed(2)}
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 font-semibold block">Deposited</span>
+              <span className="font-mono font-bold text-emerald-600 text-xs">
+                ₹{Number(patient?.paidBill || 0).toFixed(2)}
+              </span>
+            </div>
+            <div className="bg-amber-100/60 rounded-lg p-1 border border-amber-200">
+              <span className="text-[10px] text-amber-900 font-bold block">Balance Due</span>
+              <span className="font-mono font-extrabold text-rose-700 text-xs">
+                ₹{calculateDueAmount().toFixed(2)}
+              </span>
+            </div>
+          </div>
+
+          {depositError && (
+            <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 font-semibold flex items-center gap-1.5">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+              <span>{depositError}</span>
+            </div>
+          )}
+
           <div>
-            <label className="font-bold text-slate-700 block mb-1">
-              Deposit Amount (₹)
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="font-bold text-slate-700">
+                Deposit Amount (₹)
+              </label>
+              {calculateDueAmount() > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setDepositAmount(String(calculateDueAmount()))}
+                  className="text-[11px] text-indigo-600 hover:text-indigo-800 font-bold cursor-pointer underline"
+                >
+                  Pay Full Balance (₹{calculateDueAmount()})
+                </button>
+              )}
+            </div>
             <input
               type="number"
+              min="1"
               value={depositAmount}
-              onChange={(e) => setDepositAmount(e.target.value)}
-              className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded font-mono text-base font-extrabold text-slate-900 focus:outline-none focus:bg-white"
+              onChange={(e) => {
+                setDepositAmount(e.target.value);
+                setDepositError('');
+              }}
+              placeholder={`e.g. ${calculateDueAmount() || '100'}`}
+              disabled={submittingDeposit}
+              className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-mono text-base font-extrabold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20"
             />
           </div>
 
@@ -426,7 +558,8 @@ export default function PatientDetailPage() {
             <select
               value={paymentMode}
               onChange={(e) => setPaymentMode(e.target.value)}
-              className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded font-semibold text-xs focus:outline-none focus:bg-white"
+              disabled={submittingDeposit}
+              className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-xs focus:outline-none focus:bg-white"
             >
               <option value="Cash">Cash (Counter Desk)</option>
               <option value="UPI">UPI / QR Code Scan</option>
@@ -436,16 +569,27 @@ export default function PatientDetailPage() {
 
           <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
             <button
+              type="button"
               onClick={() => setShowDepositModal(false)}
-              className="px-4 py-2 border border-slate-300 rounded-xl text-slate-700 font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+              disabled={submittingDeposit}
+              className="px-4 py-2 border border-slate-300 rounded-xl text-slate-700 font-semibold hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-50"
             >
               Cancel
             </button>
             <button
+              type="button"
               onClick={handleConfirmDeposit}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+              disabled={submittingDeposit}
+              className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
             >
-              Record Deposit Receipt
+              {submittingDeposit ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Recording Deposit...</span>
+                </>
+              ) : (
+                <span>Record Deposit Receipt</span>
+              )}
             </button>
           </div>
         </div>

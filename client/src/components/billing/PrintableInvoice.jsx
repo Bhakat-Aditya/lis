@@ -47,9 +47,10 @@ export default function PrintableInvoice({
   };
 
   const displayItems = items || [];
-  const totalAmount = Number(financials.totalBill ?? financials.totalAmount ?? displayItems.reduce((acc, it) => acc + (Number(it.amount) || 0), 0));
+  const totalAmount = Number(financials.grossAmount ?? financials.totalAmount ?? financials.totalBill ?? displayItems.reduce((acc, it) => acc + (Number(it.amount) || 0), 0));
   const discount = Number(financials.discount || 0);
-  const netAmount = Number(financials.netBill ?? financials.netAmount ?? (totalAmount - discount));
+  const roundoff = Number(financials.roundoff || 0);
+  const netAmount = Number(financials.netBill ?? financials.netAmount ?? Math.max(0, totalAmount - discount - roundoff));
   const rawPaid = Number(financials.paidAmount ?? financials.deposited ?? 0);
   const rawDue = Number(financials.dueAmount ?? financials.totalDue ?? Math.max(0, netAmount - rawPaid));
   const isPaid = netAmount > 0 && rawDue <= 0 && (rawPaid > 0 || patient.billPayStatus === 2 || patient.billPayStatus === '2');
@@ -269,23 +270,35 @@ export default function PrintableInvoice({
             </tbody>
           </table>
 
-          {/* Financial Summary Box on Bottom Right matching Screenshot 5 */}
+          {/* Financial Summary Box on Bottom Right */}
           <div className="border-t border-black flex justify-end">
             <div className="w-64 border-l border-black text-xs font-semibold divide-y divide-black/30">
               <div className="flex justify-between py-1 px-3">
                 <span className="text-slate-700">TOTAL AMOUNT</span>
-                <span className="font-mono font-bold">{totalAmount}</span>
+                <span className="font-mono font-bold">₹{totalAmount}</span>
               </div>
+              {discount > 0 && (
+                <div className="flex justify-between py-1 px-3 text-rose-700">
+                  <span className="font-bold">DISCOUNT AMOUNT</span>
+                  <span className="font-mono font-bold">(-) ₹{discount}</span>
+                </div>
+              )}
+              {roundoff > 0 && (
+                <div className="flex justify-between py-1 px-3 text-slate-600">
+                  <span>ROUND OFF</span>
+                  <span className="font-mono font-bold">(-) ₹{roundoff}</span>
+                </div>
+              )}
               <div className="flex justify-between py-1 px-3 bg-slate-50">
-                <span className="font-bold">NET AMOUNT</span>
+                <span className="font-bold">TOTAL BILL</span>
                 <span className="font-mono font-extrabold">₹{netAmount}</span>
               </div>
               <div className="flex justify-between py-1 px-3">
-                <span className="text-slate-700">Depositd by Cash</span>
-                <span className="font-mono font-bold">{depositedCash}</span>
+                <span className="text-slate-700">Deposited</span>
+                <span className="font-mono font-bold">₹{depositedCash}</span>
               </div>
               <div className="flex justify-between py-1 px-3 bg-slate-50">
-                <span className="font-bold">TOTAL DUE</span>
+                <span className="font-bold">TOTAL OUTSTANDING</span>
                 <span className="font-mono font-extrabold text-slate-900">₹{totalDue}</span>
               </div>
             </div>

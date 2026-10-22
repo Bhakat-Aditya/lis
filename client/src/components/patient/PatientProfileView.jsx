@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   User,
   Phone,
@@ -17,8 +17,16 @@ import {
   ArrowDownRight,
   Banknote,
   DollarSign,
+  Package,
+  Layers,
+  FlaskConical,
+  ChevronDown,
+  ChevronUp,
+  ListTree,
 } from 'lucide-react';
 import { formatDisplayDate } from '../../utils/dateUtils.js';
+import { useMaster } from '../../context/context.master.jsx';
+import { groupInvestigationsIntoLots } from '../../utils/labTestUtils.js';
 
 export default function PatientProfileView({
   patient,
@@ -43,11 +51,23 @@ export default function PatientProfileView({
   }
 
   const pid = patient.patientId || patient.slNo || '';
+  const { tests: catalogTests = [], profiles: catalogProfiles = [], packages: catalogPackages = [] } = useMaster();
+  const [expandedLots, setExpandedLots] = useState({});
+
+  const investigationLots = useMemo(() => {
+    return groupInvestigationsIntoLots(reports, patient, catalogProfiles, catalogPackages, catalogTests);
+  }, [reports, patient, catalogProfiles, catalogPackages, catalogTests]);
+
   const hasReports = reports && reports.length > 0;
+  const lotsTotal = useMemo(() => {
+    return investigationLots.reduce((acc, lot) => acc + (Number(lot.amount) || 0), 0);
+  }, [investigationLots]);
   const reportsTotal = hasReports
     ? reports.reduce((acc, r) => acc + (Number(r.rate) || 0), 0)
     : 0;
-  const testsTotal = Number(patient.totalBill) > 0 ? Number(patient.totalBill) : (hasReports ? reportsTotal : 0);
+  const testsTotal = Number(patient.totalBill) > 0
+    ? Number(patient.totalBill)
+    : (lotsTotal > 0 ? lotsTotal : (hasReports ? reportsTotal : 0));
   const isBilled = testsTotal > 0;
   const discountAmount = Number(patient.discount || 0);
   const netDue = Math.max(0, testsTotal - discountAmount);
@@ -367,7 +387,7 @@ export default function PatientProfileView({
                 }`}
               >
                 <CreditCard className="w-3.5 h-3.5" />
-                <span>Deposits ({depositsAmount > 0 ? 1 : 0})</span>
+                <span>Deposits ({paymentLines.length > 0 ? paymentLines.length : (depositsAmount > 0 ? 1 : 0)})</span>
               </button>
             </div>
 
@@ -399,24 +419,96 @@ export default function PatientProfileView({
                 <thead>
                   <tr className="border-b border-slate-200 text-slate-500 text-[11px] font-bold">
                     <th className="py-2 px-3 w-12">#</th>
-                    <th className="py-2 px-3">Test Name</th>
-                    <th className="py-2 px-3 text-right w-32">Rate (₹)</th>
+                    <th className="py-2 px-3">Investigation Lot Name</th>
+                    <th className="py-2 px-3 text-right w-32">Lot Rate (₹)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-800">
-                  {reports.length > 0 ? (
-                    reports.map((r, i) => (
-                      <tr key={i} className="hover:bg-slate-50">
-                        <td className="py-2.5 px-3 font-mono text-slate-500">{i + 1}</td>
-                        <td className="py-2.5 px-3 font-semibold flex items-center gap-1.5">
-                          <FileEdit className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                          <span>{r.testName || r.profileName}</span>
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold">
-                          {Number(r.rate || 0).toFixed(2)}
-                        </td>
-                      </tr>
-                    ))
+                  {investigationLots.length > 0 ? (
+                    investigationLots.map((lot, i) => {
+                      const isExpanded = Boolean(expandedLots[lot.id]);
+                      const hasSubTests = lot.subTests && lot.subTests.length > 0;
+
+                      let badgeColor = 'bg-sky-50 text-sky-800 border-sky-300';
+                      let catIcon = <FlaskConical className="w-3 h-3 text-sky-600" />;
+                      if (lot.category === 'Package') {
+                        badgeColor = 'bg-amber-50 text-amber-900 border-amber-300';
+                        catIcon = <Package className="w-3 h-3 text-amber-600" />;
+                      } else if (lot.category === 'Profile') {
+                        badgeColor = 'bg-purple-50 text-purple-900 border-purple-300';
+                        catIcon = <Layers className="w-3 h-3 text-purple-600" />;
+                      }
+
+                      return (
+                        <React.Fragment key={lot.id || i}>
+                          <tr className="hover:bg-slate-50">
+                            <td className="py-2.5 px-3 font-mono text-slate-500">{i + 1}</td>
+                            <td className="py-2.5 px-3">
+                              <div className="space-y-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span
+                                    className={`inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${badgeColor}`}
+                                  >
+                                    {catIcon}
+                                    <span>{lot.category} Lot</span>
+                                  </span>
+                                  <span className="font-bold text-slate-900">{lot.name}</span>
+                                </div>
+
+                                {hasSubTests && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setExpandedLots((prev) => ({
+                                        ...prev,
+                                        [lot.id]: !prev[lot.id],
+                                      }))
+                                    }
+                                    className="text-[10px] text-indigo-600 hover:text-indigo-800 font-semibold inline-flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <ListTree className="w-3 h-3" />
+                                    <span>
+                                      {lot.subTestCount} Included Parameter{lot.subTestCount === 1 ? '' : 's'}
+                                    </span>
+                                    {isExpanded ? (
+                                      <ChevronUp className="w-3 h-3" />
+                                    ) : (
+                                      <ChevronDown className="w-3 h-3" />
+                                    )}
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono font-bold">
+                              {Number(lot.amount || 0).toFixed(2)}
+                            </td>
+                          </tr>
+
+                          {/* Expanded sub-test chips */}
+                          {isExpanded && hasSubTests && (
+                            <tr className="bg-slate-50/60">
+                              <td colSpan="3" className="py-2.5 px-6">
+                                <div className="space-y-1">
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                                    Included tests in {lot.name}:
+                                  </span>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {lot.subTests.map((sub, sIdx) => (
+                                      <span
+                                        key={sIdx}
+                                        className="text-[10px] font-medium bg-white text-slate-700 px-2 py-0.5 rounded-md border border-slate-200 shadow-2xs"
+                                      >
+                                        {sub}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })
                   ) : (
                     <tr>
                       <td colSpan="3" className="py-8 text-center text-slate-400">

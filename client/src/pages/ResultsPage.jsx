@@ -14,6 +14,7 @@ export default function ResultsPage() {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [queuePhaseFilter, setQueuePhaseFilter] = useState('ALL');
   const [isGuideOpen, setIsGuideOpen] = useState(false);
 
   const fetchLabWorklist = async () => {
@@ -51,6 +52,15 @@ export default function ResultsPage() {
 
   const filteredPatients = sortPatientsByRecent(
     patients.filter((p) => {
+      // 1. Phase Filter
+      if (queuePhaseFilter !== 'ALL') {
+        const s = String(p.status || '').toUpperCase();
+        if (queuePhaseFilter === 'SAMPLE' && s !== 'SAMPLE' && s !== 'PENDING') return false;
+        if (queuePhaseFilter === 'ENTRY' && s !== 'ENTRY' && s !== 'TESTING') return false;
+        if (queuePhaseFilter === 'READY' && s !== 'PRINTING' && s !== 'APPROVED' && s !== 'SAVED' && s !== 'VERIFIED') return false;
+      }
+
+      // 2. Search match
       if (!searchTerm) return true;
       const term = searchTerm.toLowerCase().trim();
       const name = String(p.name || '').toLowerCase();
@@ -70,7 +80,7 @@ export default function ResultsPage() {
   );
 
   return (
-    <section className="space-y-5">
+    <section className="space-y-3">
       <Helmet>
         <title>Laboratory Results Entry Workstation | Lab Expert LIS</title>
         <meta
@@ -80,22 +90,22 @@ export default function ResultsPage() {
       </Helmet>
 
       {/* Header */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-purple-50 border border-purple-200 text-purple-700 flex items-center justify-center font-bold shadow-2xs">
-            <FlaskConical className="w-6 h-6" />
+      <div className="bg-white p-3 px-4 rounded-xl border border-slate-200/90 shadow-2xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-purple-50 border border-purple-200 text-purple-700 flex items-center justify-center font-bold shadow-2xs">
+            <FlaskConical className="w-4 h-4" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-base font-bold text-slate-900 tracking-tight">
+              <h1 className="text-sm font-bold text-slate-900 tracking-tight">
                 Laboratory Results Entry Workstation
               </h1>
-              <span className="text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-full">
-                Auto-Analyzer Bench
+              <span className="text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.2 rounded-full">
+                Analyzer Bench
               </span>
             </div>
-            <p className="text-xs text-slate-500">
-              Input and correlate biochemical, hematological & microbiological values with live reference meters
+            <p className="text-[11px] text-slate-500">
+              Input and correlate diagnostic parameters with real-time reference range evaluations
             </p>
           </div>
         </div>
@@ -103,32 +113,32 @@ export default function ResultsPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsGuideOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs"
+            className="flex items-center gap-1.5 px-3 py-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs"
           >
             <BookOpen className="w-3.5 h-3.5" />
-            <span>Clinical Reference Guide</span>
+            <span>Guide</span>
           </button>
 
           <button
             onClick={fetchLabWorklist}
             disabled={loading}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh Queue</span>
+            <span>Refresh</span>
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* Left Side: Patient Queue (4 cols) */}
-        <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden flex flex-col">
-          <div className="p-3.5 bg-slate-50/80 border-b border-slate-200">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5">
+        {/* Left Side: Patient Queue (3 cols on xl) */}
+        <div className="lg:col-span-4 xl:col-span-3 bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden flex flex-col">
+          <div className="p-3.5 bg-slate-50/80 border-b border-slate-200 space-y-2">
             <div className="relative">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Search patient queue..."
+                placeholder="Search patient, ID, doctor..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-8 pr-7 py-1.5 text-xs bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-medium"
@@ -144,11 +154,61 @@ export default function ResultsPage() {
                 </button>
               )}
             </div>
+
+            {/* Queue Phase Quick Filters */}
+            <div className="flex items-center gap-1 overflow-x-auto text-[10px] font-bold">
+              <button
+                type="button"
+                onClick={() => setQueuePhaseFilter('ALL')}
+                className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                  queuePhaseFilter === 'ALL'
+                    ? 'bg-slate-900 text-white shadow-2xs'
+                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                }`}
+              >
+                All ({patients.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setQueuePhaseFilter('SAMPLE')}
+                className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                  queuePhaseFilter === 'SAMPLE'
+                    ? 'bg-amber-500 text-white shadow-2xs'
+                    : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
+                }`}
+              >
+                Pending
+              </button>
+              <button
+                type="button"
+                onClick={() => setQueuePhaseFilter('ENTRY')}
+                className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                  queuePhaseFilter === 'ENTRY'
+                    ? 'bg-violet-600 text-white shadow-2xs'
+                    : 'bg-violet-50 text-violet-800 hover:bg-violet-100 border border-violet-200'
+                }`}
+              >
+                Testing
+              </button>
+              <button
+                type="button"
+                onClick={() => setQueuePhaseFilter('READY')}
+                className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                  queuePhaseFilter === 'READY'
+                    ? 'bg-emerald-600 text-white shadow-2xs'
+                    : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
+                }`}
+              >
+                Ready
+              </button>
+            </div>
           </div>
 
           <div className="divide-y divide-slate-100 max-h-[680px] overflow-y-auto">
             {filteredPatients.map((p) => {
               const isSelected = selectedPatient?.patientId === p.patientId;
+              const statusStr = String(p.status || '').toUpperCase();
+
               return (
                 <div
                   key={p.patientId}
@@ -168,14 +228,19 @@ export default function ResultsPage() {
                     <span>{p.gender} • {p.age}</span>
                     <span className="font-mono text-slate-500 font-medium text-[10px]">{formatDisplayDate(p.regDate)}</span>
                   </div>
+                  {p.referedDr && (
+                    <div className="text-[10px] text-slate-400 mt-0.5 truncate">
+                      Ref: {p.referedDr}
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         </div>
 
-        {/* Right Side: Results Entry Table (8 cols) */}
-        <div className="lg:col-span-8">
+        {/* Right Side: Results Entry Table (8 cols / 9 cols on xl) */}
+        <div className="lg:col-span-8 xl:col-span-9">
           {selectedPatient ? (
             <ResultsEntry
               patient={selectedPatient}

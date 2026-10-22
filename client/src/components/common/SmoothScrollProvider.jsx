@@ -12,6 +12,46 @@ export default function SmoothScrollProvider({ children }) {
       smoothWheel: true,
       wheelMultiplier: 1.0,
       touchMultiplier: 2.0,
+      prevent: (node) => {
+        if (!node) return false;
+        const el = node instanceof Element ? node : node.parentElement;
+        if (!el) return false;
+
+        // Fast path for tagged elements or common scrollable classes
+        if (
+          el.hasAttribute?.('data-lenis-prevent') ||
+          Boolean(el.closest?.('[data-lenis-prevent]')) ||
+          Boolean(el.closest?.('[role="dialog"]')) ||
+          Boolean(el.closest?.('.fixed')) ||
+          Boolean(el.closest?.('.overflow-y-auto')) ||
+          Boolean(el.closest?.('.overflow-auto')) ||
+          Boolean(el.closest?.('.overflow-x-auto')) ||
+          Boolean(el.closest?.('.overflow-scroll'))
+        ) {
+          return true;
+        }
+
+        // Dynamic check for any element with active scrollable overflow
+        let curr = el;
+        while (curr && curr !== document.body && curr !== document.documentElement) {
+          const style = window.getComputedStyle(curr);
+          if (
+            (style.overflowY === 'auto' || style.overflowY === 'scroll') &&
+            curr.scrollHeight > curr.clientHeight
+          ) {
+            return true;
+          }
+          if (
+            (style.overflowX === 'auto' || style.overflowX === 'scroll') &&
+            curr.scrollWidth > curr.clientWidth
+          ) {
+            return true;
+          }
+          curr = curr.parentElement;
+        }
+
+        return false;
+      },
     });
 
     let animationFrameId;

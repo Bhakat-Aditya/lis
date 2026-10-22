@@ -359,9 +359,11 @@ export default function PatientsPage({ onOpenNewPatient }) {
                     <React.Fragment key={pid}>
                       <tr
                         onClick={() => handleToggleRow(pid)}
+                        onDoubleClick={(e) => handleOpenPatient(p, e)}
                         className={`transition-colors cursor-pointer select-none ${
                           isExpanded ? 'bg-slate-50' : 'hover:bg-slate-50/80'
                         }`}
+                        title="Click to expand details • Double-click to open patient profile"
                       >
                         {/* SN */}
                         <td className="py-2.5 px-3 text-center font-bold text-slate-900 text-xs">
@@ -369,12 +371,20 @@ export default function PatientsPage({ onOpenNewPatient }) {
                         </td>
 
                         {/* ID */}
-                        <td className="py-2.5 px-3 font-semibold text-slate-800 text-xs">
+                        <td
+                          onDoubleClick={(e) => handleOpenPatient(p, e)}
+                          className="py-2.5 px-3 font-semibold text-slate-800 text-xs hover:text-blue-600 transition-colors"
+                          title="Double-click to open patient profile"
+                        >
                           {pid}
                         </td>
 
                         {/* Patient Name */}
-                        <td className="py-2.5 px-3 font-bold text-slate-900 text-xs">
+                        <td
+                          onDoubleClick={(e) => handleOpenPatient(p, e)}
+                          className="py-2.5 px-3 font-bold text-slate-900 text-xs hover:text-blue-600 hover:underline transition-colors"
+                          title="Double-click to open patient profile"
+                        >
                           {p.title ? `${p.title} ` : ''}
                           {p.name}
                         </td>
