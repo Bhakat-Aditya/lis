@@ -64,15 +64,18 @@ export default function DoctorApprovalModal({
         ? `P${String(rawPid).trim().replace(/^P+/i, '')}`
         : `P${String(rawPid).trim()}`;
 
+      const reportIdList = (reports || []).map((r) => r.reportId).filter(Boolean).join(',');
+
       if (actionType === 'verify') {
-        await api.post('/reports/verify', { patientId: cleanPatientId });
+        await api.post('/reports/verify', { patientId: cleanPatientId, reportId: reportIdList });
       } else if (actionType === 'approve') {
-        await api.post('/reports/approve', { patientId: cleanPatientId });
+        await api.post('/reports/approve', { patientId: cleanPatientId, reportId: reportIdList });
       } else if (actionType === 'release') {
         await api.post('/reports/release', { patientId: cleanPatientId });
       } else if (actionType === 'reject') {
         await api.post('/reports/reject', {
           patientId: cleanPatientId,
+          reportId: reportIdList,
           reason: rejectReason || 'Flagged for recollection / re-test',
         });
       }

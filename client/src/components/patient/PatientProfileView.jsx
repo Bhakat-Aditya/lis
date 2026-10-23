@@ -397,7 +397,7 @@ export default function PatientProfileView({
                 className="mb-1.5 flex items-center gap-1 bg-violet-600 hover:bg-violet-700 active:scale-95 text-white font-bold text-xs py-1 px-3 rounded-lg shadow-xs cursor-pointer transition-all"
               >
                 <Plus className="w-3 h-3" />
-                <span>+ Add Tests</span>
+                <span>Add Tests</span>
               </button>
             )}
 
@@ -407,7 +407,7 @@ export default function PatientProfileView({
                 className="mb-1.5 flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs py-1 px-3 rounded-lg shadow-xs cursor-pointer transition-all"
               >
                 <PlusCircle className="w-3 h-3" />
-                <span>+ Add Deposit</span>
+                <span>Add Deposit</span>
               </button>
             )}
           </div>
@@ -521,7 +521,7 @@ export default function PatientProfileView({
                             className="mt-1 flex items-center gap-1.5 bg-violet-600 hover:bg-violet-700 active:scale-95 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-xs cursor-pointer transition-all"
                           >
                             <Plus className="w-3.5 h-3.5" />
-                            <span>+ Order Tests for this Patient</span>
+                            <span>Order Tests for this Patient</span>
                           </button>
                         </div>
                       </td>

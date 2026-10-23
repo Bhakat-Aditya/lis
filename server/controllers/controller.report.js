@@ -162,7 +162,7 @@ export const receiveSample = async (req, res, next) => {
 
 export const verifyReport = async (req, res, next) => {
   try {
-    const { patientId, reportId } = req.body;
+    const { patientId, reportId, reportIds } = req.body;
     if (!patientId) {
       return res.status(400).json({ STATUS: 'FAILED', Message: 'patientId is required' });
     }
@@ -172,9 +172,23 @@ export const verifyReport = async (req, res, next) => {
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
 
-    const params = { patientId: cleanPatientId };
+    let resolvedReportId = '';
     if (reportId && String(reportId).trim() !== 'undefined') {
-      params.reportId = String(reportId).trim();
+      resolvedReportId = Array.isArray(reportId) ? reportId.join(',') : String(reportId).trim();
+    } else if (reportIds && Array.isArray(reportIds)) {
+      resolvedReportId = reportIds.filter(Boolean).join(',');
+    } else {
+      // Auto-fetch all report IDs for this patient so upstream never fails with 1211
+      const pData = await upstreamService.get('GETPATIENTREPORT', { patientId: cleanPatientId }, req.user?.upstreamSid);
+      const repList = (pData?.payLoadJSON?.reports || []).map((r) => r.reportId).filter(Boolean);
+      if (repList.length > 0) {
+        resolvedReportId = repList.join(',');
+      }
+    }
+
+    const params = { patientId: cleanPatientId };
+    if (resolvedReportId) {
+      params.reportId = resolvedReportId;
     }
 
     const upstreamData = await upstreamService.post('REPORTVERIFY', params, null, req.user?.upstreamSid);
@@ -191,7 +205,7 @@ export const verifyReport = async (req, res, next) => {
 
 export const approveReport = async (req, res, next) => {
   try {
-    const { patientId, reportId } = req.body;
+    const { patientId, reportId, reportIds } = req.body;
     if (!patientId) {
       return res.status(400).json({ STATUS: 'FAILED', Message: 'patientId is required' });
     }
@@ -201,9 +215,23 @@ export const approveReport = async (req, res, next) => {
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
 
-    const params = { patientId: cleanPatientId };
+    let resolvedReportId = '';
     if (reportId && String(reportId).trim() !== 'undefined') {
-      params.reportId = String(reportId).trim();
+      resolvedReportId = Array.isArray(reportId) ? reportId.join(',') : String(reportId).trim();
+    } else if (reportIds && Array.isArray(reportIds)) {
+      resolvedReportId = reportIds.filter(Boolean).join(',');
+    } else {
+      // Auto-fetch all report IDs for this patient so upstream never fails with 1211
+      const pData = await upstreamService.get('GETPATIENTREPORT', { patientId: cleanPatientId }, req.user?.upstreamSid);
+      const repList = (pData?.payLoadJSON?.reports || []).map((r) => r.reportId).filter(Boolean);
+      if (repList.length > 0) {
+        resolvedReportId = repList.join(',');
+      }
+    }
+
+    const params = { patientId: cleanPatientId };
+    if (resolvedReportId) {
+      params.reportId = resolvedReportId;
     }
 
     const upstreamData = await upstreamService.post('REPORTAPPROVE', params, null, req.user?.upstreamSid);

@@ -10,7 +10,6 @@ export default function DashboardPage({ onOpenNewPatient }) {
   const { user } = useAuth();
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeFilter, setActiveFilter] = useState('');
 
   const fetchTodayPatients = useCallback(async () => {
     setLoading(true);
@@ -97,10 +96,6 @@ export default function DashboardPage({ onOpenNewPatient }) {
         inTesting={inTesting}
         readyPrint={readyPrint}
         totalRevenue={totalRevenue}
-        activeFilter={activeFilter}
-        onFilterClick={(filterId) => {
-          setActiveFilter((prev) => (prev === filterId ? '' : filterId));
-        }}
       />
 
       {/* Primary Worklist Table (Screenshot 1) */}
