@@ -166,7 +166,45 @@ export default function TestSelectionView({
   // Sync when patient reports update from backend
   useEffect(() => {
     setSelectedTests((prev) => {
-      const newlyAdded = prev.filter((t) => t.isNew);
+      // Build lookup of all already booked lot keys & names in existingLots
+      const existingKeySet = new Set();
+      const existingNameSet = new Set();
+
+      existingLots.forEach((lot) => {
+        const type = (lot.type || 'TEST').toUpperCase();
+        const id = String(lot.testId || lot.id || '').toUpperCase().trim();
+        const name = String(lot.name || '').toLowerCase().trim();
+
+        if (id) {
+          existingKeySet.add(`${type}|${id}`);
+          if (type === 'TEST') {
+            if (id.startsWith('T')) existingKeySet.add(`TEST|${id.slice(1)}`);
+            else existingKeySet.add(`TEST|T${id}`);
+          } else if (type === 'PROF') {
+            existingKeySet.add(`PROF|${id.replace(/^P+/i, '')}`);
+            existingKeySet.add(`PROF|P${id.replace(/^P+/i, '')}`);
+          } else if (type === 'PKG') {
+            existingKeySet.add(`PKG|${id.replace(/^K+/i, '')}`);
+            existingKeySet.add(`PKG|K${id.replace(/^K+/i, '')}`);
+          }
+        }
+        if (name) existingNameSet.add(name);
+      });
+
+      // Keep only newly added items that have not yet been booked into existingLots
+      const newlyAdded = prev.filter((t) => {
+        if (!t.isNew) return false;
+        if (t.isRepeat) return true; // keep unsaved intentional repeats
+
+        const type = (t.type || 'TEST').toUpperCase();
+        const id = String(t.testId || t.id || '').toUpperCase().trim();
+        const name = String(t.name || '').toLowerCase().trim();
+
+        if (existingKeySet.has(`${type}|${id}`)) return false;
+        if (existingNameSet.has(name)) return false;
+        return true;
+      });
+
       return [...existingLots, ...newlyAdded];
     });
   }, [existingLots]);
@@ -471,7 +509,11 @@ export default function TestSelectionView({
 
       if (res.data?.STATUS === 'SUCCESS' || res.data?.StatusCode === '0000') {
         setSaveSuccess(`Added ${newTests.length} investigation lot(s) successfully!`);
-        if (onRefresh) onRefresh();
+        // Immediately mark newly added items as booked so they transition without duplicate or delete trash icon
+        setSelectedTests((prev) =>
+          prev.map((t) => (t.isNew ? { ...t, isNew: false, isRepeat: false } : t))
+        );
+        if (onRefresh) await onRefresh();
       } else {
         setSaveError(res.data?.Message || 'Failed to order tests');
       }

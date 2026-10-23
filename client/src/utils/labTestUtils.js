@@ -551,9 +551,14 @@ export function groupInvestigationsIntoLots(
   });
 
   // 1. If patient has official testList from billing, use that as the primary source of truth
+  const lots = [];
+  const processedReports = new Set();
+  const processedLotKeys = new Set();
+  const processedLotNames = new Set();
+
   const billTestList = patient?.testList || patient?.billing?.testList;
   if (Array.isArray(billTestList) && billTestList.length > 0) {
-    return billTestList.map((item, idx) => {
+    billTestList.forEach((item, idx) => {
       const name = item['Bill Particulars'] || item.name || `Item ${idx + 1}`;
       const amount = Number(item.Amount || item.amount || 0);
       const lower = name.toLowerCase().trim();
@@ -565,16 +570,19 @@ export function groupInvestigationsIntoLots(
 
       if (matchedPkg) {
         const pkgId = String(matchedPkg['Package Id'] || matchedPkg.id || '').trim();
-        const subTests = (reports || [])
-          .filter(
-            (r) =>
-              String(r.packageName || '').toLowerCase() === pkgId.toLowerCase() ||
-              String(r.profileName || '').toLowerCase() === pkgId.toLowerCase()
-          )
-          .map((r) => r.testName)
-          .filter(Boolean);
+        const pkgReports = (reports || []).filter(
+          (r) =>
+            String(r.packageName || '').toLowerCase() === pkgId.toLowerCase() ||
+            String(r.profileName || '').toLowerCase() === pkgId.toLowerCase()
+        );
+        pkgReports.forEach((r) => processedReports.add(r.reportId));
 
-        return {
+        const subTests = pkgReports.map((r) => r.testName).filter(Boolean);
+
+        processedLotKeys.add(`PKG|${pkgId.toUpperCase()}`);
+        processedLotNames.add(String(matchedPkg.Name || name).toLowerCase().trim());
+
+        lots.push({
           id: `EXISTING_PKG_${pkgId || idx + 1}`,
           testId: pkgId,
           type: 'PKG',
@@ -584,7 +592,8 @@ export function groupInvestigationsIntoLots(
           isNew: false,
           subTestCount: subTests.length,
           subTests,
-        };
+        });
+        return;
       }
 
       // Check if it's a Profile
@@ -594,15 +603,18 @@ export function groupInvestigationsIntoLots(
 
       if (matchedProf) {
         const profId = String(matchedProf['Profile Id'] || matchedProf.id || '').trim();
-        const subTests = (reports || [])
-          .filter(
-            (r) =>
-              String(r.profileName || '').toLowerCase() === profId.toLowerCase() && !r.packageName
-          )
-          .map((r) => r.testName)
-          .filter(Boolean);
+        const profReports = (reports || []).filter(
+          (r) =>
+            String(r.profileName || '').toLowerCase() === profId.toLowerCase() && !r.packageName
+        );
+        profReports.forEach((r) => processedReports.add(r.reportId));
 
-        return {
+        const subTests = profReports.map((r) => r.testName).filter(Boolean);
+
+        processedLotKeys.add(`PROF|${profId.toUpperCase()}`);
+        processedLotNames.add(String(matchedProf.Name || name).toLowerCase().trim());
+
+        lots.push({
           id: `EXISTING_PROF_${profId || idx + 1}`,
           testId: profId,
           type: 'PROF',
@@ -612,16 +624,25 @@ export function groupInvestigationsIntoLots(
           isNew: false,
           subTestCount: subTests.length,
           subTests,
-        };
+        });
+        return;
       }
 
       // Standalone Individual Test: resolve actual testId from catalog or reports
+      const matchedReport = (reports || []).find(
+        (r) => String(r.testName || '').toLowerCase().trim() === lower
+      );
+      if (matchedReport) processedReports.add(matchedReport.reportId);
+
       const matchedTestId =
         testMapByName.get(lower) ||
-        (reports || []).find((r) => String(r.testName || '').toLowerCase().trim() === lower)?.testId ||
+        matchedReport?.testId ||
         `T_${idx + 1}`;
 
-      return {
+      processedLotKeys.add(`TEST|${String(matchedTestId).toUpperCase()}`);
+      processedLotNames.add(lower);
+
+      lots.push({
         id: `EXISTING_TEST_${matchedTestId || idx + 1}`,
         testId: matchedTestId,
         type: 'TEST',
@@ -631,18 +652,15 @@ export function groupInvestigationsIntoLots(
         isNew: false,
         subTestCount: 0,
         subTests: [],
-      };
+      });
     });
   }
 
-  // 2. Fallback: Group directly from reports
-  const lots = [];
-  const processedReports = new Set();
-
+  // 2. Append any reports that were not covered by billTestList (e.g. tests added later)
   // Step A: Group by Package
   const packageGroups = new Map();
   (reports || []).forEach((r) => {
-    if (r.packageName) {
+    if (!processedReports.has(r.reportId) && r.packageName) {
       const kId = String(r.packageName).trim();
       if (!packageGroups.has(kId)) packageGroups.set(kId, []);
       packageGroups.get(kId).push(r);
@@ -652,17 +670,22 @@ export function groupInvestigationsIntoLots(
 
   packageGroups.forEach((reps, kId) => {
     const pkg = packageMapById.get(kId.toLowerCase());
-    lots.push({
-      id: `EXISTING_PKG_${kId}`,
-      testId: kId,
-      type: 'PKG',
-      name: pkg?.Name || `Package ${kId}`,
-      amount: Number(pkg?.Rate) || 0,
-      category: 'Package',
-      isNew: false,
-      subTestCount: reps.length,
-      subTests: reps.map((r) => r.testName).filter(Boolean),
-    });
+    const pkgName = pkg?.Name || `Package ${kId}`;
+    if (!processedLotKeys.has(`PKG|${kId.toUpperCase()}`) && !processedLotNames.has(pkgName.toLowerCase().trim())) {
+      processedLotKeys.add(`PKG|${kId.toUpperCase()}`);
+      processedLotNames.add(pkgName.toLowerCase().trim());
+      lots.push({
+        id: `EXISTING_PKG_${kId}`,
+        testId: kId,
+        type: 'PKG',
+        name: pkgName,
+        amount: Number(pkg?.Rate) || 0,
+        category: 'Package',
+        isNew: false,
+        subTestCount: reps.length,
+        subTests: reps.map((r) => r.testName).filter(Boolean),
+      });
+    }
   });
 
   // Step B: Group by Profile (for reports not already in a package)
@@ -678,33 +701,45 @@ export function groupInvestigationsIntoLots(
 
   profileGroups.forEach((reps, pId) => {
     const prof = profileMapById.get(pId.toLowerCase());
-    lots.push({
-      id: `EXISTING_PROF_${pId}`,
-      testId: pId,
-      type: 'PROF',
-      name: prof?.Name || `Profile ${pId}`,
-      amount: Number(prof?.Rate) || 0,
-      category: 'Profile',
-      isNew: false,
-      subTestCount: reps.length,
-      subTests: reps.map((r) => r.testName).filter(Boolean),
-    });
+    const profName = prof?.Name || `Profile ${pId}`;
+    if (!processedLotKeys.has(`PROF|${pId.toUpperCase()}`) && !processedLotNames.has(profName.toLowerCase().trim())) {
+      processedLotKeys.add(`PROF|${pId.toUpperCase()}`);
+      processedLotNames.add(profName.toLowerCase().trim());
+      lots.push({
+        id: `EXISTING_PROF_${pId}`,
+        testId: pId,
+        type: 'PROF',
+        name: profName,
+        amount: Number(prof?.Rate) || 0,
+        category: 'Profile',
+        isNew: false,
+        subTestCount: reps.length,
+        subTests: reps.map((r) => r.testName).filter(Boolean),
+      });
+    }
   });
 
   // Step C: Standalone Individual Tests
   (reports || []).forEach((r, idx) => {
     if (!processedReports.has(r.reportId)) {
-      lots.push({
-        id: `EXISTING_TEST_${r.reportId || idx + 1}`,
-        testId: r.testId || `T_${idx + 1}`,
-        type: 'TEST',
-        name: r.testName,
-        amount: Number(r.rate) || 0,
-        category: 'Test',
-        isNew: false,
-        subTestCount: 0,
-        subTests: [],
-      });
+      const tName = r.testName || `Test ${r.testId || idx + 1}`;
+      const tid = r.testId || `T_${idx + 1}`;
+      const lowerName = tName.toLowerCase().trim();
+      if (!processedLotKeys.has(`TEST|${String(tid).toUpperCase()}`) && !processedLotNames.has(lowerName)) {
+        processedLotKeys.add(`TEST|${String(tid).toUpperCase()}`);
+        processedLotNames.add(lowerName);
+        lots.push({
+          id: `EXISTING_TEST_${r.reportId || idx + 1}`,
+          testId: tid,
+          type: 'TEST',
+          name: tName,
+          amount: Number(r.rate) || 0,
+          category: 'Test',
+          isNew: false,
+          subTestCount: 0,
+          subTests: [],
+        });
+      }
     }
   });
 
