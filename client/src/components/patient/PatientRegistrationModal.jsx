@@ -12,6 +12,8 @@ import {
   Loader2,
   Stethoscope,
   Users,
+  X,
+  GraduationCap,
 } from 'lucide-react';
 import { getLocalDateString } from '../../utils/dateUtils.js';
 
@@ -38,6 +40,9 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
   const [isDoctorDropdownOpen, setIsDoctorDropdownOpen] = useState(false);
   const doctorDropdownRef = useRef(null);
 
+  const [isReferDoctorDropdownOpen, setIsReferDoctorDropdownOpen] = useState(false);
+  const referDoctorDropdownRef = useRef(null);
+
   const [referralSearchQuery, setReferralSearchQuery] = useState('');
   const [isReferralDropdownOpen, setIsReferralDropdownOpen] = useState(false);
   const referralDropdownRef = useRef(null);
@@ -50,6 +55,9 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
     const handleOutsideClick = (e) => {
       if (doctorDropdownRef.current && !doctorDropdownRef.current.contains(e.target)) {
         setIsDoctorDropdownOpen(false);
+      }
+      if (referDoctorDropdownRef.current && !referDoctorDropdownRef.current.contains(e.target)) {
+        setIsReferDoctorDropdownOpen(false);
       }
       if (referralDropdownRef.current && !referralDropdownRef.current.contains(e.target)) {
         setIsReferralDropdownOpen(false);
@@ -78,7 +86,10 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
         branch: '1',
       });
       setDoctorSearchQuery('');
+      setIsDoctorDropdownOpen(false);
+      setIsReferDoctorDropdownOpen(false);
       setReferralSearchQuery('');
+      setIsReferralDropdownOpen(false);
       setError('');
     }
   }, [isOpen]);
@@ -115,7 +126,7 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Filtered doctors based on search
+  // Filtered doctors based on search in Commission dropdown
   const filteredDoctors = doctors.filter((doc) => {
     if (!doctorSearchQuery.trim()) return true;
     const q = doctorSearchQuery.toLowerCase();
@@ -125,21 +136,47 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
     return name.includes(q) || deg.includes(q) || id.includes(q);
   });
 
-  // When a doctor is selected from commission search:
-  // Auto-fill Refer Doctor text field, set referDr ID, and update search input
+  // Filtered doctors for Refer Doctor field
+  const filteredReferDoctors = doctors.filter((doc) => {
+    const q = (formData.referedDr || '').toLowerCase().trim();
+    if (!q || q === 'self') return true;
+    const name = (doc.Name || '').toLowerCase();
+    const deg = (doc.Deg || '').toLowerCase();
+    const id = String(doc['Doct Id'] || '').toLowerCase();
+    return name.includes(q) || deg.includes(q) || id.includes(q);
+  });
+
+  // Helper to format doctor name with degree
+  const formatDoctorWithDegree = (doc) => {
+    if (!doc || !doc.Name || doc.Name === 'Self') return 'Self';
+    const deg = (doc.Deg || '').trim();
+    return deg ? `${doc.Name} (${deg})` : doc.Name;
+  };
+
+  // When a doctor is selected from either Refer Doctor or Commission search:
+  // Auto-fill Refer Doctor text field WITH degree, set referDr ID, and update search input
   const handleSelectDoctor = (doc) => {
     const docName = doc.Name || 'Self';
     const docId = doc['Doct Id'] || 'D1';
+    const fullNameWithDeg = formatDoctorWithDegree(doc);
 
     setFormData((prev) => ({
       ...prev,
       referDr: docId,
-      referedDr: docName, // Automatically updates Refer Doctor text box!
+      referedDr: fullNameWithDeg, // Includes degree: e.g. "DR. AMIT ROY (MBBS, MD)"
     }));
 
-    setDoctorSearchQuery(doc.Name ? `${doc.Name}${doc.Deg ? ` (${doc.Deg})` : ''}` : '');
+    setDoctorSearchQuery(doc.Name && doc.Name !== 'Self' ? fullNameWithDeg : (doc.Name === 'Self' ? 'Self' : ''));
     setIsDoctorDropdownOpen(false);
+    setIsReferDoctorDropdownOpen(false);
   };
+
+  // Find currently matched doctor to display their degree pill
+  const matchedDoctor = doctors.find(
+    (d) =>
+      d['Doct Id'] === formData.referDr ||
+      (d.Name && formData.referedDr.toLowerCase().includes(d.Name.toLowerCase()))
+  );
 
   // Filtered referrals based on search
   const filteredReferrals = references.filter((ref) => {
@@ -199,12 +236,20 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
   return (
     <Modal isOpen={isOpen} onClose={onClose} maxWidth="max-w-4xl" overflow="overflow-visible">
       <div className="-mt-1">
-        {/* Header matching screenshot */}
-        <div className="flex items-center gap-2 pb-4 mb-4 border-b border-slate-100">
+        {/* Header with Cancel Sign */}
+        <div className="flex items-center justify-between pb-3.5 mb-4 border-b border-slate-100">
           <div className="flex items-center gap-2 text-blue-600 font-bold text-base">
             <UserPlus className="w-5 h-5 stroke-[2.5]" />
             <span>Add New Patient</span>
           </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+            title="Cancel / Close (Esc)"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {error && (
@@ -404,22 +449,80 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
               </div>
             </div>
 
-            {/* 9. Refer Doctor (Free text name printed on reports) */}
-            <div>
-              <label className="text-[11px] font-semibold text-slate-500 block mb-1.5">
-                Refer Doctor
-              </label>
+            {/* 9. Refer Doctor (With searchable suggestions & degree display) */}
+            <div className="relative" ref={referDoctorDropdownRef}>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[11px] font-semibold text-slate-500 block">
+                  Refer Doctor
+                </label>
+                {matchedDoctor?.Deg && (
+                  <span className="text-[10px] text-blue-700 font-bold bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded-md">
+                    {matchedDoctor.Deg}
+                  </span>
+                )}
+              </div>
               <div className="relative">
                 <User className="w-4 h-4 text-blue-500 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   name="referedDr"
-                  placeholder="Doctor Name"
+                  placeholder="Doctor Name (Degree)"
                   value={formData.referedDr}
-                  onChange={handleInputChange}
+                  onFocus={() => setIsReferDoctorDropdownOpen(true)}
+                  onChange={(e) => {
+                    handleInputChange(e);
+                    setIsReferDoctorDropdownOpen(true);
+                  }}
                   className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 shadow-2xs"
                 />
               </div>
+
+              {/* Refer Doctor Autocomplete Dropdown */}
+              {isReferDoctorDropdownOpen && (
+                <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-300 rounded-lg shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-slate-100">
+                  <div className="px-3 py-1.5 bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider sticky top-0 border-b border-slate-200">
+                    Select Doctor (Shows Degree)
+                  </div>
+                  <div
+                    onClick={() => handleSelectDoctor({ 'Doct Id': 'D1', Name: 'Self' })}
+                    className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-xs font-semibold text-slate-700 flex justify-between items-center"
+                  >
+                    <span>Self / Walk-in</span>
+                    <span className="text-[10px] text-slate-400 font-mono">D1</span>
+                  </div>
+
+                  {filteredReferDoctors.length > 0 ? (
+                    filteredReferDoctors.map((doc, idx) => (
+                      <div
+                        key={doc['Doct Id'] || idx}
+                        onClick={() => handleSelectDoctor(doc)}
+                        className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-xs text-slate-800 flex justify-between items-center transition-colors"
+                      >
+                        <div>
+                          <span className="font-bold text-slate-900">{doc.Name}</span>
+                          {doc.Deg && (
+                            <span className="text-[11px] text-blue-700 font-semibold ml-1.5 bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded-md">
+                              {doc.Deg}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-mono shrink-0 ml-2">
+                          {doc['Doct Id']}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="px-3 py-2 text-xs text-slate-400 italic">No matching doctor found</div>
+                  )}
+                </div>
+              )}
+
+              {matchedDoctor?.Deg && (
+                <div className="mt-1 flex items-center gap-1 text-[11px] text-slate-600">
+                  <GraduationCap className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                  <span>Degree: <strong className="text-slate-800 font-semibold">{matchedDoctor.Deg}</strong></span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -468,8 +571,8 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
                         <div>
                           <span className="font-bold">{doc.Name}</span>
                           {doc.Deg && (
-                            <span className="text-[11px] text-slate-500 ml-1.5">
-                              ({doc.Deg})
+                            <span className="text-[11px] text-blue-700 font-semibold ml-1.5 bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded-md">
+                              {doc.Deg}
                             </span>
                           )}
                         </div>
@@ -566,8 +669,15 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
             </div>
           </div>
 
-          {/* Bottom Action Footer matching Screenshot */}
-          <div className="flex justify-end pt-4 mt-2 border-t border-slate-100">
+          {/* Bottom Action Footer with Cancel & Submit */}
+          <div className="flex items-center justify-end gap-2.5 pt-4 mt-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-5 py-2.5 border border-slate-300 hover:bg-slate-100 active:scale-95 text-slate-700 font-semibold rounded-lg text-xs transition-all cursor-pointer"
+            >
+              Cancel
+            </button>
             <button
               type="submit"
               disabled={loading}
