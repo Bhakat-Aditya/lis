@@ -13,6 +13,7 @@ import {
   MinusCircle,
   TestTube,
   FileText,
+  FileCheck,
   CreditCard,
   ArrowDownRight,
   Banknote,
@@ -27,6 +28,9 @@ import {
 import { formatDisplayDate } from '../../utils/dateUtils.js';
 import { useMaster } from '../../context/context.master.jsx';
 import { groupInvestigationsIntoLots } from '../../utils/labTestUtils.js';
+import PatientEmrHistory from './PatientEmrHistory.jsx';
+import ReportActivityLog from './ReportActivityLog.jsx';
+
 
 export default function PatientProfileView({
   patient,
@@ -280,13 +284,13 @@ export default function PatientProfileView({
               <span>Fill Results</span>
             </button>
 
-            {/* 5. Print Report (Vibrant Teal) */}
+            {/* 5. View Report (Vibrant Teal) */}
             <button
               onClick={onPrintReport}
               className="flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold text-xs py-2.5 px-3 rounded-xl shadow-xs transition-all cursor-pointer"
             >
-              <Printer className="w-4 h-4" />
-              <span>Print Report</span>
+              <FileCheck className="w-4 h-4" />
+              <span>View Report</span>
             </button>
 
             {/* 6. Receive Sample (Vibrant Indigo) */}
@@ -620,6 +624,19 @@ export default function PatientProfileView({
           )}
         </div>
       </div>
+
+      {/* BOTTOM SECTION: Patient EMR History & Report Activity Log */}
+      <div className="lg:col-span-12 space-y-4 pt-1">
+        <PatientEmrHistory
+          patientId={pid}
+          currentPatient={patient}
+        />
+
+        <ReportActivityLog
+          patientId={pid}
+        />
+      </div>
     </div>
   );
 }
+

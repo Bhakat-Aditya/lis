@@ -15,6 +15,7 @@ import {
   Building,
 } from 'lucide-react';
 import Modal from '../components/common/Modal.jsx';
+import BillPreviewModal from '../components/billing/BillPreviewModal.jsx';
 import { formatDisplayDate, sortPatientsByRecent } from '../utils/dateUtils.js';
 
 export default function BillingPage() {
@@ -24,6 +25,7 @@ export default function BillingPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL'); // ALL, PAID, DUE
   const [depositPatient, setDepositPatient] = useState(null);
+  const [previewPatient, setPreviewPatient] = useState(null);
   const [amount, setAmount] = useState('500');
   const [paymentMode, setPaymentMode] = useState('Cash');
   const [notification, setNotification] = useState('');
@@ -336,11 +338,12 @@ export default function BillingPage() {
                           <span>Deposit</span>
                         </button>
                         <button
-                          onClick={() => navigate(`/invoice/${p.patientId}`)}
+                          onClick={() => setPreviewPatient(p)}
                           className="flex items-center gap-1 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold text-xs py-1.5 px-3 rounded-xl shadow-xs cursor-pointer transition-all"
+                          title="Preview official AWS bill"
                         >
                           <Printer className="w-3.5 h-3.5" />
-                          <span>Invoice</span>
+                          <span>Preview Bill</span>
                         </button>
                       </div>
                     </td>
@@ -429,6 +432,14 @@ export default function BillingPage() {
           </div>
         </div>
       </Modal>
+
+      {/* Bill Preview Modal Popup */}
+      <BillPreviewModal
+        isOpen={!!previewPatient}
+        onClose={() => setPreviewPatient(null)}
+        patientId={previewPatient?.patientId}
+        patientName={previewPatient?.name}
+      />
     </section>
   );
 }

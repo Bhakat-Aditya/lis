@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { StatusBadge, PaymentBadge } from '../common/Badge.jsx';
 import ClinicalGuideModal from '../common/ClinicalGuideModal.jsx';
+import BillPreviewModal from '../billing/BillPreviewModal.jsx';
 
 export default function RecentWorklistTable({
   patients = [],
@@ -23,6 +24,7 @@ export default function RecentWorklistTable({
   onOpenNewPatient,
 }) {
   const navigate = useNavigate();
+  const [previewPatient, setPreviewPatient] = useState(null);
   const [tableSearch, setTableSearch] = useState('');
   const [paymentFilter, setPaymentFilter] = useState('ALL');
   const [copiedPid, setCopiedPid] = useState(null);
@@ -295,8 +297,8 @@ export default function RecentWorklistTable({
                             <FileEdit className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={() => navigate(`/invoice/${pid}`)}
-                            title="Print Invoice Receipt"
+                            onClick={() => setPreviewPatient(p)}
+                            title="Preview Bill"
                             className="p-1.5 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-600 hover:text-white transition-all cursor-pointer"
                           >
                             <Printer className="w-3.5 h-3.5" />
@@ -348,6 +350,14 @@ export default function RecentWorklistTable({
       <ClinicalGuideModal
         isOpen={isGuideOpen}
         onClose={() => setIsGuideOpen(false)}
+      />
+
+      {/* Bill Preview Modal Popup */}
+      <BillPreviewModal
+        isOpen={!!previewPatient}
+        onClose={() => setPreviewPatient(null)}
+        patientId={previewPatient?.patientId || previewPatient?.slNo}
+        patientName={previewPatient?.name}
       />
     </>
   );

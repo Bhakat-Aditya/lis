@@ -18,7 +18,11 @@ import {
   Check,
   RefreshCw,
   Plus,
+  Printer,
+  Download,
+  ExternalLink,
 } from 'lucide-react';
+
 import {
   getLocalDateString,
   getYesterdayDateString,
@@ -27,6 +31,7 @@ import {
   formatPatientDateTime,
   sortPatientsByRecent,
 } from '../utils/dateUtils.js';
+import BillPreviewModal from '../components/billing/BillPreviewModal.jsx';
 
 export default function PatientsPage({ onOpenNewPatient }) {
   const navigate = useNavigate();
@@ -39,6 +44,7 @@ export default function PatientsPage({ onOpenNewPatient }) {
 
   // Mode: 'recent' (default: loads all recent active records), 'today', 'yesterday', 'custom'
   const [dateMode, setDateMode] = useState('recent');
+  const [previewBillPatient, setPreviewBillPatient] = useState(null);
   const [selectedDate, setSelectedDate] = useState(todayStr);
   const [latestFoundDate, setLatestFoundDate] = useState(null);
   const [searchTerm, setSearchTerm] = useState(urlSearch);
@@ -601,14 +607,11 @@ export default function PatientsPage({ onOpenNewPatient }) {
                                   </button>
 
                                   <button
-                                    onClick={() => {
-                                      setActivePatient(p);
-                                      navigate(`/invoice/${pid}`);
-                                    }}
+                                    onClick={() => setPreviewBillPatient(p)}
                                     className="w-full flex items-center justify-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold py-1.5 px-3 rounded-lg shadow-xs cursor-pointer transition-all"
                                   >
                                     <FileText className="w-3.5 h-3.5" />
-                                    <span>Generate Invoice</span>
+                                    <span>Preview Bill</span>
                                   </button>
 
                                   <button
@@ -621,7 +624,36 @@ export default function PatientsPage({ onOpenNewPatient }) {
                                     <FileCheck className="w-3.5 h-3.5" />
                                     <span>View Report</span>
                                   </button>
+
+                                  {/* AWS Report PDF */}
+                                  {/* AWS Report PDF */}
+                                  <button
+                                    onClick={() => {
+                                      const rawPid = p.patientId || pid;
+                                      const cleanPid = rawPid
+                                        ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
+                                        : '';
+                                      const token = localStorage.getItem('token');
+                                      window.open(`/api/reports/pdf?patientId=${cleanPid || rawPid}&addHeader=true${token ? `&token=${token}` : ''}`, '_blank');
+                                    }}
+                                    className="w-full flex items-center justify-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold py-1.5 px-3 rounded-lg shadow-xs cursor-pointer transition-all"
+                                    title="Open official AWS Diagnostic Report PDF"
+                                  >
+                                    <Printer className="w-3.5 h-3.5" />
+                                    <span>AWS Report PDF</span>
+                                  </button>
+
+                                  {/* AWS Bill Preview Popup */}
+                                  <button
+                                    onClick={() => setPreviewBillPatient(p)}
+                                    className="w-full flex items-center justify-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold py-1.5 px-3 rounded-lg shadow-xs cursor-pointer transition-all"
+                                    title="Open official AWS Invoice Preview Popup"
+                                  >
+                                    <FileText className="w-3.5 h-3.5" />
+                                    <span>AWS Bill Preview</span>
+                                  </button>
                                 </div>
+
                               </div>
                             </div>
                           </td>
@@ -671,6 +703,14 @@ export default function PatientsPage({ onOpenNewPatient }) {
           </table>
         </div>
       </div>
+
+      {/* Bill Preview Modal Popup */}
+      <BillPreviewModal
+        isOpen={!!previewBillPatient}
+        onClose={() => setPreviewBillPatient(null)}
+        patientId={previewBillPatient?.patientId || previewBillPatient?.slNo}
+        patientName={previewBillPatient?.name}
+      />
     </section>
   );
 }

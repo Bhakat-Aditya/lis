@@ -18,7 +18,11 @@ import {
   RotateCcw,
   AlertTriangle,
   X,
+  Printer,
+  Download,
+  ExternalLink,
 } from 'lucide-react';
+
 import api from '../../services/api';
 import ResultsPhaseTracker from './ResultsPhaseTracker.jsx';
 import ResultsTableView from './ResultsTableView.jsx';
@@ -305,16 +309,46 @@ export default function ResultsEntry({
 
   const handleCalculate = async (reportId) => {
     try {
-      await api.post('/reports/calculate-result', {
+      const res = await api.post('/reports/calculate-result', {
         patientId: patient.patientId,
         reportId,
       });
-      setSuccessMsg('Automated diagnostic calculation evaluated successfully!');
-      if (onRefresh) onRefresh();
+      if (res.data?.STATUS === 'FAILED' || res.data?.StatusCode === '1211') {
+        setErrorMsg(res.data?.Message || 'This calculation is not available in the system');
+      } else {
+        setSuccessMsg(res.data?.Message || 'Result calculated successfully!');
+        if (onRefresh) onRefresh();
+      }
     } catch (err) {
-      setErrorMsg('Failed to run automated formula calculation');
+      setErrorMsg(err.response?.data?.Message || 'Failed to run automated formula calculation');
     }
   };
+
+  const handleSetDefaultResult = async (reportId, resultVersion) => {
+    try {
+      // Optimistically update local input reading immediately
+      const rep = reports.find((r) => r.reportId === reportId);
+      const chosenVal = rep ? rep[`resultData${resultVersion}`] : null;
+      if (chosenVal !== undefined && chosenVal !== null) {
+        handleInputChange(reportId, 'resultData', chosenVal);
+      }
+
+      const res = await api.post('/reports/set-default-result', {
+        patientId: patient.patientId,
+        reportId,
+        resultVersion,
+      });
+      if (res.data?.STATUS === 'FAILED') {
+        setErrorMsg(res.data?.Message || 'Failed to set default result version');
+      } else {
+        setSuccessMsg(res.data?.Message || `Default result set to version ${resultVersion}`);
+        if (onRefresh) onRefresh();
+      }
+    } catch (err) {
+      setErrorMsg(err.response?.data?.Message || 'Failed to set default result version');
+    }
+  };
+
 
   const handleReceiveSample = async (report) => {
     try {
@@ -440,6 +474,29 @@ export default function ResultsEntry({
             <FileCheck className="w-3.5 h-3.5" />
             <span>Sign-Off</span>
           </button>
+
+          {/* Official AWS Report PDF Button */}
+          <button
+            type="button"
+            onClick={() => {
+              const rawPid = patient?.patientId || patient?.slNo;
+              const cleanPid = rawPid
+                ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
+                : '';
+              const targetUrl = patient?.printPDFUrl || patient?.reportUrl;
+              if (targetUrl) {
+                window.open(targetUrl, '_blank');
+              } else {
+                window.open(`/api/reports/pdf?patientId=${cleanPid || rawPid}&addHeader=true`, '_blank');
+              }
+            }}
+            className="flex items-center gap-1.5 px-3 py-1 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer"
+            title="Download / Print official AWS Diagnostic Report PDF"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>AWS Report PDF</span>
+          </button>
+
 
           {/* Save All Results Button */}
           <button
@@ -571,6 +628,7 @@ export default function ResultsEntry({
           onInputChange={handleInputChange}
           onSaveSingle={saveSingleReport}
           onCalculate={handleCalculate}
+          onSetDefaultResult={handleSetDefaultResult}
           onOpenGuide={openClinicalGuide}
           onReceiveSample={handleReceiveSample}
         />
@@ -583,6 +641,7 @@ export default function ResultsEntry({
           onInputChange={handleInputChange}
           onSaveSingle={saveSingleReport}
           onCalculate={handleCalculate}
+          onSetDefaultResult={handleSetDefaultResult}
           onOpenGuide={openClinicalGuide}
           onReceiveSample={handleReceiveSample}
         />

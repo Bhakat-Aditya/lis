@@ -7,6 +7,8 @@ import PatientProfileView from '../components/patient/PatientProfileView.jsx';
 import TestSelectionView from '../components/patient/TestSelectionView.jsx';
 import ResultsEntry from '../components/results/ResultsEntry.jsx';
 import PrintableInvoice from '../components/billing/PrintableInvoice.jsx';
+import AwsBillViewer from '../components/billing/AwsBillViewer.jsx';
+import BillPreviewModal from '../components/billing/BillPreviewModal.jsx';
 import BarcodeModal from '../components/patient/BarcodeModal.jsx';
 import DiscountModal from '../components/patient/DiscountModal.jsx';
 import DoctorApprovalModal from '../components/results/DoctorApprovalModal.jsx';
@@ -25,6 +27,10 @@ import {
   Edit,
   Loader2,
   AlertCircle,
+  Printer,
+  Download,
+  ExternalLink,
+  ChevronDown,
 } from 'lucide-react';
 import { formatDisplayDate, getLocalDateString } from '../utils/dateUtils.js';
 
@@ -42,17 +48,21 @@ export default function PatientDetailPage() {
   const [reports, setReports] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [invoiceData, setInvoiceData] = useState(null);
+  const [reportPdfUrl, setReportPdfUrl] = useState('');
+  const [billPdfUrl, setBillPdfUrl] = useState('');
 
   // Modals
   const [showApproval, setShowApproval] = useState(false);
   const [showDepositModal, setShowDepositModal] = useState(false);
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [showBarcodeModal, setShowBarcodeModal] = useState(false);
+  const [showBillPreviewModal, setShowBillPreviewModal] = useState(false);
   const [depositAmount, setDepositAmount] = useState('');
   const [paymentMode, setPaymentMode] = useState('Cash');
   const [notification, setNotification] = useState('');
   const [submittingDeposit, setSubmittingDeposit] = useState(false);
   const [depositError, setDepositError] = useState('');
+
 
   // Accurately calculate outstanding balance due for deposit modal
   const calculateDueAmount = (pt = patient, repList = reports) => {
@@ -106,6 +116,11 @@ export default function PatientDetailPage() {
       });
       const pt = res.data?.patient;
       const repList = res.data?.reports || [];
+      const awsReportUrl = res.data?.printPDFUrl || pt?.printPDFUrl || res.data?.reportUrl || '';
+      const awsBillUrl = res.data?.billUrl || pt?.billUrl || '';
+      if (awsReportUrl) setReportPdfUrl(awsReportUrl);
+      if (awsBillUrl) setBillPdfUrl(awsBillUrl);
+
       if (pt) {
         setPatient(pt);
         setReports(repList);
@@ -120,6 +135,9 @@ export default function PatientDetailPage() {
         const invRes = await api.get('/billing/invoice', {
           params: { patientId: id },
         });
+        if (invRes.data?.billUrl && !awsBillUrl) {
+          setBillPdfUrl(invRes.data.billUrl);
+        }
         if (invRes.data?.invoice) {
           setInvoiceData(invRes.data.invoice);
         } else {
@@ -135,6 +153,20 @@ export default function PatientDetailPage() {
       setLoading(false);
     }
   };
+
+  const handleOpenReportPdf = (withHeader = true) => {
+    const rawPid = patient?.patientId || id;
+    const cleanPid = rawPid
+      ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
+      : '';
+    const token = localStorage.getItem('token');
+    window.open(`/api/reports/pdf?patientId=${cleanPid || rawPid}&addHeader=${withHeader}${token ? `&token=${token}` : ''}`, '_blank');
+  };
+
+  const handleOpenBillPdf = () => {
+    setShowBillPreviewModal(true);
+  };
+
 
   const applyFallbackPatient = () => {
     const fallback =
@@ -420,8 +452,8 @@ export default function PatientDetailPage() {
           reports={reports}
           onAddTests={() => setSearchParams({ tab: 'tests' })}
           onFillResults={() => setSearchParams({ tab: 'results' })}
-          onPrintInvoice={() => setSearchParams({ tab: 'invoice' })}
-          onPrintReport={() => setSearchParams({ tab: 'results' })}
+          onPrintInvoice={() => setShowBillPreviewModal(true)}
+          onPrintReport={() => handleOpenReportPdf(true)}
           onReceiveSample={handleReceiveSample}
           onAddDeposit={handleOpenDepositModal}
           onAddDiscount={() => setShowDiscountModal(true)}
@@ -450,15 +482,11 @@ export default function PatientDetailPage() {
       )}
 
       {activeTab === 'invoice' && (
-        <div className="bg-slate-100 p-3 rounded-lg border border-slate-200">
-          <PrintableInvoice
-            invoiceData={invoiceData}
-            onFillResults={() => setSearchParams({ tab: 'results' })}
-            onHome={() => navigate('/patients')}
-            onDiscount={() => setShowDiscountModal(true)}
-            onDeposit={handleOpenDepositModal}
-          />
-        </div>
+        <AwsBillViewer
+          patientId={id}
+          onBack={() => setSearchParams({ tab: 'profile' })}
+          title="Official Diagnostic Bill & Receipt (AWS Server)"
+        />
       )}
 
       {/* Barcode Modal */}
@@ -594,6 +622,14 @@ export default function PatientDetailPage() {
           </div>
         </div>
       </Modal>
+
+      {/* Bill Preview Modal Popup */}
+      <BillPreviewModal
+        isOpen={showBillPreviewModal}
+        onClose={() => setShowBillPreviewModal(false)}
+        patientId={id}
+        patientName={patient?.name}
+      />
     </section>
   );
 }

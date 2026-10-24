@@ -130,3 +130,44 @@ export const sortPatientsByRecent = (patients) => {
     return numB - numA;
   });
 };
+
+/**
+ * Format date specifically for EMR History: '23-October-2026'
+ */
+export const formatEmrDate = (dateVal) => {
+  if (!dateVal) return '-';
+  const d = parseLISDate(dateVal);
+  if (!d) return String(dateVal);
+
+  const day = d.getDate();
+  const monthsFull = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+  const month = monthsFull[d.getMonth()];
+  const year = d.getFullYear();
+
+  return `${day}-${month}-${year}`;
+};
+
+/**
+ * Format date & time for Report Activity Log console: '23-10-2026 06:43:20 PM'
+ */
+export const formatLogDateTime = (dateVal) => {
+  if (!dateVal) return '';
+  const d = parseLISDate(dateVal);
+  if (!d) return String(dateVal);
+
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+
+  const hours = d.getHours();
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const seconds = String(d.getSeconds()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  const hour12 = String(hours % 12 || 12).padStart(2, '0');
+
+  return `${day}-${month}-${year} ${hour12}:${minutes}:${seconds} ${ampm}`;
+};
+

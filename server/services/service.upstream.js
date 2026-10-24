@@ -229,12 +229,16 @@ class UpstreamService {
    */
   async getBillingSummary(patientId, sid = null) {
     if (!patientId) return null;
-    const cleanId = String(patientId).trim();
+    const rawId = String(patientId).trim();
+    const cleanId = rawId.toUpperCase().startsWith('P') ? `P${rawId.replace(/^P+/i, '')}` : `P${rawId}`;
     const activeSid = sid || await this.ensureMasterSession();
 
     // 1. Try native GETBILLJSON (accurate, structured JSON from upstream database)
     try {
-      const billData = await this.get('GETBILLJSON', { patientId: cleanId }, activeSid);
+      let billData = await this.get('GETBILLJSON', { patientId: cleanId }, activeSid);
+      if (!billData?.payLoadJSON?.billUrl && rawId !== cleanId) {
+        billData = await this.get('GETBILLJSON', { patientId: rawId }, activeSid);
+      }
       const b = billData?.payLoadJSON?.bill;
       if (b && typeof b === 'object') {
         const total = parseFloat(b['Total Bill']) || 0;

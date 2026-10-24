@@ -1,4 +1,6 @@
+import axios from 'axios';
 import { upstreamService } from '../services/service.upstream.js';
+
 
 // Number to Words converter (for Indian Rupees on medical invoices)
 function numberToWordsINR(amount) {
@@ -437,6 +439,7 @@ export const getInvoice = async (req, res, next) => {
         amountInWords: numberToWordsINR(netAmount),
         payments: summary?.paymentLines || [],
         billUrl: summary?.billUrl || '',
+        invoiceUrl: summary?.billUrl || '',
       },
       printedAt: new Date().toLocaleString(),
       printedBy: req.user?.name || 'Staff',
@@ -446,8 +449,56 @@ export const getInvoice = async (req, res, next) => {
       STATUS: 'SUCCESS',
       StatusCode: '0000',
       invoice: invoiceData,
+      billUrl: summary?.billUrl || '',
     });
   } catch (err) {
     next(err);
   }
 };
+
+/**
+ * Stream official AWS Bill / Invoice PDF directly
+ */
+export const streamInvoicePdf = async (req, res, next) => {
+  try {
+    const { patientId } = req.query;
+    if (!patientId) {
+      return res.status(400).json({ STATUS: 'FAILED', Message: 'patientId is required' });
+    }
+
+    const rawPid = String(patientId).trim();
+    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+      ? `P${rawPid.replace(/^P+/i, '')}`
+      : `P${rawPid}`;
+
+    let summary = await upstreamService.getBillingSummary(cleanPatientId, req.user?.upstreamSid);
+    let billUrl = summary?.billUrl;
+
+    if (!billUrl) {
+      const bData = await upstreamService.get('GETBILLJSON', { patientId: cleanPatientId }, req.user?.upstreamSid);
+      billUrl = bData?.payLoadJSON?.billUrl;
+    }
+
+    if (!billUrl) {
+      return res.status(404).json({ STATUS: 'FAILED', Message: 'Official bill PDF not found on upstream AWS server' });
+    }
+
+    const pdfStream = await axios.get(billUrl, {
+      responseType: 'stream',
+      timeout: 25000,
+    });
+
+    const isDownload = req.query.download === 'true';
+    res.setHeader('Content-Type', 'application/pdf');
+    if (isDownload) {
+      res.setHeader('Content-Disposition', `attachment; filename="Bill_${cleanPatientId}.pdf"`);
+    } else {
+      res.setHeader('Content-Disposition', 'inline');
+    }
+    pdfStream.data.pipe(res);
+  } catch (err) {
+    console.error('[InvoicePDF] Stream error:', err.message);
+    next(err);
+  }
+};
+

@@ -836,18 +836,26 @@ export default function TestSelectionView({
               <Trash2 className="w-3.5 h-3.5 text-rose-500" />
               <span>CLEAR</span>
             </button>
-            <button
-              onClick={handleSaveTests}
-              disabled={saving || selectedTests.filter((t) => t.isNew).length === 0}
-              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-50 text-white font-bold text-xs py-2 px-4 rounded-xl transition-all cursor-pointer shadow-xs ml-auto"
-            >
-              <Save className="w-3.5 h-3.5" />
-              <span>
-                {saving
-                  ? 'Saving...'
-                  : `Save Order (${selectedTests.filter((t) => t.isNew).length} New)`}
-              </span>
-            </button>
+            <div className="flex items-center gap-2 ml-auto">
+              <button
+                type="button"
+                onClick={onMakePayment}
+                className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs py-2 px-3.5 rounded-xl shadow-xs transition-all cursor-pointer"
+                title="Record patient deposit payment"
+              >
+                <DollarSign className="w-3.5 h-3.5" />
+                <span>Record Deposit</span>
+              </button>
+              <button
+                type="button"
+                onClick={onPrintInvoice}
+                className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-800 font-bold text-xs py-2 px-3.5 rounded-xl border border-slate-200 transition-all cursor-pointer shadow-2xs"
+                title="Print investigation bill slip"
+              >
+                <Printer className="w-3.5 h-3.5 text-slate-600" />
+                <span>Print Slip</span>
+              </button>
+            </div>
           </div>
 
           {/* Duplicate Test Warning Banner with Repeat Test Option */}
@@ -1120,24 +1128,22 @@ export default function TestSelectionView({
                 </div>
               </div>
 
-              {/* Quick Actions */}
-              <div className="pt-2 border-t border-slate-100 space-y-2">
+              {/* Save Tests Action right after the Total */}
+              <div className="pt-3 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={onMakePayment}
-                  className="w-full flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs py-2 px-3 rounded-xl shadow-xs transition-all cursor-pointer"
+                  onClick={handleSaveTests}
+                  disabled={saving || selectedTests.filter((t) => t.isNew).length === 0}
+                  className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-50 text-white font-bold text-xs py-2.5 px-4 rounded-xl shadow-sm transition-all cursor-pointer"
                 >
-                  <DollarSign className="w-3.5 h-3.5" />
-                  <span>Record Deposit Payment</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={onPrintInvoice}
-                  className="w-full flex items-center justify-center gap-1.5 bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-800 font-bold text-xs py-2 px-3 rounded-xl transition-all cursor-pointer"
-                >
-                  <Printer className="w-3.5 h-3.5 text-slate-600" />
-                  <span>Print Investigation Slip</span>
+                  <Save className="w-4 h-4" />
+                  <span>
+                    {saving
+                      ? 'Saving Tests...'
+                      : selectedTests.filter((t) => t.isNew).length > 0
+                      ? `Save Tests (${selectedTests.filter((t) => t.isNew).length} New)`
+                      : 'Save Tests'}
+                  </span>
                 </button>
               </div>
             </div>

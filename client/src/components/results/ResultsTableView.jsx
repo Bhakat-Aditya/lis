@@ -27,11 +27,13 @@ export default function ResultsTableView({
   onInputChange,
   onSaveSingle,
   onCalculate,
+  onSetDefaultResult,
   onOpenGuide,
   onReceiveSample,
 }) {
   const [focusedIndex, setFocusedIndex] = useState(null);
   const inputRefs = useRef([]);
+
 
   const handleKeyDown = (e, idx) => {
     if (e.key === 'Enter' || e.key === 'ArrowDown') {
@@ -235,7 +237,57 @@ export default function ResultsTableView({
                         </button>
                       )}
                     </div>
+
+                    {/* Multi-run version options (resultData1 through resultData5) */}
+                    {(() => {
+                      const vers = [
+                        { num: 1, val: report.resultData1 },
+                        { num: 2, val: report.resultData2 },
+                        { num: 3, val: report.resultData3 },
+                        { num: 4, val: report.resultData4 },
+                        { num: 5, val: report.resultData5 },
+                      ].filter((v) => v.val !== undefined && v.val !== null && String(v.val).trim() !== '');
+
+                      if (vers.length === 0) return null;
+
+                      return (
+                        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap select-none">
+                          <span className="text-[9px] text-purple-800 font-bold uppercase tracking-wider">Runs:</span>
+                          {vers.map((v) => {
+                            const isDefault = String(current.resultData || '').trim() === String(v.val).trim();
+                            return (
+                              <div
+                                key={v.num}
+                                className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-lg border transition-all ${
+                                  isDefault
+                                    ? 'bg-purple-100 border-purple-400 font-bold text-purple-950 shadow-2xs'
+                                    : 'bg-[#f6effe] border-purple-200 text-slate-800'
+                                }`}
+                              >
+                                <span className="font-mono font-bold">v{v.num}: {v.val}</span>
+                                {isDefault ? (
+                                  <span className="text-[9px] font-extrabold text-emerald-700 ml-1">✓ Default</span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      onInputChange(report.reportId, 'resultData', v.val);
+                                      if (onSetDefaultResult) onSetDefaultResult(report.reportId, v.num);
+                                    }}
+                                    className="ml-1 bg-red-600 hover:bg-red-700 active:scale-95 text-white font-bold text-[9px] px-1.5 py-0.2 rounded cursor-pointer shadow-2xs transition-all"
+                                    title={`Set Version v${v.num} (${v.val}) as Default Result`}
+                                  >
+                                    ✓ Set
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                   </td>
+
 
                   {/* Unit */}
                   <td className="py-1.5 px-2 font-mono text-[11px] font-semibold text-slate-600">

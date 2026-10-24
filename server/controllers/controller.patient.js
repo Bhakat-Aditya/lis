@@ -668,3 +668,88 @@ export const addMultipleTests = async (req, res, next) => {
     next(err);
   }
 };
+
+/**
+ * Fetch patient audit/activity logs (GETLOGPATIENT)
+ */
+export const getPatientLogs = async (req, res, next) => {
+  try {
+    const { patientId } = req.query;
+    if (!patientId) {
+      return res.status(400).json({
+        STATUS: 'FAILED',
+        StatusCode: '400',
+        Message: 'patientId query parameter is required',
+      });
+    }
+
+    const rawPid = String(patientId).trim();
+    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+      ? `P${rawPid.replace(/^P+/i, '')}`
+      : `P${rawPid}`;
+
+    const upstreamData = await upstreamService.get(
+      'GETLOGPATIENT',
+      { patientId: cleanPatientId },
+      req.user?.upstreamSid
+    );
+
+    const payload = upstreamData?.payLoadJSON || {};
+    const logs = payload.logs || [];
+    const patient = payload.patient || null;
+
+    return res.json({
+      STATUS: upstreamData?.STATUS || 'SUCCESS',
+      StatusCode: upstreamData?.StatusCode || '0000',
+      Message: upstreamData?.Message || 'Logs fetched successfully',
+      logs,
+      patient,
+      data: upstreamData,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Fetch patient EMR history (GETEMRPATIENT)
+ */
+export const getPatientEmr = async (req, res, next) => {
+  try {
+    const { patientId } = req.query;
+    if (!patientId) {
+      return res.status(400).json({
+        STATUS: 'FAILED',
+        StatusCode: '400',
+        Message: 'patientId query parameter is required',
+      });
+    }
+
+    const rawPid = String(patientId).trim();
+    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+      ? `P${rawPid.replace(/^P+/i, '')}`
+      : `P${rawPid}`;
+
+    const upstreamData = await upstreamService.get(
+      'GETEMRPATIENT',
+      { patientId: cleanPatientId },
+      req.user?.upstreamSid
+    );
+
+    const payload = upstreamData?.payLoadJSON || {};
+    const emrlist = payload.emrlist || [];
+    const patient = payload.patient || null;
+
+    return res.json({
+      STATUS: upstreamData?.STATUS || 'SUCCESS',
+      StatusCode: upstreamData?.StatusCode || '0000',
+      Message: upstreamData?.Message || 'EMR history fetched successfully',
+      emrlist,
+      patient,
+      data: upstreamData,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
