@@ -103,42 +103,33 @@ export const getPatients = async (req, res, next) => {
       }
     }
 
-    // Proactively pre-fetch billing summaries for top recent patients who have a total bill
-    if (req.query.withBilling === 'true' || allDates) {
-      const needsBilling = patients
-        .slice(0, 20)
-        .filter((p) => Number(p.totalBill) > 0 && !upstreamService.getCachedBilling(p.patientId || p.slNo));
-      if (needsBilling.length > 0) {
-        await Promise.allSettled(
-          needsBilling.map((p) =>
-            upstreamService.getBillingSummary(p.patientId || p.slNo, req.user?.upstreamSid)
-          )
-        );
-      }
-    }
-
-    // Enrich patients with latest billing summaries
+    // Use patient billing status provided directly inside each patient JSON
+    // PAYMENT_STATUS_CODE_NOBILL = 1, PAYMENT_STATUS_CODE_PAID = 2, PAYMENT_STATUS_CODE_UNPAID = 3
     patients = patients.map((p) => {
       const pid = p.patientId || p.slNo;
+      const total = Number(p.totalBill || 0);
       const cached = upstreamService.getCachedBilling(pid);
-      if (cached) {
-        const total = (cached.total && cached.total > 0) ? cached.total : Number(p.totalBill || 0);
-        const paid = cached.paid || 0;
-        const due = cached.due !== undefined ? cached.due : Math.max(0, total - paid);
-        const isPaid = total > 0 && due <= 0 && paid >= total;
-        return {
-          ...p,
-          totalBill: total,
-          discount: cached.discount || 0,
-          roundoff: cached.roundoff || 0,
-          grossTotal: cached.gross || total,
-          paidBill: paid,
-          balance: due,
-          dueAmount: due,
-          billPayStatus: isPaid ? 2 : (paid > 0 ? 1 : 0),
-        };
+
+      let statusNum = Number(p.billPayStatus);
+      if (!statusNum || isNaN(statusNum)) {
+        statusNum = total > 0 ? 3 : 1;
       }
-      return p;
+
+      const isPaid = statusNum === 2;
+      const paid = cached ? (cached.paid || 0) : (isPaid ? total : Number(p.paidBill || 0));
+      const due = isPaid ? 0 : (cached ? cached.due : (p.balance !== undefined ? Number(p.balance) : Math.max(0, total - paid)));
+
+      return {
+        ...p,
+        totalBill: cached?.total || total,
+        discount: cached?.discount || 0,
+        roundoff: cached?.roundoff || 0,
+        grossTotal: cached?.gross || total,
+        paidBill: paid,
+        balance: due,
+        dueAmount: due,
+        billPayStatus: statusNum,
+      };
     });
 
     return res.json({
@@ -641,15 +632,8 @@ export const addMultipleTests = async (req, res, next) => {
       });
     }
 
-    // Sync bill ledger with upstream and refresh summary so dues update immediately
-    try {
-      await upstreamService.post('BILLGENERATE', { patientId: cleanPatientId }, null, req.user?.upstreamSid);
-    } catch (e) {
-      console.warn('[AddTests] BILLGENERATE sync note:', e.message);
-    }
-    upstreamService.getBillingSummary(cleanPatientId, req.user?.upstreamSid).catch((e) => {
-      console.warn('[AddTests] Billing summary refresh note:', e.message);
-    });
+    // Bill is generated and modified internally upstream upon adding tests;
+    // do not trigger routine BILLGENERATE here.
 
     const successMsg = duplicateLabels.length > 0
       ? `Added ${tokensToSend.length} new test(s). Skipped duplicate(s): ${duplicateLabels.join(', ')}.`

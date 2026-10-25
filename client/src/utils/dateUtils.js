@@ -83,28 +83,36 @@ export const formatDisplayDate = (dateVal, includeTime = false) => {
 };
 
 /**
+ * Extract clean, human-readable time string from patient record (e.g. '01:15 PM', '06:02 PM', or '--:--')
+ */
+export const getPatientTime = (patient) => {
+  if (!patient) return '--:--';
+  const raw = patient.sampleTime || patient.reportTime || patient.regTime || patient.time || '';
+  if (raw) {
+    const match = String(raw).match(/(\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM|am|pm)?)/i);
+    if (match) {
+      return match[1].trim().toUpperCase();
+    }
+    return String(raw).trim();
+  }
+  return '--:--';
+};
+
+/**
  * Format registration date and time together for table rows
  */
 export const formatPatientDateTime = (patient) => {
   if (!patient) return '-';
   const regDate = patient.regDate || patient.collectionDate;
-  const sampleTime = patient.sampleTime || patient.regTime;
+  const timeStr = getPatientTime(patient);
 
   const d = parseLISDate(regDate);
-  if (!d) {
-    return sampleTime ? `${sampleTime}` : '-';
+  const dateFormatted = d ? formatDisplayDate(d) : '-';
+
+  if (timeStr && timeStr !== '--:--') {
+    return `${dateFormatted}, ${timeStr}`;
   }
-
-  const day = d.getDate();
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const month = months[d.getMonth()];
-  const dateShort = `${day} ${month}`;
-
-  if (sampleTime && !sampleTime.includes('/')) {
-    return `${dateShort}, ${sampleTime}`;
-  }
-
-  return `${dateShort} ${d.getFullYear()}`;
+  return dateFormatted;
 };
 
 /**

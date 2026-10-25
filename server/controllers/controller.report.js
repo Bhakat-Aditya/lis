@@ -45,27 +45,35 @@ export const getPatientReport = async (req, res, next) => {
     });
 
     let billing = null;
-    try {
-      billing = await upstreamService.getBillingSummary(cleanPatientId, req.user?.upstreamSid);
-    } catch (e) {}
+    if (req.query.withBilling === 'true') {
+      try {
+        billing = await upstreamService.getBillingSummary(cleanPatientId, req.user?.upstreamSid);
+      } catch (e) {}
+    } else {
+      billing = upstreamService.getCachedBilling(cleanPatientId);
+    }
 
     const billUrl = billing?.billUrl || '';
+
+    const patientTotal = Number(patient?.totalBill || 0);
+    const statusNum = Number(patient?.billPayStatus);
+    const isPaid = statusNum === 2 || (billing && billing.total > 0 && billing.due <= 0 && billing.paid >= billing.total);
+    const isUnpaid = statusNum === 3 || (!isPaid && statusNum !== 1 && patientTotal > 0);
+    const resolvedPayStatus = isPaid ? 2 : (isUnpaid ? 3 : 1);
 
     const patientWithBilling = patient
       ? {
           ...patient,
-          grossTotal: billing?.gross || (billing?.total && billing.total > 0 ? billing.total : Number(patient.totalBill || 0)),
-          totalBill: (billing?.total && billing.total > 0) ? billing.total : Number(patient.totalBill || 0),
+          grossTotal: billing?.gross || (billing?.total && billing.total > 0 ? billing.total : patientTotal),
+          totalBill: (billing?.total && billing.total > 0) ? billing.total : patientTotal,
           discount: billing?.discount || 0,
           roundoff: billing?.roundoff || 0,
-          paidBill: billing ? billing.paid : Number(patient.paidBill || 0),
+          paidBill: billing ? billing.paid : (isPaid ? patientTotal : Number(patient.paidBill || 0)),
           balance: billing
             ? billing.due
-            : (patient.billPayStatus === 2 || patient.billPayStatus === '2' ? 0 : Math.max(0, Number(patient.totalBill || 0) - Number(patient.paidBill || 0))),
-          dueAmount: billing ? billing.due : 0,
-          billPayStatus: billing
-            ? (billing.total > 0 && billing.due <= 0 && billing.paid >= billing.total ? 2 : (billing.paid > 0 ? 1 : 0))
-            : (patient.billPayStatus === 2 || patient.billPayStatus === '2' ? 2 : (Number(patient.paidBill) > 0 ? 1 : 0)),
+            : (isPaid ? 0 : (patient.balance !== undefined ? Number(patient.balance) : Math.max(0, patientTotal - Number(patient.paidBill || 0)))),
+          dueAmount: billing ? billing.due : (isPaid ? 0 : patientTotal),
+          billPayStatus: resolvedPayStatus,
           paymentLines: billing?.paymentLines || [],
           payments: billing?.paymentLines || [],
           billUrl,

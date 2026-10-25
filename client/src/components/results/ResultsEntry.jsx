@@ -215,15 +215,28 @@ export default function ResultsEntry({
         method: report.method || '',
         refRange: report.refRange,
         unitref: report.unit,
-        resultData: current.resultData,
+        resultData: current.resultData !== undefined ? current.resultData : (report.resultData || ''),
         unit: report.unit,
-        comment: current.comment || '',
+        comment: current.comment !== undefined ? current.comment : (report.comment || ''),
         profileName: report.profileName || '',
         deptName: report.deptName || 'D1',
       });
 
       setSuccessMsg(`Test "${report.testName}" saved successfully.`);
-      if (onRefresh) onRefresh();
+      if (onRefresh) {
+        const freshData = await onRefresh();
+        if (freshData?.reports) {
+          const fresh = {};
+          freshData.reports.forEach((r) => {
+            fresh[r.reportId] = {
+              resultData: r.resultData || '',
+              comment: r.comment || '',
+              status: r.status || 'SAVED',
+            };
+          });
+          setResultsState(fresh);
+        }
+      }
     } catch (err) {
       setErrorMsg(err.response?.data?.Message || 'Failed to update test result');
     } finally {
@@ -232,12 +245,20 @@ export default function ResultsEntry({
   };
 
   const handleSaveAll = async () => {
+    // Only call for modified parameters, NOT all reports!
+    const changedReports = reports.filter((r) => dirtyReportIds.includes(r.reportId));
+
+    if (changedReports.length === 0) {
+      setSuccessMsg('No unsaved parameter modifications.');
+      return;
+    }
+
     setSavingAll(true);
     setSuccessMsg('');
     setErrorMsg('');
 
     try {
-      for (const report of reports) {
+      for (const report of changedReports) {
         const current = resultsState[report.reportId] || {};
         await api.post('/reports/update', {
           reportId: report.reportId,
@@ -249,15 +270,31 @@ export default function ResultsEntry({
           method: report.method || '',
           refRange: report.refRange,
           unitref: report.unit,
-          resultData: current.resultData,
+          resultData: current.resultData !== undefined ? current.resultData : (report.resultData || ''),
           unit: report.unit,
-          comment: current.comment || '',
+          comment: current.comment !== undefined ? current.comment : (report.comment || ''),
           profileName: report.profileName || '',
           deptName: report.deptName || 'D1',
         });
       }
-      setSuccessMsg(`All ${reports.length} laboratory test results saved successfully!`);
-      if (onRefresh) onRefresh();
+
+      setSuccessMsg(`Successfully saved ${changedReports.length} test ${changedReports.length === 1 ? 'parameter' : 'parameters'}! Synchronizing...`);
+
+      // After saving, call GETPATIENTREPORT API for sync of data
+      if (onRefresh) {
+        const freshData = await onRefresh();
+        if (freshData?.reports) {
+          const fresh = {};
+          freshData.reports.forEach((r) => {
+            fresh[r.reportId] = {
+              resultData: r.resultData || '',
+              comment: r.comment || '',
+              status: r.status || 'SAVED',
+            };
+          });
+          setResultsState(fresh);
+        }
+      }
     } catch (err) {
       setErrorMsg(err.response?.data?.Message || 'Failed to save test results');
     } finally {

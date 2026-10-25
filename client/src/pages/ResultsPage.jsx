@@ -41,8 +41,10 @@ export default function ResultsPage() {
       });
       setReports(res.data?.reports || []);
       setTemplates(res.data?.templates || []);
+      return res.data;
     } catch (err) {
       console.warn('Error loading tests for patient:', err.message);
+      return null;
     }
   };
 
@@ -243,6 +245,7 @@ export default function ResultsPage() {
         <div className="lg:col-span-8 xl:col-span-9">
           {selectedPatient ? (
             <ResultsEntry
+              key={selectedPatient.patientId}
               patient={selectedPatient}
               reports={reports}
               templates={templates}

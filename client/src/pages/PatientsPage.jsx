@@ -29,6 +29,7 @@ import {
   shiftDateDays,
   formatDisplayDate,
   formatPatientDateTime,
+  getPatientTime,
   sortPatientsByRecent,
 } from '../utils/dateUtils.js';
 import BillPreviewModal from '../components/billing/BillPreviewModal.jsx';
@@ -321,7 +322,7 @@ export default function PatientsPage({ onOpenNewPatient }) {
                 <th className="py-2.5 px-3 w-12 text-center text-slate-500">SN</th>
                 <th className="py-2.5 px-3 w-16 text-slate-500">ID</th>
                 <th className="py-2.5 px-3 min-w-[160px]">Patient Name</th>
-                <th className="py-2.5 px-2 w-8 text-center text-slate-500">G</th>
+                <th className="py-2.5 px-3 w-20 text-center text-slate-500">Gender</th>
                 <th className="py-2.5 px-3 min-w-[180px]">Doctor</th>
                 <th className="py-2.5 px-3 w-16 text-slate-500">Center</th>
                 <th className="py-2.5 px-3 min-w-[125px]">Date / Time</th>
@@ -350,10 +351,13 @@ export default function PatientsPage({ onOpenNewPatient }) {
                   const billTotal = Number(p.totalBill || 0);
                   const billPaid = Number(p.paidBill || 0);
                   const billBalance = Number(p.balance ?? Math.max(0, billTotal - billPaid));
-                  const isBilled = billTotal > 0;
-                  const isPaid = isBilled && billBalance <= 0 && (p.billPayStatus === 2 || p.billPayStatus === '2' || (billPaid >= billTotal && billTotal > 0));
+                  const billPayStatusNum = Number(p.billPayStatus);
+                  const isPaid = billPayStatusNum === 2;
+                  const isUnpaid = billPayStatusNum === 3 || (!isPaid && billPayStatusNum !== 1 && billTotal > 0);
+                  const isNoBill = billPayStatusNum === 1 || (!isPaid && !isUnpaid && billTotal === 0);
+                  const isBilled = !isNoBill && billTotal > 0;
                   const isReady = ['APPROVED', 'PRINTING', 'RELEASED', 'READY', 'REPORT READY'].includes(
-                    String(p.status || '').toUpperCase()
+                    String(p.status || '').toUpperCase().trim()
                   );
                   const isExpanded = expandedRowId === pid;
                   const details = rowDetails[pid];
@@ -395,17 +399,9 @@ export default function PatientsPage({ onOpenNewPatient }) {
                           {p.name}
                         </td>
 
-                        {/* G (Gender) */}
-                        <td className="py-2.5 px-2 text-center">
-                          {isMale ? (
-                            <span className="text-blue-600 font-bold text-sm" title="Male">
-                              ♂
-                            </span>
-                          ) : (
-                            <span className="text-rose-500 font-bold text-sm" title="Female">
-                              ♀
-                            </span>
-                          )}
+                        {/* Gender (Text without icons) */}
+                        <td className="py-2.5 px-3 text-center text-xs font-medium text-slate-700">
+                          {p.gender || (isMale ? 'Male' : 'Female')}
                         </td>
 
                         {/* Doctor */}
@@ -418,14 +414,14 @@ export default function PatientsPage({ onOpenNewPatient }) {
                           {p.center || 'Main'}
                         </td>
 
-                        {/* Date / Time */}
+                        {/* Date / Time: Both Date and Time displayed */}
                         <td className="py-2.5 px-3 text-[11px] font-medium text-slate-700 whitespace-nowrap">
-                          <div className="font-semibold text-slate-900">{formatPatientDateTime(p)}</div>
-                          {p.regDate && (
-                            <div className="text-[10px] text-slate-400 font-mono">
-                              {formatDisplayDate(p.regDate)}
-                            </div>
-                          )}
+                          <div className="font-semibold text-slate-900">
+                            {formatDisplayDate(p.regDate || p.collectionDate)}
+                          </div>
+                          <div className="text-[10px] text-slate-500 font-mono">
+                            {getPatientTime(p)}
+                          </div>
                         </td>
 
                         {/* M */}
@@ -443,21 +439,21 @@ export default function PatientsPage({ onOpenNewPatient }) {
                           {isPaid ? (
                             <span
                               className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-100 text-emerald-700"
-                              title="Payment Complete"
+                              title={`Payment Paid • Total: ₹${billTotal}`}
                             >
                               <Check className="w-3.5 h-3.5" />
                             </span>
-                          ) : isBilled ? (
+                          ) : isUnpaid ? (
                             <span
                               className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-rose-100 text-rose-600"
-                              title={`Payment Pending - Due: ₹${billBalance || billTotal}`}
+                              title={`Payment Unpaid • Total: ₹${billTotal}`}
                             >
                               <AlertTriangle className="w-3.5 h-3.5" />
                             </span>
                           ) : (
                             <span
                               className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-100 text-slate-400 font-mono text-[10px]"
-                              title="Unbilled - No tests ordered"
+                              title="No Bill"
                             >
                               —
                             </span>
@@ -622,7 +618,7 @@ export default function PatientsPage({ onOpenNewPatient }) {
                                     className="w-full flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-1.5 px-3 rounded-lg shadow-xs cursor-pointer transition-all"
                                   >
                                     <FileCheck className="w-3.5 h-3.5" />
-                                    <span>View Report</span>
+                                    <span>Enter Results</span>
                                   </button>
 
                                   {/* AWS Report PDF */}

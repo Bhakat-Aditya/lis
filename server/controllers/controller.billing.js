@@ -113,15 +113,8 @@ export const generateBill = async (req, res, next) => {
       }
     }
 
-    // 2. Trigger BILLGENERATE to sync internal state
-    let upstreamData = null;
-    try {
-      upstreamData = await upstreamService.post('BILLGENERATE', { patientId: cleanPatientId }, null, req.user?.upstreamSid);
-    } catch (e) {
-      console.warn('[Billing] BILLGENERATE sync note:', e.message);
-    }
-
-    // 3. Fetch fresh summary
+    // Bill is generated and modified internally upon recording payment;
+    // only fetch updated billing summary
     const summary = await upstreamService.getBillingSummary(cleanPatientId, req.user?.upstreamSid);
 
     return res.json({
@@ -158,7 +151,18 @@ export const applyDiscount = async (req, res, next) => {
     try {
       billJson = await upstreamService.get('GETBILLJSON', { patientId: cleanPatientId }, req.user?.upstreamSid);
     } catch (e) {
-      console.warn('[Billing] GETBILLJSON failed, attempting GETPATIENTREPORT:', e.message);
+      console.warn('[Billing] GETBILLJSON failed:', e.message);
+    }
+
+    // Call BILLGENERATE iff GETBILLJSON has FAILED response
+    if (billJson?.STATUS === 'FAILED' || !billJson?.payLoadJSON?.bill) {
+      try {
+        console.log(`[Billing] GETBILLJSON failed/empty for ${cleanPatientId}, invoking BILLGENERATE fallback...`);
+        await upstreamService.post('BILLGENERATE', { patientId: cleanPatientId }, null, req.user?.upstreamSid);
+        billJson = await upstreamService.get('GETBILLJSON', { patientId: cleanPatientId }, req.user?.upstreamSid);
+      } catch (err) {
+        console.warn('[Billing] BILLGENERATE fallback note:', err.message);
+      }
     }
 
     let tests = billJson?.payLoadJSON?.bill?.['Test List'] || [];
@@ -301,7 +305,24 @@ export const getBillJson = async (req, res, next) => {
     const cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
-    const data = await upstreamService.get('GETBILLJSON', { patientId: cleanPatientId }, req.user?.upstreamSid);
+    let data;
+    try {
+      data = await upstreamService.get('GETBILLJSON', { patientId: cleanPatientId }, req.user?.upstreamSid);
+    } catch (e) {
+      data = { STATUS: 'FAILED', Message: e.message };
+    }
+
+    // Call BILLGENERATE iff GETBILLJSON has FAILED response
+    if (data?.STATUS === 'FAILED' || !data?.payLoadJSON?.bill) {
+      try {
+        console.log(`[Billing] GETBILLJSON returned FAILED, invoking BILLGENERATE recovery for ${cleanPatientId}`);
+        await upstreamService.post('BILLGENERATE', { patientId: cleanPatientId }, null, req.user?.upstreamSid);
+        data = await upstreamService.get('GETBILLJSON', { patientId: cleanPatientId }, req.user?.upstreamSid);
+      } catch (err) {
+        console.warn('[Billing] BILLGENERATE recovery failed:', err.message);
+      }
+    }
+
     return res.json(data);
   } catch (err) {
     next(err);

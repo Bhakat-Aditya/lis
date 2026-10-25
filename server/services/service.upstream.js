@@ -239,6 +239,18 @@ class UpstreamService {
       if (!billData?.payLoadJSON?.billUrl && rawId !== cleanId) {
         billData = await this.get('GETBILLJSON', { patientId: rawId }, activeSid);
       }
+
+      // If GETBILLJSON has FAILED response, call BILLGENERATE to generate bill
+      if (billData?.STATUS === 'FAILED' || !billData?.payLoadJSON?.bill) {
+        try {
+          console.log(`[Upstream] GETBILLJSON failed/empty for ${cleanId}, invoking BILLGENERATE...`);
+          await this.post('BILLGENERATE', { patientId: cleanId }, null, activeSid);
+          billData = await this.get('GETBILLJSON', { patientId: cleanId }, activeSid);
+        } catch (bgErr) {
+          console.warn(`[Upstream] BILLGENERATE fallback note for ${cleanId}:`, bgErr.message);
+        }
+      }
+
       const b = billData?.payLoadJSON?.bill;
       if (b && typeof b === 'object') {
         const total = parseFloat(b['Total Bill']) || 0;
@@ -278,7 +290,51 @@ class UpstreamService {
         return summary;
       }
     } catch (e) {
-      console.warn(`[Upstream] GETBILLJSON failed for ${cleanId}, falling back to billing.jsp:`, e.message);
+      console.warn(`[Upstream] GETBILLJSON failed for ${cleanId}, attempting BILLGENERATE recovery:`, e.message);
+      try {
+        await this.post('BILLGENERATE', { patientId: cleanId }, null, activeSid);
+        const retryData = await this.get('GETBILLJSON', { patientId: cleanId }, activeSid);
+        const b = retryData?.payLoadJSON?.bill;
+        if (b && typeof b === 'object') {
+          const total = parseFloat(b['Total Bill']) || 0;
+          const gross = parseFloat(b['Total Amount']) || total;
+          const discount = parseFloat(b['Discount Amount']) || 0;
+          const roundoff = parseFloat(b['Round Off']) || 0;
+          const paid = parseFloat(b['Total Payment']) || 0;
+          const due = parseFloat(b['Total Outstanding']) || 0;
+          const isPaid = (total > 0 && due <= 0 && paid >= total) || (total === 0 && paid === 0 && due === 0);
+
+          const paymentLines = (b['Payment List'] || []).map((p) => ({
+            mode: p['Payment Mode'] || 'CASH',
+            amount: parseFloat(p['Amount']) || 0,
+            date: p['Payment Date'] || '',
+            info: p['Info'] || '',
+          }));
+
+          const summary = {
+            patientId: cleanId,
+            isPaid,
+            total,
+            gross,
+            discount,
+            roundoff,
+            paid,
+            due,
+            paymentLines,
+            testList: b['Test List'] || [],
+            billUrl: retryData?.payLoadJSON?.billUrl || '',
+            timestamp: Date.now(),
+          };
+
+          const uId = cleanId.toUpperCase();
+          const altId = uId.startsWith('P') ? uId.slice(1) : `P${uId}`;
+          this.billingCache.set(uId, summary);
+          this.billingCache.set(altId, summary);
+          return summary;
+        }
+      } catch (bgErr) {
+        console.warn(`[Upstream] BILLGENERATE recovery also failed for ${cleanId}:`, bgErr.message);
+      }
     }
 
     // 2. Fallback to billing.jsp scraping

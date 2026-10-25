@@ -50,23 +50,26 @@ export default function Badge({
 export function StatusBadge({ status = '', size = 'sm' }) {
   const s = String(status || '').toUpperCase().trim();
 
-  if (s === 'REGISTERED') {
+  if (s === 'ENTRY' || s === 'REGISTERED') {
     return <Badge variant="primary" size={size} dot>Registered</Badge>;
   }
   if (s === 'SAMPLE' || s === 'SAMPLE RECEIVED' || s === 'SAMPLE_RECEIVED') {
     return <Badge variant="warning" size={size} dot>Sample Recd</Badge>;
   }
-  if (s === 'TESTING' || s === 'IN TESTING' || s === 'SAVED') {
-    return <Badge variant="purple" size={size} dot>In Testing</Badge>;
+  if (s === 'RESULT PARTLY' || s === 'DATA_PART') {
+    return <Badge variant="blue" size={size} dot>Result Partly</Badge>;
+  }
+  if (s === 'RESULT FULLY' || s === 'DATA_FULL' || s === 'TESTING' || s === 'IN TESTING' || s === 'SAVED') {
+    return <Badge variant="purple" size={size} dot>Result Fully</Badge>;
   }
   if (s === 'PRINTING' || s === 'READY TO PRINT') {
-    return <Badge variant="blue" size={size} dot>Ready to Print</Badge>;
+    return <Badge variant="teal" size={size} dot>Printing</Badge>;
   }
   if (s === 'VERIFIED') {
     return <Badge variant="teal" size={size} dot>Doctor Verified</Badge>;
   }
-  if (s === 'APPROVED' || s === 'RELEASED') {
-    return <Badge variant="success" size={size} dot>Approved</Badge>;
+  if (s === 'RELEASED' || s === 'APPROVED' || s === 'REPORT READY' || s === 'READY') {
+    return <Badge variant="success" size={size} dot>Report Ready</Badge>;
   }
   if (s === 'REJECTED') {
     return <Badge variant="danger" size={size} dot>Rejected</Badge>;
@@ -99,7 +102,30 @@ export function PriorityBadge({ priority = 'Routine' }) {
   );
 }
 
-export function PaymentBadge({ balance = 0, total = 0 }) {
+export function PaymentBadge({ balance = 0, total = 0, billPayStatus }) {
+  const statusNum = billPayStatus !== undefined && billPayStatus !== null ? Number(billPayStatus) : null;
+  if (statusNum === 2) {
+    return (
+      <span className="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded-sm bg-emerald-50 text-emerald-700 border border-emerald-200">
+        PAID
+      </span>
+    );
+  }
+  if (statusNum === 3) {
+    return (
+      <span className="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded-sm bg-rose-50 text-rose-700 border border-rose-200">
+        UNPAID
+      </span>
+    );
+  }
+  if (statusNum === 1) {
+    return (
+      <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-sm bg-slate-100 text-slate-500 border border-slate-200">
+        NO BILL
+      </span>
+    );
+  }
+
   const bal = Number(balance) || 0;
   if (bal <= 0 && total > 0) {
     return (

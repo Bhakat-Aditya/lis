@@ -238,7 +238,7 @@ export default function PatientProfileView({
             <span>🚀</span> Quick Actions
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
             {/* 0. Order Tests (Vibrant Violet) */}
             <button
               onClick={onAddTests}
@@ -284,22 +284,13 @@ export default function PatientProfileView({
               <span>Fill Results</span>
             </button>
 
-            {/* 5. View Report (Vibrant Teal) */}
-            <button
-              onClick={onPrintReport}
-              className="flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold text-xs py-2.5 px-3 rounded-xl shadow-xs transition-all cursor-pointer"
-            >
-              <FileCheck className="w-4 h-4" />
-              <span>View Report</span>
-            </button>
-
-            {/* 6. Receive Sample (Vibrant Indigo) */}
+            {/* 5. Receive Sample (Vibrant Indigo) */}
             <button
               onClick={onReceiveSample}
-              className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs py-2.5 px-3 rounded-xl shadow-xs transition-all cursor-pointer col-span-2"
+              className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs py-2.5 px-3 rounded-xl shadow-xs transition-all cursor-pointer"
             >
               <TestTube className="w-4 h-4" />
-              <span>Receive Sample Specimen</span>
+              <span>Receive Sample</span>
             </button>
           </div>
         </div>

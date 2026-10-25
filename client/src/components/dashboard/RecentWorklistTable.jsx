@@ -282,7 +282,7 @@ export default function RecentWorklistTable({
                           ₹{totalBill.toLocaleString('en-IN')}
                         </div>
                         <div className="mt-0.5">
-                          <PaymentBadge balance={balance} total={totalBill} />
+                          <PaymentBadge balance={balance} total={totalBill} billPayStatus={p.billPayStatus} />
                         </div>
                       </td>
 
