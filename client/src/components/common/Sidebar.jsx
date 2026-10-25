@@ -91,11 +91,12 @@ export default function Sidebar({ onOpenNewPatient }) {
     <aside
       className={`${
         collapsed ? 'w-16' : 'w-64'
-      } shrink-0 min-h-[calc(100vh-56px)] transition-all duration-200 select-none flex flex-col justify-between bg-white border-r border-slate-200/90 text-slate-800 shadow-2xs relative z-20`}
+      } shrink-0 h-full max-h-screen transition-all duration-200 select-none flex flex-col justify-between bg-white border-r border-slate-200/90 text-slate-800 shadow-2xs relative z-20 overflow-hidden`}
     >
-      <div>
+      {/* Scrollable Upper Navigation & Action Area */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
         {/* Lab Expert Brand Header */}
-        <div className="px-4 py-3 flex items-center justify-between border-b border-slate-100">
+        <div className="px-4 py-3 flex items-center justify-between border-b border-slate-100 sticky top-0 bg-white z-10">
           <div className="flex items-center gap-2.5 overflow-hidden">
             {/* Clean Medical Emblem */}
             <div className="w-8 h-8 shrink-0 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold shadow-xs">
@@ -296,8 +297,8 @@ export default function Sidebar({ onOpenNewPatient }) {
         </nav>
       </div>
 
-      {/* User Status & Logout Footer */}
-      <div className="p-3 border-t border-slate-100 space-y-2">
+      {/* User Status & Fixed Bottom Logout Footer */}
+      <div className="shrink-0 p-3 border-t border-slate-100 bg-white space-y-2 mt-auto sticky bottom-0 z-10 shadow-xs">
         {!collapsed && (
           <div className="px-2 py-1.5 bg-slate-50 rounded-xl flex items-center justify-between text-xs">
             <div className="truncate">

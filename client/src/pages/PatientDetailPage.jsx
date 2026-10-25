@@ -117,6 +117,11 @@ export default function PatientDetailPage() {
       });
       const pt = res.data?.patient;
       const repList = res.data?.reports || [];
+      const isRateLimited =
+        res.data?.StatusCode === '8887' ||
+        res.data?.rateLimited ||
+        String(res.data?.Message || '').includes('8887');
+
       const awsReportUrl = res.data?.printPDFUrl || pt?.printPDFUrl || res.data?.reportUrl || '';
       const awsBillUrl = res.data?.billUrl || pt?.billUrl || '';
       if (awsReportUrl) setReportPdfUrl(awsReportUrl);
@@ -124,19 +129,34 @@ export default function PatientDetailPage() {
 
       if (pt) {
         setPatient(pt);
-        setReports(repList);
-        setTemplates(res.data?.templates || []);
+        if (repList.length > 0) {
+          setReports(repList);
+        }
+        if (res.data?.templates?.length > 0) {
+          setTemplates(res.data.templates);
+        }
         setActivePatient(pt);
-      } else {
-        applyFallbackPatient();
+      } else if (!isRateLimited) {
+        // Only apply fallback patient if not rate-limited and no existing data
+        setPatient((prev) => {
+          if (!prev) applyFallbackPatient();
+          return prev;
+        });
       }
 
       // Generate invoice format directly from loaded patient and report data
-      setInvoiceData(generateDemoInvoice(pt || activePatient, repList));
+      setInvoiceData((prevInv) => {
+        const effectivePt = pt || patient || activePatient;
+        const effectiveReps = repList.length > 0 ? repList : (reports || []);
+        return generateDemoInvoice(effectivePt, effectiveReps);
+      });
       return res.data;
     } catch (err) {
-      console.warn('Error loading patient detail, using demo catalog:', err.message);
-      applyFallbackPatient();
+      console.warn('Error loading patient detail:', err.message);
+      setPatient((prev) => {
+        if (!prev) applyFallbackPatient();
+        return prev;
+      });
       return null;
     } finally {
       setLoading(false);

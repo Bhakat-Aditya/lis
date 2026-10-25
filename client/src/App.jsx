@@ -42,9 +42,9 @@ const ProtectedLayout = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 antialiased selection:bg-indigo-100 selection:text-indigo-900">
+    <div className="h-screen flex flex-col bg-slate-50 text-slate-900 antialiased selection:bg-indigo-100 selection:text-indigo-900 overflow-hidden">
       <Navbar onSearch={(term) => navigate(term ? `/patients?search=${encodeURIComponent(term)}` : '/patients')} />
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden min-h-0">
         <Sidebar onOpenNewPatient={() => setIsRegisterOpen(true)} />
         <main className="flex-1 p-3 md:p-5 overflow-y-auto max-w-7xl mx-auto w-full">
           <Outlet context={{ openNewPatient: () => setIsRegisterOpen(true) }} />

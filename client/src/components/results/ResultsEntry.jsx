@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Save,
   Calculator,
@@ -64,10 +64,54 @@ export default function ResultsEntry({
     return 'ENTRY';
   };
 
+  // Retain previously loaded reports so rate-limit / network hiccups NEVER wipe the UI!
+  const persistedReportsRef = useRef(reports);
+  useEffect(() => {
+    if (reports && reports.length > 0) {
+      persistedReportsRef.current = reports;
+    }
+  }, [reports]);
+
+  const activeReports = useMemo(() => {
+    if (reports && reports.length > 0) return reports;
+    if (persistedReportsRef.current && persistedReportsRef.current.length > 0) return persistedReportsRef.current;
+    return reports || [];
+  }, [reports]);
+
+  // Rate-limiting (8887) and sync cooldown state
+  const [rateLimitWarning, setRateLimitWarning] = useState(null);
+  const [rateLimitCooldownSec, setRateLimitCooldownSec] = useState(0);
+  const cooldownTimerRef = useRef(null);
+  const cooldownUntilRef = useRef(0);
+
+  const triggerRateLimitCooldown = (msg = 'Exceeded per minute limit for this operation - 8887') => {
+    setRateLimitWarning(msg);
+    setSuccessMsg(''); // NEVER show green synced banner on rate limit!
+    const cooldownDuration = 45; // 45s backoff
+    cooldownUntilRef.current = Date.now() + cooldownDuration * 1000;
+    setRateLimitCooldownSec(cooldownDuration);
+
+    if (cooldownTimerRef.current) clearInterval(cooldownTimerRef.current);
+    cooldownTimerRef.current = setInterval(() => {
+      const remaining = Math.max(0, Math.ceil((cooldownUntilRef.current - Date.now()) / 1000));
+      setRateLimitCooldownSec(remaining);
+      if (remaining <= 0) {
+        clearInterval(cooldownTimerRef.current);
+        cooldownTimerRef.current = null;
+      }
+    }, 1000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (cooldownTimerRef.current) clearInterval(cooldownTimerRef.current);
+    };
+  }, []);
+
   // Initialize internal state for editable test values
   const [resultsState, setResultsState] = useState(() => {
     const initial = {};
-    reports.forEach((r) => {
+    activeReports.forEach((r) => {
       initial[r.reportId] = {
         resultData: r.resultData || '',
         comment: r.comment || '',
@@ -77,11 +121,11 @@ export default function ResultsEntry({
     return initial;
   });
 
-  // Synchronize when reports prop updates
+  // Synchronize when reports update
   useEffect(() => {
     setResultsState((prev) => {
       const updated = { ...prev };
-      reports.forEach((r) => {
+      activeReports.forEach((r) => {
         if (!updated[r.reportId]) {
           updated[r.reportId] = {
             resultData: r.resultData || '',
@@ -100,7 +144,7 @@ export default function ResultsEntry({
       });
       return updated;
     });
-  }, [reports]);
+  }, [activeReports]);
 
   const [savingId, setSavingId] = useState(null);
   const [savingAll, setSavingAll] = useState(false);
@@ -124,7 +168,7 @@ export default function ResultsEntry({
 
   // Compute Unsaved Modifications
   const dirtyReportIds = useMemo(() => {
-    return reports
+    return activeReports
       .filter((r) => {
         const cur = resultsState[r.reportId];
         if (!cur) return false;
@@ -135,12 +179,12 @@ export default function ResultsEntry({
         return curVal !== origVal || curComment !== origComment;
       })
       .map((r) => r.reportId);
-  }, [reports, resultsState]);
+  }, [activeReports, resultsState]);
 
   // Compute Live Numbers for All 10 Upstream LIS Statuses
   const phaseStats = useMemo(() => {
     const stats = {
-      total: reports.length,
+      total: activeReports.length,
       ENTRY: 0,
       SAMPLE: 0,
       RECEIVED: 0,
@@ -154,7 +198,7 @@ export default function ResultsEntry({
       abnormal: 0,
     };
 
-    reports.forEach((r) => {
+    activeReports.forEach((r) => {
       const cur = resultsState[r.reportId] || {};
       const val = cur.resultData !== undefined ? cur.resultData : r.resultData;
       const status = resolveStatus(r, cur);
@@ -168,11 +212,11 @@ export default function ResultsEntry({
     });
 
     return stats;
-  }, [reports, resultsState]);
+  }, [activeReports, resultsState]);
 
   // Filtered Reports list
   const filteredReports = useMemo(() => {
-    return reports.filter((r) => {
+    return activeReports.filter((r) => {
       const cur = resultsState[r.reportId] || {};
       const val = cur.resultData !== undefined ? cur.resultData : r.resultData;
       const status = resolveStatus(r, cur);
@@ -484,50 +528,75 @@ export default function ResultsEntry({
         params: { patientId: targetPid, fresh: 'true' },
       });
 
+      // Check if upstream returned rate-limit error 8887 or failed operation
+      const isRateLimited =
+        res.data?.StatusCode === '8887' ||
+        res.data?.rateLimited ||
+        String(res.data?.Message || '').includes('8887') ||
+        String(res.data?.Message || '').toLowerCase().includes('exceeded per minute limit') ||
+        String(res.data?.warningMessage || '').includes('8887');
+
+      if (isRateLimited) {
+        const errorMsgText =
+          res.data?.Message ||
+          res.data?.warningMessage ||
+          'Exceeded per minute limit for this operation - 8887';
+        triggerRateLimitCooldown(errorMsgText);
+        if (!silent) {
+          setErrorMsg(`Rate Limit (8887): ${errorMsgText}. Existing test readings and parameters are preserved intact.`);
+        }
+        return;
+      }
+
+      // Sync succeeded! Clear any previous rate-limit warning
+      setRateLimitWarning(null);
+
       const serverReports = res.data?.reports || [];
       let newReadingsCount = 0;
       const updatedTestNames = [];
 
-      setResultsState((prev) => {
-        const next = { ...prev };
+      if (serverReports.length > 0) {
+        setResultsState((prev) => {
+          const next = { ...prev };
 
-        serverReports.forEach((sr) => {
-          const current = prev[sr.reportId];
-          const isDirty = dirtyReportIds.includes(sr.reportId);
+          serverReports.forEach((sr) => {
+            const current = prev[sr.reportId];
+            const isDirty = dirtyReportIds.includes(sr.reportId);
 
-          if (!current) {
-            next[sr.reportId] = {
-              resultData: sr.resultData || '',
-              comment: sr.comment || '',
-              status: sr.status || 'SAVED',
-            };
-          } else if (!isDirty) {
-            const hasNewValue = sr.resultData && sr.resultData !== current.resultData;
-            const hasNewStatus = sr.status && sr.status !== current.status;
-
-            if (hasNewValue || hasNewStatus) {
-              if (hasNewValue) {
-                newReadingsCount++;
-                updatedTestNames.push(sr.testName);
-              }
+            if (!current) {
               next[sr.reportId] = {
                 resultData: sr.resultData || '',
-                comment: sr.comment || current.comment || '',
-                status: sr.status || current.status || 'SAVED',
+                comment: sr.comment || '',
+                status: sr.status || 'SAVED',
               };
+            } else if (!isDirty) {
+              const hasNewValue = sr.resultData && sr.resultData !== current.resultData;
+              const hasNewStatus = sr.status && sr.status !== current.status;
+
+              if (hasNewValue || hasNewStatus) {
+                if (hasNewValue) {
+                  newReadingsCount++;
+                  updatedTestNames.push(sr.testName);
+                }
+                next[sr.reportId] = {
+                  resultData: sr.resultData || '',
+                  comment: sr.comment || current.comment || '',
+                  status: sr.status || current.status || 'SAVED',
+                };
+              }
             }
-          }
+          });
+
+          return next;
         });
 
-        return next;
-      });
+        if (onRefresh) {
+          await onRefresh(true);
+        }
+      }
 
       const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       setLastSyncedTime(nowStr);
-
-      if (onRefresh) {
-        await onRefresh(true);
-      }
 
       if (!silent) {
         if (newReadingsCount > 0) {
@@ -539,7 +608,20 @@ export default function ResultsEntry({
         setSuccessMsg(`Analyzer machine transmitted reading${newReadingsCount > 1 ? 's' : ''} for: ${updatedTestNames.slice(0, 3).join(', ')}`);
       }
     } catch (err) {
-      if (!silent) {
+      const errData = err.response?.data;
+      const isRateLimited =
+        errData?.StatusCode === '8887' ||
+        errData?.rateLimited ||
+        String(errData?.Message || '').includes('8887') ||
+        String(errData?.Message || '').toLowerCase().includes('exceeded per minute limit');
+
+      if (isRateLimited) {
+        const msg = errData?.Message || 'Exceeded per minute limit for this operation - 8887';
+        triggerRateLimitCooldown(msg);
+        if (!silent) {
+          setErrorMsg(`Rate Limit (8887): ${msg}. Existing test readings and parameters are preserved intact.`);
+        }
+      } else if (!silent) {
         setErrorMsg(err.response?.data?.Message || 'Failed to sync with analyzer machine');
       }
     } finally {
@@ -547,15 +629,18 @@ export default function ResultsEntry({
     }
   };
 
-  // Automated background polling every 10 seconds (respects document visibility & pauses during active user typing saves)
+  // Automated background polling every 25 seconds (respects cooldown, visibility & pauses during active typing)
   useEffect(() => {
     if (!autoSyncEnabled) return;
 
     const intervalId = setInterval(() => {
       if (!document.hidden && !isSyncing && !savingAll) {
+        if (Date.now() < cooldownUntilRef.current) {
+          return; // Skip poll while in rate-limit cooldown
+        }
         handleSyncAnalyzer({ silent: true });
       }
-    }, 10000);
+    }, 25000);
 
     return () => clearInterval(intervalId);
   }, [autoSyncEnabled, isSyncing, savingAll, patient?.patientId, dirtyReportIds.length]);
@@ -646,7 +731,7 @@ export default function ResultsEntry({
           </span>
 
           <span className="text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.2 rounded-full">
-            {reports.length} Tests
+            {activeReports.length} Tests
           </span>
 
           {dirtyReportIds.length > 0 && (
@@ -699,25 +784,43 @@ export default function ResultsEntry({
               const nextState = !autoSyncEnabled;
               setAutoSyncEnabled(nextState);
               if (nextState) {
-                setSuccessMsg('Automated analyzer sync activated (polling every 10s)');
+                setSuccessMsg('Automated analyzer sync activated (polling every 25s)');
                 handleSyncAnalyzer({ silent: true });
               } else {
                 setSuccessMsg('Automated analyzer sync paused');
               }
             }}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
-              autoSyncEnabled
+              rateLimitCooldownSec > 0
+                ? 'bg-amber-50 text-amber-800 border-amber-300 shadow-2xs'
+                : autoSyncEnabled
                 ? 'bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs'
                 : 'bg-slate-100 text-slate-500 border-slate-300'
             }`}
-            title={autoSyncEnabled ? `Auto-sync active (every 10s)${lastSyncedTime ? ` • Last: ${lastSyncedTime}` : ''} — click to pause` : 'Auto-sync paused — click to activate'}
+            title={
+              rateLimitCooldownSec > 0
+                ? `Rate limit active: cooldown in progress (${rateLimitCooldownSec}s remaining)`
+                : autoSyncEnabled
+                ? `Auto-sync active (every 25s)${lastSyncedTime ? ` • Last: ${lastSyncedTime}` : ''} — click to pause`
+                : 'Auto-sync paused — click to activate'
+            }
           >
             <span
               className={`w-2 h-2 rounded-full ${
-                autoSyncEnabled ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
+                rateLimitCooldownSec > 0
+                  ? 'bg-amber-500 animate-pulse'
+                  : autoSyncEnabled
+                  ? 'bg-emerald-500 animate-pulse'
+                  : 'bg-slate-400'
               }`}
             />
-            <span className="hidden sm:inline">{autoSyncEnabled ? 'Auto-Sync (10s)' : 'Auto-Sync: Off'}</span>
+            <span className="hidden sm:inline">
+              {rateLimitCooldownSec > 0
+                ? `Cooldown (${rateLimitCooldownSec}s)`
+                : autoSyncEnabled
+                ? 'Auto-Sync (25s)'
+                : 'Auto-Sync: Off'}
+            </span>
           </button>
 
           {/* Clinical Reference Guide */}
@@ -826,6 +929,48 @@ export default function ResultsEntry({
       />
 
       {/* Notifications */}
+      {/* Rate-Limit Alert Banner when Upstream returns 8887 */}
+      {rateLimitWarning && (
+        <div className="py-2.5 px-3.5 bg-amber-50/95 border border-amber-300 text-amber-900 rounded-xl text-xs flex flex-wrap items-center justify-between gap-2 shadow-2xs animate-in fade-in">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 bg-amber-100 rounded-lg text-amber-700 shrink-0">
+              <AlertTriangle className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="font-bold flex items-center gap-1.5 text-slate-900">
+                <span>Operation Rate Limit (Code 8887)</span>
+                {rateLimitCooldownSec > 0 && (
+                  <span className="bg-amber-200/90 text-amber-900 px-1.5 py-0.2 rounded font-mono text-[10px] font-bold">
+                    Cooldown: {rateLimitCooldownSec}s
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-amber-800">
+                {rateLimitWarning}. All existing patient test parameters, entered readings, and statuses remain preserved intact.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={rateLimitCooldownSec > 0 || isSyncing}
+              onClick={() => handleSyncAnalyzer({ silent: false })}
+              className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-lg font-bold text-xs shadow-2xs transition-all cursor-pointer"
+            >
+              {isSyncing ? 'Syncing...' : 'Retry Now'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setRateLimitWarning(null)}
+              className="text-amber-700 hover:text-amber-900 font-bold p-1 cursor-pointer text-sm"
+              title="Dismiss warning"
+            >
+              &times;
+            </button>
+          </div>
+        </div>
+      )}
+
       {successMsg && (
         <div className="py-1.5 px-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs flex items-center justify-between font-medium">
           <div className="flex items-center gap-2">

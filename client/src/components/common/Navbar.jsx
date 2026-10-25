@@ -35,7 +35,7 @@ export default function Navbar({ onSearch }) {
   };
 
   return (
-    <header className="bg-white border-b border-slate-200 sticky top-0 z-30 px-4 py-2">
+    <header className="bg-white border-b border-slate-200 sticky top-0 z-30 px-4 py-2 shrink-0">
       <div className="flex items-center justify-between gap-4 w-full">
         {/* Left: Global Search Input matching Screenshot */}
         <div className="w-full max-w-xs md:max-w-sm">

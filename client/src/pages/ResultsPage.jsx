@@ -39,8 +39,18 @@ export default function ResultsPage() {
       const res = await api.get('/reports/patient-report', {
         params: { patientId: patient.patientId },
       });
-      setReports(res.data?.reports || []);
-      setTemplates(res.data?.templates || []);
+      const repList = res.data?.reports || [];
+      const isRateLimited =
+        res.data?.StatusCode === '8887' ||
+        res.data?.rateLimited ||
+        String(res.data?.Message || '').includes('8887');
+
+      if (repList.length > 0 || !isRateLimited) {
+        setReports(repList);
+      }
+      if (res.data?.templates?.length > 0) {
+        setTemplates(res.data.templates);
+      }
       return res.data;
     } catch (err) {
       console.warn('Error loading tests for patient:', err.message);

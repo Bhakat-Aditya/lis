@@ -56,6 +56,44 @@ export const getPatientReport = async (req, res, next) => {
       }
     }
 
+    // Check if upstream returned rate-limit error 8887 or failed operation
+    const isRateLimited =
+      upstreamData?.StatusCode === '8887' ||
+      String(upstreamData?.Message || '').includes('8887') ||
+      String(upstreamData?.Message || '').toLowerCase().includes('exceeded per minute limit') ||
+      String(upstreamData?.Message || '').toLowerCase().includes('limit for this operation');
+
+    const isUpstreamFailed =
+      upstreamData?.STATUS === 'FAILED' &&
+      (!upstreamData?.payLoadJSON?.reports || upstreamData?.payLoadJSON?.reports.length === 0);
+
+    if (isRateLimited || isUpstreamFailed) {
+      console.warn(`[Report] Upstream limit or failure for ${cleanPatientId}: StatusCode=${upstreamData?.StatusCode}, Message=${upstreamData?.Message}`);
+      // If we have cached report data, serve it so the UI remains completely intact!
+      if (cached?.data?.reports && cached.data.reports.length > 0) {
+        console.warn(`[Report] Serving cached data for ${cleanPatientId} to preserve UI intact.`);
+        return res.json({
+          ...cached.data,
+          rateLimited: true,
+          StatusCode: upstreamData?.StatusCode || '8887',
+          STATUS: 'RATE_LIMITED',
+          Message: upstreamData?.Message || 'Exceeded per minute limit for this operation - 8887',
+          warningMessage: upstreamData?.Message || 'Exceeded per minute limit for this operation - 8887',
+        });
+      }
+
+      // If no cache exists yet, return failure status without destroying UI state
+      return res.json({
+        STATUS: 'FAILED',
+        StatusCode: upstreamData?.StatusCode || '8887',
+        rateLimited: true,
+        Message: upstreamData?.Message || 'Exceeded per minute limit for this operation - 8887',
+        patient: null,
+        reports: [],
+        templates: [],
+      });
+    }
+
     const payload = upstreamData?.payLoadJSON || {};
     const reports = payload.reports || [];
     const patient = payload.patient || null;
@@ -143,7 +181,9 @@ export const getPatientReport = async (req, res, next) => {
       billUrl,
     };
 
-    reportCache.set(cleanPatientId, { timestamp: Date.now(), data: responseData });
+    if (responseData.reports && responseData.reports.length > 0) {
+      reportCache.set(cleanPatientId, { timestamp: Date.now(), data: responseData });
+    }
     return res.json(responseData);
   } catch (err) {
     next(err);
