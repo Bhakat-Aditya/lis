@@ -1,5 +1,7 @@
 import axios from 'axios';
 import { upstreamService } from '../services/service.upstream.js';
+import { invalidateReportCache } from './controller.report.js';
+import { invalidatePatientListCache } from './controller.patient.js';
 
 
 // Number to Words converter (for Indian Rupees on medical invoices)
@@ -82,9 +84,10 @@ export const generateBill = async (req, res, next) => {
     const mode = (paymentMode || '').toUpperCase().includes('UPI') ? 'OFFLINE_UPI' : 'CASH';
 
     // 1. Post real payment using BILLPAYMENTUPDATE or fallback to BillingServlet
+    let upstreamData = null;
     if (amtToPay > 0) {
       try {
-        await upstreamService.post(
+        upstreamData = await upstreamService.post(
           'BILLPAYMENTUPDATE',
           {
             patientId: cleanPatientId,
@@ -99,7 +102,7 @@ export const generateBill = async (req, res, next) => {
         );
       } catch (err) {
         console.warn('[Billing] BILLPAYMENTUPDATE fallback to BillingServlet:', err.message);
-        await upstreamService.postBilling(
+        upstreamData = await upstreamService.postBilling(
           {
             patientId: cleanPatientId,
             action: 'addpayment',
@@ -116,6 +119,9 @@ export const generateBill = async (req, res, next) => {
     // Bill is generated and modified internally upon recording payment;
     // only fetch updated billing summary
     const summary = await upstreamService.getBillingSummary(cleanPatientId, req.user?.upstreamSid);
+
+    invalidateReportCache(cleanPatientId);
+    invalidatePatientListCache();
 
     return res.json({
       STATUS: 'SUCCESS',
@@ -271,6 +277,8 @@ export const applyDiscount = async (req, res, next) => {
 
     // Refresh summary
     const freshSummary = await upstreamService.getBillingSummary(cleanPatientId, req.user?.upstreamSid);
+    invalidateReportCache(cleanPatientId);
+    invalidatePatientListCache();
 
     return res.json({
       STATUS: 'SUCCESS',

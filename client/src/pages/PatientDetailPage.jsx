@@ -67,6 +67,7 @@ export default function PatientDetailPage() {
   // Accurately calculate outstanding balance due for deposit modal
   const calculateDueAmount = (pt = patient, repList = reports) => {
     if (!pt) return 0;
+    if (Number(pt.billPayStatus) === 2) return 0;
     const explicitDue =
       pt.balance !== undefined && pt.balance !== null && pt.balance !== ''
         ? Number(pt.balance)
@@ -108,11 +109,11 @@ export default function PatientDetailPage() {
     if (activeModal) closeModal();
   }, [activeModal, closeModal, patient, reports]);
 
-  const fetchPatientData = async () => {
+  const fetchPatientData = async (isFresh = false) => {
     setLoading(true);
     try {
       const res = await api.get('/reports/patient-report', {
-        params: { patientId: id },
+        params: { patientId: id, ...(isFresh ? { fresh: 'true' } : {}) },
       });
       const pt = res.data?.patient;
       const repList = res.data?.reports || [];
@@ -130,25 +131,13 @@ export default function PatientDetailPage() {
         applyFallbackPatient();
       }
 
-      // Also fetch invoice format
-      try {
-        const invRes = await api.get('/billing/invoice', {
-          params: { patientId: id },
-        });
-        if (invRes.data?.billUrl && !awsBillUrl) {
-          setBillPdfUrl(invRes.data.billUrl);
-        }
-        if (invRes.data?.invoice) {
-          setInvoiceData(invRes.data.invoice);
-        } else {
-          setInvoiceData(generateDemoInvoice(pt || activePatient, repList));
-        }
-      } catch (e) {
-        setInvoiceData(generateDemoInvoice(pt || activePatient, repList));
-      }
+      // Generate invoice format directly from loaded patient and report data
+      setInvoiceData(generateDemoInvoice(pt || activePatient, repList));
+      return res.data;
     } catch (err) {
       console.warn('Error loading patient detail, using demo catalog:', err.message);
       applyFallbackPatient();
+      return null;
     } finally {
       setLoading(false);
     }

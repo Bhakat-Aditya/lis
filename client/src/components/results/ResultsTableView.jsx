@@ -11,6 +11,9 @@ import {
   Sparkles,
   Check,
   Loader2,
+  Trash2,
+  RotateCcw,
+  Cpu,
 } from 'lucide-react';
 import {
   getSpecimenTubeInfo,
@@ -24,12 +27,15 @@ export default function ResultsTableView({
   resultsState = {},
   patient = {},
   savingId = null,
+  deletingId = null,
   onInputChange,
   onSaveSingle,
   onCalculate,
   onSetDefaultResult,
   onOpenGuide,
   onReceiveSample,
+  onDeleteReport,
+  onRestoreReport,
 }) {
   const [focusedIndex, setFocusedIndex] = useState(null);
   const inputRefs = useRef([]);
@@ -105,7 +111,7 @@ export default function ResultsTableView({
               <th className="py-2 px-2 w-16">Unit</th>
               <th className="py-2 px-2.5 w-28">Ref Range</th>
               <th className="py-2 px-3 min-w-[180px]">Clinical Evaluation & Range Gauge</th>
-              <th className="py-2 px-2.5 w-20 text-right">Action</th>
+              <th className="py-2 px-2.5 w-28 text-right">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -114,8 +120,10 @@ export default function ResultsTableView({
               const enteredVal = current.resultData;
               const evalRes = evaluateResultValue(enteredVal, report.refRange, report.unit);
               const tube = getSpecimenTubeInfo(report.sampleType, report.testName);
-              const phase = getTestPhaseInfo(report, patient);
+              const phase = getTestPhaseInfo({ ...report, status: current.status || report.status, resultData: enteredVal }, patient);
               const isSaving = savingId === report.reportId;
+              const isDeleting = deletingId === report.reportId;
+              const isDeleted = report.status === 'DELETED' || current.status === 'DELETED' || phase.phaseId === 'DELETED';
               const hasUnsavedVal = current.resultData !== (report.resultData || '');
               const isFocused = focusedIndex === idx;
 
@@ -123,7 +131,10 @@ export default function ResultsTableView({
               let rowHighlightClass = 'hover:bg-slate-50/80 transition-colors';
               let inputHighlightClass = 'border-slate-300 bg-slate-50/70 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 text-slate-800';
 
-              if (evalRes.status.includes('PANIC')) {
+              if (isDeleted) {
+                rowHighlightClass = 'bg-rose-50/60 hover:bg-rose-100/60 border-l-[6px] border-l-rose-500 text-rose-950 opacity-80';
+                inputHighlightClass = 'border-rose-300 bg-rose-50/40 text-slate-500 line-through';
+              } else if (evalRes.status.includes('PANIC')) {
                 rowHighlightClass = 'bg-rose-100/90 hover:bg-rose-100/95 border-l-[6px] border-l-rose-600 font-bold text-rose-950 shadow-xs';
                 inputHighlightClass = 'border-rose-600 ring-2 ring-rose-500/70 bg-rose-50 text-rose-950 font-black shadow-xs';
               } else if (evalRes.status === 'REACTIVE') {
@@ -178,9 +189,22 @@ export default function ResultsTableView({
 
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-slate-900 text-xs truncate">
+                          <span
+                            className={`font-bold text-xs truncate ${
+                              isDeleted ? 'line-through text-slate-400' : 'text-slate-900'
+                            }`}
+                          >
                             {report.testName}
                           </span>
+                          {phase.phaseId === 'RECEIVED' && (
+                            <span
+                              className="inline-flex items-center gap-0.5 text-[9px] font-bold text-cyan-800 bg-cyan-100 border border-cyan-300 px-1 py-0.2 rounded shrink-0"
+                              title="Auto-received from laboratory analyzer"
+                            >
+                              <Cpu className="w-2.5 h-2.5 text-cyan-700" />
+                              <span>Machine</span>
+                            </span>
+                          )}
                           <button
                             type="button"
                             onClick={() => onOpenGuide(report.testName)}
@@ -336,34 +360,67 @@ export default function ResultsTableView({
                   </td>
 
                   {/* Actions */}
-                  <td className="py-1.5 px-2.5 text-right w-20">
+                  <td className="py-1.5 px-2.5 text-right w-28">
                     <div className="flex items-center justify-end gap-1">
-                      <button
-                        type="button"
-                        onClick={() => onSaveSingle(report)}
-                        disabled={isSaving}
-                        title="Save result for this parameter"
-                        className={`p-1 rounded-lg border font-bold text-xs transition-all cursor-pointer ${
-                          hasUnsavedVal
-                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600 shadow-xs active:scale-95'
-                            : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
-                        } disabled:opacity-50`}
-                      >
-                        {isSaving ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Save className="w-3.5 h-3.5" />
-                        )}
-                      </button>
+                      {isDeleted ? (
+                        <button
+                          type="button"
+                          onClick={() => onRestoreReport && onRestoreReport(report)}
+                          disabled={isDeleting}
+                          title="Restore deleted test parameter"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                        >
+                          {isDeleting ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <RotateCcw className="w-3.5 h-3.5" />
+                          )}
+                          <span>Restore</span>
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => onSaveSingle(report)}
+                            disabled={isSaving}
+                            title="Save result for this parameter"
+                            className={`p-1 rounded-lg border font-bold text-xs transition-all cursor-pointer ${
+                              hasUnsavedVal
+                                ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600 shadow-xs active:scale-95'
+                                : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
+                            } disabled:opacity-50`}
+                          >
+                            {isSaving ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Save className="w-3.5 h-3.5" />
+                            )}
+                          </button>
 
-                      <button
-                        type="button"
-                        onClick={() => onCalculate(report.reportId)}
-                        title="Evaluate automated formula calculation"
-                        className="p-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 hover:text-indigo-600 rounded-lg transition-colors cursor-pointer"
-                      >
-                        <Calculator className="w-3.5 h-3.5" />
-                      </button>
+                          <button
+                            type="button"
+                            onClick={() => onCalculate(report.reportId)}
+                            title="Evaluate automated formula calculation"
+                            className="p-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 hover:text-indigo-600 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <Calculator className="w-3.5 h-3.5" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => onDeleteReport && onDeleteReport(report)}
+                            disabled={isDeleting}
+                            title="Delete test parameter"
+                            className="p-1 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-300 text-slate-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                          >
+                            {isDeleting ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>

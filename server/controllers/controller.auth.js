@@ -3,6 +3,7 @@ import { config } from '../config/config.env.js';
 import { upstreamService } from '../services/service.upstream.js';
 import { cacheService, CACHE_KEYS } from '../services/service.cache.js';
 import { normalizeRole } from '../middleware/middleware.role.js';
+import { sessionService } from '../services/service.session.js';
 
 export const login = async (req, res, next) => {
   try {
@@ -16,8 +17,19 @@ export const login = async (req, res, next) => {
       });
     }
 
-    // Call upstream APIServlet LOGIN or LOGIN2FA
-    const upstreamRes = await upstreamService.userLogin(loginId, password, totp);
+    // Extract client IP and User-Agent
+    const rawIp =
+      req.body.ip ||
+      req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+      req.headers['x-real-ip'] ||
+      req.socket?.remoteAddress ||
+      req.ip ||
+      '127.0.0.1';
+    const ip = rawIp.replace(/^.*:/, '') || rawIp;
+    const userAgent = req.body.userAgent || req.headers['user-agent'] || 'Unknown Browser';
+
+    // Call upstream APIServlet LOGIN or LOGIN2FA with IP and User-Agent
+    const upstreamRes = await upstreamService.userLogin(loginId, password, totp, ip, userAgent);
 
     if (upstreamRes?.STATUS !== 'SUCCESS' && !upstreamRes?.sid) {
       return res.status(401).json({
@@ -44,9 +56,10 @@ export const login = async (req, res, next) => {
     let branchId = '1';
     if (matchedUser) {
       try {
-        const parsedPerm = typeof matchedUser.accessPermissionJson === 'string'
-          ? JSON.parse(matchedUser.accessPermissionJson)
-          : matchedUser.accessPermissionJson;
+        const parsedPerm =
+          typeof matchedUser.accessPermissionJson === 'string'
+            ? JSON.parse(matchedUser.accessPermissionJson)
+            : matchedUser.accessPermissionJson;
         accessType = parsedPerm?.accessType || 'Receptionist';
       } catch (err) {
         accessType = 'Receptionist';
@@ -58,6 +71,21 @@ export const login = async (req, res, next) => {
 
     const role = normalizeRole(accessType);
 
+    // Generate unique session ID for this browser login instance
+    const sessionId = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+    // Invalidate any previous session for this user from another browser/IP
+    await sessionService.createSession({
+      sessionId,
+      userId: matchedUser?.userId || '1',
+      loginId,
+      upstreamSid: sid,
+      ip,
+      userAgent,
+      role,
+      branchId,
+    });
+
     const userPayload = {
       userId: matchedUser?.userId || '1',
       loginId: loginId,
@@ -68,9 +96,12 @@ export const login = async (req, res, next) => {
       role: role,
       branchId: branchId,
       upstreamSid: sid,
+      sessionId,
+      ip,
+      userAgent,
     };
 
-    // Generate JWT token
+    // Generate JWT token with sessionId embedded
     const token = jwt.sign(userPayload, config.jwtSecret, {
       expiresIn: config.jwtExpiresIn,
     });
@@ -81,7 +112,10 @@ export const login = async (req, res, next) => {
       Message: 'Login successful',
       token,
       user: userPayload,
+      sessionId,
       sid,
+      ip,
+      userAgent,
     });
   } catch (err) {
     next(err);
@@ -91,25 +125,41 @@ export const login = async (req, res, next) => {
 export const logout = async (req, res, next) => {
   try {
     const sid = req.user?.upstreamSid;
-    if (sid) {
+    const sessionId = req.user?.sessionId;
+    const loginId = req.user?.loginId;
+
+    // Safely terminate session (can be called multiple times idempotently)
+    if (sessionId || loginId) {
+      await sessionService.terminateSession(sessionId, loginId, sid);
+    } else if (sid) {
       await upstreamService.userLogout(sid);
     }
+
     return res.json({
       STATUS: 'SUCCESS',
       StatusCode: '0000',
       Message: 'Logout successful',
     });
   } catch (err) {
-    next(err);
+    // Never crash on logout even if called repeatedly
+    return res.json({
+      STATUS: 'SUCCESS',
+      StatusCode: '0000',
+      Message: 'Logout completed',
+    });
   }
 };
 
 export const getMe = async (req, res, next) => {
   try {
+    const session = sessionService.getActiveSession(req.user?.loginId);
     return res.json({
       STATUS: 'SUCCESS',
       StatusCode: '0000',
-      user: req.user,
+      user: {
+        ...req.user,
+        activeSession: session || null,
+      },
     });
   } catch (err) {
     next(err);

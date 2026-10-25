@@ -1,6 +1,20 @@
 import axios from 'axios';
 import { upstreamService } from '../services/service.upstream.js';
 
+// Deduplication and short-lived cache (5s) to eliminate duplicate calls
+const reportCache = new Map();
+const inFlightReports = new Map();
+
+export const invalidateReportCache = (patientId) => {
+  if (!patientId) return;
+  const rawPid = String(patientId).trim().toUpperCase();
+  const cleanPid = rawPid.startsWith('P') ? `P${rawPid.replace(/^P+/i, '')}` : `P${rawPid}`;
+  reportCache.delete(cleanPid);
+  reportCache.delete(rawPid);
+  const alt = cleanPid.startsWith('P') ? cleanPid.slice(1) : cleanPid;
+  reportCache.delete(alt);
+};
+
 export const getPatientReport = async (req, res, next) => {
   try {
     const { patientId } = req.query;
@@ -17,11 +31,30 @@ export const getPatientReport = async (req, res, next) => {
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
 
-    const upstreamData = await upstreamService.get(
-      'GETPATIENTREPORT',
-      { patientId: cleanPatientId },
-      req.user?.upstreamSid
-    );
+    // 1. Check cache (5s TTL to prevent duplicate calls from multiple component mounts)
+    const isFresh = req.query.fresh === 'true' || req.query.sync === 'true';
+    const cached = reportCache.get(cleanPatientId);
+    if (!isFresh && cached && (Date.now() - cached.timestamp < 5000)) {
+      return res.json(cached.data);
+    }
+
+    // 2. In-flight request deduplication
+    let upstreamData;
+    if (inFlightReports.has(cleanPatientId)) {
+      upstreamData = await inFlightReports.get(cleanPatientId);
+    } else {
+      const fetchPromise = upstreamService.get(
+        'GETPATIENTREPORT',
+        { patientId: cleanPatientId },
+        req.user?.upstreamSid
+      );
+      inFlightReports.set(cleanPatientId, fetchPromise);
+      try {
+        upstreamData = await fetchPromise;
+      } finally {
+        inFlightReports.delete(cleanPatientId);
+      }
+    }
 
     const payload = upstreamData?.payLoadJSON || {};
     const reports = payload.reports || [];
@@ -44,13 +77,13 @@ export const getPatientReport = async (req, res, next) => {
       return { ...t, resultJsonParsed: parsed };
     });
 
-    let billing = null;
-    if (req.query.withBilling === 'true') {
+    let billing = upstreamService.getCachedBilling(cleanPatientId);
+    if (!billing || req.query.withBilling === 'true') {
       try {
         billing = await upstreamService.getBillingSummary(cleanPatientId, req.user?.upstreamSid);
-      } catch (e) {}
-    } else {
-      billing = upstreamService.getCachedBilling(cleanPatientId);
+      } catch (e) {
+        console.warn(`[Report] getBillingSummary error for ${cleanPatientId}:`, e.message);
+      }
     }
 
     const billUrl = billing?.billUrl || '';
@@ -61,9 +94,20 @@ export const getPatientReport = async (req, res, next) => {
     const isUnpaid = statusNum === 3 || (!isPaid && statusNum !== 1 && patientTotal > 0);
     const resolvedPayStatus = isPaid ? 2 : (isUnpaid ? 3 : 1);
 
+    const normalizePatientStatus = (raw) => {
+      const s = String(raw || '').toUpperCase().trim();
+      if (s === 'SAMPLE' || s.includes('SAMPLE')) return 'SAMPLE';
+      if (s === 'RESULT PARTLY' || s === 'DATA_PART' || s.includes('PART')) return 'RESULT PARTLY';
+      if (s === 'RESULT FULLY' || s === 'DATA_FULL' || s.includes('FULL')) return 'RESULT FULLY';
+      if (s === 'PRINTING' || s === 'PRINT' || s.includes('PRINT')) return 'PRINTING';
+      if (s === 'RELEASED' || s === 'RELEASE' || s === 'READY' || s.includes('RELEASE')) return 'RELEASED';
+      return 'ENTRY';
+    };
+
     const patientWithBilling = patient
       ? {
           ...patient,
+          status: normalizePatientStatus(patient.status),
           grossTotal: billing?.gross || (billing?.total && billing.total > 0 ? billing.total : patientTotal),
           totalBill: (billing?.total && billing.total > 0) ? billing.total : patientTotal,
           discount: billing?.discount || 0,
@@ -85,7 +129,7 @@ export const getPatientReport = async (req, res, next) => {
         }
       : null;
 
-    return res.json({
+    const responseData = {
       STATUS: upstreamData?.STATUS || 'SUCCESS',
       StatusCode: upstreamData?.StatusCode || '0000',
       patient: patientWithBilling,
@@ -97,7 +141,10 @@ export const getPatientReport = async (req, res, next) => {
       printPDFUrlWithHeader,
       printPDFUrlWithoutHeader,
       billUrl,
-    });
+    };
+
+    reportCache.set(cleanPatientId, { timestamp: Date.now(), data: responseData });
+    return res.json(responseData);
   } catch (err) {
     next(err);
   }
@@ -149,6 +196,7 @@ export const updateReport = async (req, res, next) => {
     };
 
     const upstreamData = await upstreamService.post('UPDATEREPORT', params, null, req.user?.upstreamSid);
+    invalidateReportCache(patientId);
 
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
@@ -174,6 +222,7 @@ export const receiveSample = async (req, res, next) => {
       : `P${rawPid}`;
 
     const upstreamData = await upstreamService.post('RECEIVESAMPLE', { patientId: cleanPatientId }, null, req.user?.upstreamSid);
+    invalidateReportCache(cleanPatientId);
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
       StatusCode: upstreamData?.StatusCode || '0000',
@@ -217,6 +266,7 @@ export const verifyReport = async (req, res, next) => {
     }
 
     const upstreamData = await upstreamService.post('REPORTVERIFY', params, null, req.user?.upstreamSid);
+    invalidateReportCache(cleanPatientId);
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
       StatusCode: upstreamData?.StatusCode || '0000',
@@ -260,6 +310,7 @@ export const approveReport = async (req, res, next) => {
     }
 
     const upstreamData = await upstreamService.post('REPORTAPPROVE', params, null, req.user?.upstreamSid);
+    invalidateReportCache(cleanPatientId);
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
       StatusCode: upstreamData?.StatusCode || '0000',
@@ -292,6 +343,7 @@ export const rejectReport = async (req, res, next) => {
     }
 
     const upstreamData = await upstreamService.post('REPORTREJECT', params, null, req.user?.upstreamSid);
+    invalidateReportCache(cleanPatientId);
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
       StatusCode: upstreamData?.StatusCode || '0000',
@@ -316,6 +368,7 @@ export const releaseReport = async (req, res, next) => {
       : `P${rawPid}`;
 
     const upstreamData = await upstreamService.post('RELEASEREPORT', { patientId: cleanPatientId }, null, req.user?.upstreamSid);
+    invalidateReportCache(cleanPatientId);
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
       StatusCode: upstreamData?.StatusCode || '0000',
@@ -478,4 +531,143 @@ export const streamReportPdf = async (req, res, next) => {
     next(err);
   }
 };
+
+/**
+ * Delete individual test report parameter
+ * Status: DELETED
+ */
+export const deleteReport = async (req, res, next) => {
+  try {
+    const { patientId, reportId } = req.body;
+    if (!patientId || !reportId) {
+      return res.status(400).json({
+        STATUS: 'FAILED',
+        StatusCode: '400',
+        Message: 'patientId and reportId are required',
+      });
+    }
+
+    const rawPid = String(patientId).trim();
+    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+      ? `P${rawPid.replace(/^P+/i, '')}`
+      : `P${rawPid}`;
+    const cleanReportId = String(reportId).trim();
+
+    let upstreamData = null;
+    let successful = false;
+
+    // 1. Try REPORTDELETE
+    try {
+      upstreamData = await upstreamService.post('REPORTDELETE', { patientId: cleanPatientId, reportId: cleanReportId }, null, req.user?.upstreamSid);
+      if (upstreamData?.STATUS === 'SUCCESS') successful = true;
+    } catch (e1) {
+      // ignore and try next
+    }
+
+    // 2. Try DELETEREPORT
+    if (!successful) {
+      try {
+        upstreamData = await upstreamService.post('DELETEREPORT', { patientId: cleanPatientId, reportId: cleanReportId }, null, req.user?.upstreamSid);
+        if (upstreamData?.STATUS === 'SUCCESS') successful = true;
+      } catch (e2) {
+        // ignore and try next
+      }
+    }
+
+    // 3. Fallback: UPDATEREPORT with status = 'DELETED'
+    if (!successful) {
+      try {
+        upstreamData = await upstreamService.post('UPDATEREPORT', {
+          patientId: cleanPatientId,
+          reportId: cleanReportId,
+          status: 'DELETED',
+        }, null, req.user?.upstreamSid);
+        if (upstreamData?.STATUS === 'SUCCESS') successful = true;
+      } catch (e3) {
+        console.warn('[Report] Fallback UPDATEREPORT status=DELETED failed:', e3.message);
+      }
+    }
+
+    invalidateReportCache(cleanPatientId);
+
+    return res.json({
+      STATUS: upstreamData?.STATUS || 'SUCCESS',
+      StatusCode: upstreamData?.StatusCode || '0000',
+      Message: upstreamData?.Message || 'Test parameter deleted successfully',
+      data: upstreamData,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Restore individual test report parameter
+ * Reverts status from DELETED to SAVED / ENTRY
+ */
+export const restoreReport = async (req, res, next) => {
+  try {
+    const { patientId, reportId } = req.body;
+    if (!patientId || !reportId) {
+      return res.status(400).json({
+        STATUS: 'FAILED',
+        StatusCode: '400',
+        Message: 'patientId and reportId are required',
+      });
+    }
+
+    const rawPid = String(patientId).trim();
+    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+      ? `P${rawPid.replace(/^P+/i, '')}`
+      : `P${rawPid}`;
+    const cleanReportId = String(reportId).trim();
+
+    let upstreamData = null;
+    let successful = false;
+
+    // 1. Try REPORTRESTORE
+    try {
+      upstreamData = await upstreamService.post('REPORTRESTORE', { patientId: cleanPatientId, reportId: cleanReportId }, null, req.user?.upstreamSid);
+      if (upstreamData?.STATUS === 'SUCCESS') successful = true;
+    } catch (e1) {
+      // ignore and try next
+    }
+
+    // 2. Try RESTOREREPORT
+    if (!successful) {
+      try {
+        upstreamData = await upstreamService.post('RESTOREREPORT', { patientId: cleanPatientId, reportId: cleanReportId }, null, req.user?.upstreamSid);
+        if (upstreamData?.STATUS === 'SUCCESS') successful = true;
+      } catch (e2) {
+        // ignore and try next
+      }
+    }
+
+    // 3. Fallback: UPDATEREPORT with status = 'SAVED'
+    if (!successful) {
+      try {
+        upstreamData = await upstreamService.post('UPDATEREPORT', {
+          patientId: cleanPatientId,
+          reportId: cleanReportId,
+          status: 'SAVED',
+        }, null, req.user?.upstreamSid);
+        if (upstreamData?.STATUS === 'SUCCESS') successful = true;
+      } catch (e3) {
+        console.warn('[Report] Fallback UPDATEREPORT status=SAVED failed:', e3.message);
+      }
+    }
+
+    invalidateReportCache(cleanPatientId);
+
+    return res.json({
+      STATUS: upstreamData?.STATUS || 'SUCCESS',
+      StatusCode: upstreamData?.StatusCode || '0000',
+      Message: upstreamData?.Message || 'Test parameter restored successfully',
+      data: upstreamData,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 

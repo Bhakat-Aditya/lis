@@ -36,9 +36,25 @@ export const AuthProvider = ({ children }) => {
     }
   }, [token]);
 
+  // Prevent multiple concurrent login/logout invocations
+  const loginInProgressRef = React.useRef(false);
+  const logoutInProgressRef = React.useRef(false);
+
   const login = async (loginId, password, totp = null) => {
+    if (loginInProgressRef.current) {
+      return { success: false, message: 'Login already in progress...' };
+    }
+    loginInProgressRef.current = true;
+
     try {
-      const res = await api.post('/auth/login', { loginId, password, totp });
+      const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'Browser Client';
+      const res = await api.post('/auth/login', {
+        loginId,
+        password,
+        totp,
+        userAgent,
+      });
+
       if (res.data?.token && res.data?.user) {
         setToken(res.data.token);
         setUser(res.data.user);
@@ -67,10 +83,15 @@ export const AuthProvider = ({ children }) => {
         success: false,
         message: err.response?.data?.Message || err.message || 'Login connection failed',
       };
+    } finally {
+      loginInProgressRef.current = false;
     }
   };
 
   const logout = async () => {
+    if (logoutInProgressRef.current) return;
+    logoutInProgressRef.current = true;
+
     try {
       if (token) {
         await api.post('/auth/logout');
@@ -82,6 +103,7 @@ export const AuthProvider = ({ children }) => {
       setToken(null);
       localStorage.removeItem('lis_auth_token');
       localStorage.removeItem('lis_user');
+      logoutInProgressRef.current = false;
     }
   };
 

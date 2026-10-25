@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useAuth } from '../context/context.auth.jsx';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ShieldCheck,
   Lock,
@@ -19,6 +19,8 @@ import {
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const sessionLogoutReason = searchParams.get('reason') || '';
 
   const [loginId, setLoginId] = useState('sandip');
   const [password, setPassword] = useState('Life');
@@ -88,6 +90,13 @@ export default function LoginPage() {
 
         {/* Login Form Body */}
         <div className="p-6 sm:p-7 space-y-4">
+          {sessionLogoutReason && !error && (
+            <div className="p-3 bg-amber-50 border border-amber-300 text-amber-800 rounded-xl text-xs flex items-center gap-2 font-medium shadow-2xs">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>{sessionLogoutReason}</span>
+            </div>
+          )}
+
           {error && (
             <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center gap-2 font-medium">
               <AlertCircle className="w-4 h-4 shrink-0" />

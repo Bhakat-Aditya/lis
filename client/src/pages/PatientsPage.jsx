@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
@@ -21,6 +21,8 @@ import {
   Printer,
   Download,
   ExternalLink,
+  FlaskConical,
+  Filter,
 } from 'lucide-react';
 
 import {
@@ -34,7 +36,101 @@ import {
 } from '../utils/dateUtils.js';
 import BillPreviewModal from '../components/billing/BillPreviewModal.jsx';
 
-export default function PatientsPage({ onOpenNewPatient }) {
+// Upstream LIS Payment Constants
+export const PAYMENT_STATUS_CODE_NOBILL = 1;
+export const PAYMENT_STATUS_CODE_PAID = 2;
+export const PAYMENT_STATUS_CODE_UNPAID = 3;
+
+// Official Upstream Patient Directory Status Constants (Strictly these 6 only)
+export const STATUS_ENTRY = 'ENTRY';
+export const STATUS_SAMPLE = 'SAMPLE';
+export const STATUS_DATA_PART = 'RESULT PARTLY';
+export const STATUS_DATA_FULL = 'RESULT FULLY';
+export const STATUS_REPORT_PRINT = 'PRINTING';
+export const STATUS_REPORT_RELEASED = 'RELEASED';
+
+/**
+ * Strictly normalizes any raw patient status string into one of the 6 official statuses.
+ */
+export const normalizePatientStatus = (rawStatus) => {
+  const s = String(rawStatus || '').toUpperCase().trim();
+  if (s === 'SAMPLE' || s.includes('SAMPLE')) return STATUS_SAMPLE;
+  if (s === 'RESULT PARTLY' || s === 'DATA_PART' || s.includes('PART')) return STATUS_DATA_PART;
+  if (s === 'RESULT FULLY' || s === 'DATA_FULL' || s.includes('FULL')) return STATUS_DATA_FULL;
+  if (s === 'PRINTING' || s === 'PRINT' || s.includes('PRINT')) return STATUS_REPORT_PRINT;
+  if (s === 'RELEASED' || s === 'RELEASE' || s === 'READY' || s.includes('RELEASE')) return STATUS_REPORT_RELEASED;
+  return STATUS_ENTRY;
+};
+
+export const PATIENT_STATUS_CONFIGS = [
+  { key: 'ALL', label: 'ALL', color: 'slate' },
+  { key: STATUS_ENTRY, label: 'ENTRY', color: 'rose' },
+  { key: STATUS_SAMPLE, label: 'SAMPLE', color: 'amber' },
+  { key: STATUS_DATA_PART, label: 'RESULT PARTLY', color: 'sky' },
+  { key: STATUS_DATA_FULL, label: 'RESULT FULLY', color: 'purple' },
+  { key: STATUS_REPORT_PRINT, label: 'PRINTING', color: 'teal' },
+  { key: STATUS_REPORT_RELEASED, label: 'RELEASED', color: 'emerald' },
+];
+
+/**
+ * Render Status pill badge matching upstream LIS statuses & aesthetic strictly using official labels
+ */
+const renderPatientStatus = (status) => {
+  const s = normalizePatientStatus(status);
+  switch (s) {
+    case STATUS_ENTRY:
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#f43f5e] text-white whitespace-nowrap shadow-2xs">
+          <User className="w-3 h-3" />
+          <span>ENTRY</span>
+        </span>
+      );
+    case STATUS_SAMPLE:
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white whitespace-nowrap shadow-2xs">
+          <FlaskConical className="w-3 h-3" />
+          <span>SAMPLE</span>
+        </span>
+      );
+    case STATUS_DATA_PART:
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-500 text-white whitespace-nowrap shadow-2xs">
+          <FileText className="w-3 h-3" />
+          <span>RESULT PARTLY</span>
+        </span>
+      );
+    case STATUS_DATA_FULL:
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-600 text-white whitespace-nowrap shadow-2xs">
+          <FileCheck className="w-3 h-3" />
+          <span>RESULT FULLY</span>
+        </span>
+      );
+    case STATUS_REPORT_PRINT:
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-teal-600 text-white whitespace-nowrap shadow-2xs">
+          <Printer className="w-3 h-3" />
+          <span>PRINTING</span>
+        </span>
+      );
+    case STATUS_REPORT_RELEASED:
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#10b981] text-white whitespace-nowrap shadow-2xs">
+          <Check className="w-3 h-3" />
+          <span>RELEASED</span>
+        </span>
+      );
+    default:
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#f43f5e] text-white whitespace-nowrap shadow-2xs">
+          <User className="w-3 h-3" />
+          <span>ENTRY</span>
+        </span>
+      );
+  }
+};
+
+export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refreshTrigger }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { setActivePatient } = usePatientContext();
@@ -49,20 +145,32 @@ export default function PatientsPage({ onOpenNewPatient }) {
   const [selectedDate, setSelectedDate] = useState(todayStr);
   const [latestFoundDate, setLatestFoundDate] = useState(null);
   const [searchTerm, setSearchTerm] = useState(urlSearch);
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState('ALL');
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(false);
   const [expandedRowId, setExpandedRowId] = useState(null);
+  const [loadingRowPid, setLoadingRowPid] = useState(null);
   const [rowDetails, setRowDetails] = useState({});
+  const rowDetailsRef = useRef({});
+  const fetchAbortRef = useRef(null);
 
   // Sync state if URL query param changes
   useEffect(() => {
-    setSearchTerm(urlSearch);
-    if (urlSearch) {
+    if (urlSearch !== searchTerm) {
+      setSearchTerm(urlSearch);
+    }
+    if (urlSearch && dateMode !== 'recent') {
       setDateMode('recent');
     }
   }, [urlSearch]);
 
   const fetchPatients = async () => {
+    if (fetchAbortRef.current) {
+      fetchAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    fetchAbortRef.current = controller;
+
     setLoading(true);
     try {
       const params = {};
@@ -76,26 +184,39 @@ export default function PatientsPage({ onOpenNewPatient }) {
         params.search = searchTerm.trim();
       }
 
-      const res = await api.get('/patients/list', { params });
+      const res = await api.get('/patients/list', {
+        params,
+        signal: controller.signal,
+      });
       const list = res.data?.patients || [];
       if (res.data?.latestDate) {
         setLatestFoundDate(res.data.latestDate);
       }
 
       if (res.data && Array.isArray(res.data.patients)) {
-        setPatients(sortPatientsByRecent(res.data.patients));
+        const sorted = sortPatientsByRecent(res.data.patients);
+        setPatients(sorted);
+        if (onPatientsLoaded) onPatientsLoaded(sorted);
       } else {
         setPatients([]);
+        if (onPatientsLoaded) onPatientsLoaded([]);
       }
 
-      if (expandedRowId) {
+      // Only fetch details for expanded row if not already cached
+      if (expandedRowId && !rowDetailsRef.current[expandedRowId]) {
         fetchRowDetails(expandedRowId);
       }
     } catch (err) {
+      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED' || err.name === 'AbortError') {
+        return;
+      }
       console.warn('Error fetching patients:', err.message);
       setPatients([]);
+      if (onPatientsLoaded) onPatientsLoaded([]);
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+      }
     }
   };
 
@@ -114,27 +235,53 @@ export default function PatientsPage({ onOpenNewPatient }) {
     setDateMode('custom');
   };
 
-  const fetchRowDetails = async (pid) => {
-    if (rowDetails[pid]) return;
+  const fetchRowDetails = async (pid, force = false) => {
+    if (!pid || (rowDetailsRef.current[pid] && !force)) return;
+    setLoadingRowPid(pid);
     try {
       const res = await api.get('/reports/patient-report', {
         params: { patientId: pid },
       });
+      const data = {
+        patient: res.data?.patient,
+        reports: res.data?.reports || [],
+      };
+      rowDetailsRef.current[pid] = data;
       setRowDetails((prev) => ({
         ...prev,
-        [pid]: {
-          patient: res.data?.patient,
-          reports: res.data?.reports || [],
-        },
+        [pid]: data,
       }));
+
+      // Synchronize real-time financial & payment details into patient list
+      if (res.data?.patient) {
+        const pt = res.data.patient;
+        setPatients((prev) =>
+          prev.map((item) => {
+            const itemPid = String(item.patientId || item.slNo || '');
+            if (itemPid === String(pid)) {
+              return {
+                ...item,
+                totalBill: pt.totalBill ?? item.totalBill,
+                paidBill: pt.paidBill ?? item.paidBill,
+                balance: pt.balance ?? item.balance,
+                dueAmount: pt.dueAmount ?? item.dueAmount,
+                billPayStatus: pt.billPayStatus ?? item.billPayStatus,
+              };
+            }
+            return item;
+          })
+        );
+      }
     } catch (e) {
       // ignore
+    } finally {
+      setLoadingRowPid(null);
     }
   };
 
   useEffect(() => {
     fetchPatients();
-  }, [selectedDate, dateMode]);
+  }, [selectedDate, dateMode, refreshTrigger]);
 
   const handleToggleRow = (pid, e) => {
     e?.stopPropagation();
@@ -153,15 +300,43 @@ export default function PatientsPage({ onOpenNewPatient }) {
     navigate(`/patients/${pid}`);
   };
 
-  // Filter based on due query param and search term safely, maintaining newest-first order
+  // Live counts for the exact 6 official patient directory statuses
+  const statusCounts = useMemo(() => {
+    const counts = {
+      ALL: patients.length,
+      [STATUS_ENTRY]: 0,
+      [STATUS_SAMPLE]: 0,
+      [STATUS_DATA_PART]: 0,
+      [STATUS_DATA_FULL]: 0,
+      [STATUS_REPORT_PRINT]: 0,
+      [STATUS_REPORT_RELEASED]: 0,
+    };
+    patients.forEach((p) => {
+      const norm = normalizePatientStatus(p.status);
+      if (counts[norm] !== undefined) {
+        counts[norm]++;
+      } else {
+        counts[STATUS_ENTRY]++;
+      }
+    });
+    return counts;
+  }, [patients]);
+
+  // Filter based on status filter, due query param, and search term safely, maintaining newest-first order
   const filterType = searchParams.get('filter');
   const displayPatients = sortPatientsByRecent(
     patients.filter((p) => {
+      if (selectedStatusFilter !== 'ALL') {
+        const norm = normalizePatientStatus(p.status);
+        if (norm !== selectedStatusFilter) return false;
+      }
       if (filterType === 'due') {
+        const statusNum = Number(p.billPayStatus);
+        if (statusNum === PAYMENT_STATUS_CODE_PAID) return false;
         const billTotal = Number(p.totalBill || 0);
         const billPaid = Number(p.paidBill || 0);
         const due = Number(p.balance ?? Math.max(0, billTotal - billPaid));
-        if (due <= 0) return false;
+        if (due <= 0 && statusNum !== PAYMENT_STATUS_CODE_UNPAID) return false;
       }
       if (searchTerm) {
         const term = searchTerm.toLowerCase().trim();
@@ -312,6 +487,53 @@ export default function PatientsPage({ onOpenNewPatient }) {
         </div>
       </div>
 
+      {/* Patient Directory Status Filter Bar (Official 6 Statuses strictly) */}
+      <div className="flex flex-wrap items-center justify-between gap-2 bg-white px-3 py-2 rounded-lg border border-slate-200 shadow-2xs">
+        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 shrink-0">
+          <Filter className="w-3.5 h-3.5 text-blue-600" />
+          <span>Status Filter:</span>
+        </div>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {PATIENT_STATUS_CONFIGS.map((cfg) => {
+            const isActive = selectedStatusFilter === cfg.key;
+            const count = statusCounts[cfg.key] ?? 0;
+            return (
+              <button
+                key={cfg.key}
+                type="button"
+                onClick={() => setSelectedStatusFilter(isActive && cfg.key !== 'ALL' ? 'ALL' : cfg.key)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap shadow-2xs ${
+                  isActive
+                    ? cfg.key === 'ALL'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : cfg.key === STATUS_ENTRY
+                      ? 'bg-[#f43f5e] text-white shadow-xs'
+                      : cfg.key === STATUS_SAMPLE
+                      ? 'bg-amber-500 text-white shadow-xs'
+                      : cfg.key === STATUS_DATA_PART
+                      ? 'bg-sky-500 text-white shadow-xs'
+                      : cfg.key === STATUS_DATA_FULL
+                      ? 'bg-purple-600 text-white shadow-xs'
+                      : cfg.key === STATUS_REPORT_PRINT
+                      ? 'bg-teal-600 text-white shadow-xs'
+                      : 'bg-[#10b981] text-white shadow-xs'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                <span>{cfg.label}</span>
+                <span
+                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
+                    isActive ? 'bg-white/25 text-white' : 'bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Patient Table (Matching Screenshot 1 exactly) */}
       <div className="bg-white rounded-lg border border-slate-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
@@ -322,7 +544,7 @@ export default function PatientsPage({ onOpenNewPatient }) {
                 <th className="py-2.5 px-3 w-12 text-center text-slate-500">SN</th>
                 <th className="py-2.5 px-3 w-16 text-slate-500">ID</th>
                 <th className="py-2.5 px-3 min-w-[160px]">Patient Name</th>
-                <th className="py-2.5 px-3 w-20 text-center text-slate-500">Gender</th>
+                <th className="py-2.5 px-3 min-w-[75px] text-center text-slate-500">Gender</th>
                 <th className="py-2.5 px-3 min-w-[180px]">Doctor</th>
                 <th className="py-2.5 px-3 w-16 text-slate-500">Center</th>
                 <th className="py-2.5 px-3 min-w-[125px]">Date / Time</th>
@@ -347,18 +569,18 @@ export default function PatientsPage({ onOpenNewPatient }) {
                 displayPatients.map((p, idx) => {
                   const pid = String(p.patientId || p.slNo || '');
                   const snNumber = p.serialNumber || (displayPatients.length - idx);
-                  const isMale = (p.gender || '').toLowerCase().startsWith('m');
+                  const rawGender = String(p.gender || '').trim();
+                  const isMale = rawGender.toLowerCase().startsWith('m');
+                  const isFemale = rawGender.toLowerCase().startsWith('f');
+                  const displayGender = isMale ? 'Male' : isFemale ? 'Female' : (rawGender || 'Male');
                   const billTotal = Number(p.totalBill || 0);
                   const billPaid = Number(p.paidBill || 0);
                   const billBalance = Number(p.balance ?? Math.max(0, billTotal - billPaid));
                   const billPayStatusNum = Number(p.billPayStatus);
-                  const isPaid = billPayStatusNum === 2;
-                  const isUnpaid = billPayStatusNum === 3 || (!isPaid && billPayStatusNum !== 1 && billTotal > 0);
-                  const isNoBill = billPayStatusNum === 1 || (!isPaid && !isUnpaid && billTotal === 0);
+                  const isPaid = billPayStatusNum === PAYMENT_STATUS_CODE_PAID;
+                  const isUnpaid = billPayStatusNum === PAYMENT_STATUS_CODE_UNPAID || (!isPaid && billPayStatusNum !== PAYMENT_STATUS_CODE_NOBILL && billTotal > 0);
+                  const isNoBill = billPayStatusNum === PAYMENT_STATUS_CODE_NOBILL || (!isPaid && !isUnpaid && billTotal === 0);
                   const isBilled = !isNoBill && billTotal > 0;
-                  const isReady = ['APPROVED', 'PRINTING', 'RELEASED', 'READY', 'REPORT READY'].includes(
-                    String(p.status || '').toUpperCase().trim()
-                  );
                   const isExpanded = expandedRowId === pid;
                   const details = rowDetails[pid];
 
@@ -399,9 +621,19 @@ export default function PatientsPage({ onOpenNewPatient }) {
                           {p.name}
                         </td>
 
-                        {/* Gender (Text without icons) */}
-                        <td className="py-2.5 px-3 text-center text-xs font-medium text-slate-700">
-                          {p.gender || (isMale ? 'Male' : 'Female')}
+                        {/* Gender: Mentioned clearly without unicode */}
+                        <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold ${
+                              isMale
+                                ? 'bg-blue-50 text-blue-700 border border-blue-200/60'
+                                : isFemale
+                                ? 'bg-rose-50 text-rose-700 border border-rose-200/60'
+                                : 'bg-slate-100 text-slate-700'
+                            }`}
+                          >
+                            {displayGender}
+                          </span>
                         </td>
 
                         {/* Doctor */}
@@ -434,7 +666,7 @@ export default function PatientsPage({ onOpenNewPatient }) {
                           {p.pCount ?? 0}
                         </td>
 
-                        {/* ₹ Payment status badge */}
+                        {/* ₹ Payment status badge matching screenshot */}
                         <td className="py-2.5 px-2 text-center">
                           {isPaid ? (
                             <span
@@ -460,19 +692,9 @@ export default function PatientsPage({ onOpenNewPatient }) {
                           )}
                         </td>
 
-                        {/* Status badge matching screenshot */}
+                        {/* Status badge matching upstream status definitions and screenshot */}
                         <td className="py-2.5 px-3 text-center">
-                          {isReady ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#10b981] text-white whitespace-nowrap shadow-2xs">
-                              <Check className="w-3 h-3" />
-                              <span>Report Ready</span>
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#f43f5e] text-white whitespace-nowrap shadow-2xs">
-                              <User className="w-3 h-3" />
-                              <span>Registered</span>
-                            </span>
-                          )}
+                          {renderPatientStatus(p.status)}
                         </td>
 
                         {/* Open Button (Vibrant Blue) */}
@@ -525,14 +747,23 @@ export default function PatientsPage({ onOpenNewPatient }) {
                                       {p.age || '3'}{!String(p.age || '').toLowerCase().includes('year') && !String(p.age || '').toLowerCase().includes('day') ? ` ${p.age_unit || 'Days'}` : ''} / {p.gender || 'Male'}
                                     </strong>
                                   </div>
+                                  <div className="flex items-center gap-1.5 pt-0.5">
+                                    <span className="text-slate-400">Status:</span>{' '}
+                                    {renderPatientStatus(p.status)}
+                                  </div>
                                 </div>
                               </div>
 
                               {/* Card 2: Tests List */}
                               <div className="space-y-2 border-r border-slate-100 pr-3">
-                                <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-700">
-                                  <FileText className="w-3.5 h-3.5" />
-                                  <span>Tests ({details?.reports?.length || 0})</span>
+                                <div className="flex items-center justify-between text-xs font-bold text-indigo-700">
+                                  <div className="flex items-center gap-1.5">
+                                    <FileText className="w-3.5 h-3.5" />
+                                    <span>Tests ({details?.reports?.length || 0})</span>
+                                  </div>
+                                  {loadingRowPid === pid && (
+                                    <RefreshCw className="w-3 h-3 animate-spin text-indigo-500" />
+                                  )}
                                 </div>
                                 <div className="text-xs space-y-1.5 max-h-28 overflow-y-auto pr-1">
                                   {details?.reports && details.reports.length > 0 ? (
@@ -549,6 +780,11 @@ export default function PatientsPage({ onOpenNewPatient }) {
                                         </span>
                                       </div>
                                     ))
+                                  ) : loadingRowPid === pid ? (
+                                    <div className="text-[11px] text-indigo-500 italic py-2 flex items-center gap-1.5">
+                                      <RefreshCw className="w-3 h-3 animate-spin" />
+                                      <span>Loading investigations...</span>
+                                    </div>
                                   ) : (
                                     <div className="text-[11px] text-slate-400 italic py-2">
                                       No tests ordered yet
@@ -558,32 +794,66 @@ export default function PatientsPage({ onOpenNewPatient }) {
                               </div>
 
                               {/* Card 3: Financial Summary */}
-                              <div className="space-y-2 border-r border-slate-100 pr-3">
-                                <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-700">
-                                  <span>💳</span>
-                                  <span>Financial Summary</span>
-                                </div>
-                                <div className="text-xs space-y-1 text-slate-700">
-                                  <div className="flex justify-between">
-                                    <span className="text-slate-400">Total Amount:</span>
-                                    <span className="font-bold text-slate-900">
-                                      ₹{billTotal.toLocaleString('en-IN')}
-                                    </span>
+                              {(() => {
+                                const effectivePatient = details?.patient || p;
+                                const reportsRateTotal = details?.reports && details.reports.length > 0
+                                  ? details.reports.reduce((acc, rep) => acc + Number(rep.rate || 0), 0)
+                                  : 0;
+
+                                const effectiveTotal = Number(effectivePatient.totalBill) > 0
+                                  ? Number(effectivePatient.totalBill)
+                                  : (reportsRateTotal > 0 ? reportsRateTotal : billTotal);
+
+                                const effectivePaid = effectivePatient.paidBill !== undefined && effectivePatient.paidBill !== null
+                                  ? Number(effectivePatient.paidBill)
+                                  : (effectivePatient.billPayStatus === PAYMENT_STATUS_CODE_PAID ? effectiveTotal : billPaid);
+
+                                const effectiveBalance = effectivePatient.balance !== undefined && effectivePatient.balance !== null
+                                  ? Number(effectivePatient.balance)
+                                  : (effectivePatient.billPayStatus === PAYMENT_STATUS_CODE_PAID ? 0 : Math.max(0, effectiveTotal - effectivePaid));
+
+                                const effectiveIsPaid = effectivePatient.billPayStatus === PAYMENT_STATUS_CODE_PAID || (effectiveTotal > 0 && effectiveBalance <= 0 && effectivePaid >= effectiveTotal);
+                                const effectiveIsBilled = effectiveTotal > 0;
+
+                                return (
+                                  <div className="space-y-2 border-r border-slate-100 pr-3">
+                                    <div className="flex items-center justify-between text-xs font-bold text-indigo-700">
+                                      <div className="flex items-center gap-1.5">
+                                        <span>💳</span>
+                                        <span>Financial Summary</span>
+                                      </div>
+                                      {loadingRowPid === pid && (
+                                        <RefreshCw className="w-3 h-3 animate-spin text-indigo-500" />
+                                      )}
+                                    </div>
+                                    <div className="text-xs space-y-1 text-slate-700">
+                                      <div className="flex justify-between">
+                                        <span className="text-slate-400">Total Amount:</span>
+                                        <span className="font-bold text-slate-900">
+                                          ₹{effectiveTotal.toLocaleString('en-IN')}
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-slate-400">Total Deposit:</span>
+                                        <span className="font-bold text-slate-900">
+                                          ₹{effectivePaid.toLocaleString('en-IN')}
+                                          {effectivePatient.paymentLines && effectivePatient.paymentLines.length > 0 && (
+                                            <span className="text-[10px] text-emerald-600 font-normal ml-1">
+                                              ({effectivePatient.paymentLines.length} receipt{effectivePatient.paymentLines.length > 1 ? 's' : ''})
+                                            </span>
+                                          )}
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-slate-400">Balance Due:</span>
+                                        <span className={`font-bold ${!effectiveIsBilled ? 'text-slate-500' : effectiveIsPaid ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                          ₹{effectiveBalance.toLocaleString('en-IN')}
+                                        </span>
+                                      </div>
+                                    </div>
                                   </div>
-                                  <div className="flex justify-between">
-                                    <span className="text-slate-400">Total Deposit:</span>
-                                    <span className="font-bold text-slate-900">
-                                      ₹{billPaid.toLocaleString('en-IN')}
-                                    </span>
-                                  </div>
-                                  <div className="flex justify-between">
-                                    <span className="text-slate-400">Balance Due:</span>
-                                    <span className={`font-bold ${!isBilled ? 'text-slate-500' : isPaid ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                      ₹{billBalance.toLocaleString('en-IN')}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
+                                );
+                              })()}
 
                               {/* Card 4: Quick Actions */}
                               <div className="space-y-2 flex flex-col justify-center">

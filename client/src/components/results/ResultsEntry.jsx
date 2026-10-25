@@ -21,6 +21,8 @@ import {
   Printer,
   Download,
   ExternalLink,
+  Trash2,
+  Cpu,
 } from 'lucide-react';
 
 import api from '../../services/api';
@@ -41,6 +43,27 @@ export default function ResultsEntry({
   templates = [],
   onRefresh,
 }) {
+  // Helper to normalize status into one of 10 official upstream LIS statuses
+  const resolveStatus = (report = {}, current = {}) => {
+    const raw = String(current.status || report.status || '').toUpperCase().trim();
+    if (raw === 'DELETED') return 'DELETED';
+    if (raw === 'VERIFIED' || raw === 'APPROVED' || raw === 'RELEASED' || raw === 'PRINTING') return 'VERIFIED';
+    if (raw === 'SUBMITTED') return 'SUBMITTED';
+    if (raw === 'SAVED' || raw === 'RECORDED') return 'SAVED';
+    if (raw === 'CALCULATED_EDITED') return 'CALCULATED_EDITED';
+    if (raw === 'CALCULATED') return 'CALCULATED';
+    if (raw === 'RECEIVED_EDITED') return 'RECEIVED_EDITED';
+    if (raw === 'RECEIVED') return 'RECEIVED';
+    if (raw === 'SAMPLE') return 'SAMPLE';
+    if (raw === 'ENTRY' || raw === 'TESTING' || raw === 'IN TESTING') return 'ENTRY';
+
+    const val = current.resultData !== undefined ? current.resultData : report.resultData;
+    if (val && String(val).trim() !== '' && String(val).trim() !== '-') {
+      return 'SAVED';
+    }
+    return 'ENTRY';
+  };
+
   // Initialize internal state for editable test values
   const [resultsState, setResultsState] = useState(() => {
     const initial = {};
@@ -48,7 +71,7 @@ export default function ResultsEntry({
       initial[r.reportId] = {
         resultData: r.resultData || '',
         comment: r.comment || '',
-        status: r.status || 'SAVED',
+        status: resolveStatus(r, {}),
       };
     });
     return initial;
@@ -63,10 +86,13 @@ export default function ResultsEntry({
           updated[r.reportId] = {
             resultData: r.resultData || '',
             comment: r.comment || '',
-            status: r.status || 'SAVED',
+            status: resolveStatus(r, {}),
           };
         } else {
-          // If server result changed and user hasn't edited, update
+          // If server status changed and user hasn't edited, update
+          if (r.status && updated[r.reportId].status !== r.status) {
+            updated[r.reportId].status = r.status;
+          }
           if (updated[r.reportId].resultData === '' && r.resultData) {
             updated[r.reportId].resultData = r.resultData;
           }
@@ -82,9 +108,15 @@ export default function ResultsEntry({
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
+  // Automated / Manual Analyzer Sync state
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
+  const [lastSyncedTime, setLastSyncedTime] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+
   // UI Filters and Modals - DEFAULT TO 'table' for maximum compactness
   const [searchTerm, setSearchTerm] = useState('');
-  const [phaseFilter, setPhaseFilter] = useState('ALL'); // ALL, PHASE_1, PHASE_2, PHASE_3, PHASE_4, PHASE_5, ABNORMAL
+  const [phaseFilter, setPhaseFilter] = useState('ALL'); // ALL, ENTRY, SAMPLE, RECEIVED, RECEIVED_EDITED, CALCULATED, CALCULATED_EDITED, SAVED, SUBMITTED, VERIFIED, DELETED, ABNORMAL
   const [viewMode, setViewMode] = useState('table'); // 'table' | 'cards'
   const [guideModalOpen, setGuideModalOpen] = useState(false);
   const [guideSearchTerm, setGuideSearchTerm] = useState('');
@@ -105,44 +137,47 @@ export default function ResultsEntry({
       .map((r) => r.reportId);
   }, [reports, resultsState]);
 
-  // Compute Phase Statistics & Abnormal Counts
+  // Compute Live Numbers for All 10 Upstream LIS Statuses
   const phaseStats = useMemo(() => {
-    let phase1 = 0;
-    let phase2 = 0;
-    let phase3 = 0;
-    let phase4 = 0;
-    let phase5 = 0;
-    let abnormal = 0;
+    const stats = {
+      total: reports.length,
+      ENTRY: 0,
+      SAMPLE: 0,
+      RECEIVED: 0,
+      RECEIVED_EDITED: 0,
+      CALCULATED: 0,
+      CALCULATED_EDITED: 0,
+      SAVED: 0,
+      SUBMITTED: 0,
+      VERIFIED: 0,
+      DELETED: 0,
+      abnormal: 0,
+    };
 
     reports.forEach((r) => {
       const cur = resultsState[r.reportId] || {};
       const val = cur.resultData !== undefined ? cur.resultData : r.resultData;
-      const phase = getTestPhaseInfo({ ...r, resultData: val }, patient);
+      const status = resolveStatus(r, cur);
 
-      if (phase.phase === 1) phase1++;
-      else if (phase.phase === 2) phase2++;
-      else if (phase.phase === 3) phase3++;
-      else if (phase.phase === 4) phase4++;
-      else if (phase.phase === 5) phase5++;
+      if (stats[status] !== undefined) {
+        stats[status]++;
+      }
 
       const evalRes = evaluateResultValue(val, r.refRange, r.unit);
-      if (evalRes.isAbnormal) abnormal++;
+      if (evalRes.isAbnormal) stats.abnormal++;
     });
 
-    return {
-      total: reports.length,
-      phase1,
-      phase2,
-      phase3,
-      phase4,
-      phase5,
-      abnormal,
-    };
-  }, [reports, resultsState, patient]);
+    return stats;
+  }, [reports, resultsState]);
 
   // Filtered Reports list
   const filteredReports = useMemo(() => {
     return reports.filter((r) => {
+      const cur = resultsState[r.reportId] || {};
+      const val = cur.resultData !== undefined ? cur.resultData : r.resultData;
+      const status = resolveStatus(r, cur);
+      const isDeleted = status === 'DELETED';
+
       // 1. Search term match
       if (searchTerm) {
         const term = searchTerm.toLowerCase().trim();
@@ -152,37 +187,55 @@ export default function ResultsEntry({
         if (!testName.includes(term) && !dept.includes(term) && !samp.includes(term)) {
           return false;
         }
+        return true;
       }
 
-      // 2. Phase Filter match
-      if (phaseFilter === 'ALL') return true;
-
-      const cur = resultsState[r.reportId] || {};
-      const val = cur.resultData !== undefined ? cur.resultData : r.resultData;
-      const phase = getTestPhaseInfo({ ...r, resultData: val }, patient);
-
-      if (phaseFilter === 'PHASE_1') return phase.phase === 1;
-      if (phaseFilter === 'PHASE_2') return phase.phase === 2;
-      if (phaseFilter === 'PHASE_3') return phase.phase === 3;
-      if (phaseFilter === 'PHASE_4') return phase.phase === 4;
-      if (phaseFilter === 'PHASE_5') return phase.phase === 5;
+      // 2. Status Filter match
+      if (phaseFilter === 'ALL') return !isDeleted;
+      if (phaseFilter === 'DELETED') return isDeleted;
       if (phaseFilter === 'ABNORMAL') {
+        if (isDeleted) return false;
         const evalRes = evaluateResultValue(val, r.refRange, r.unit);
         return evalRes.isAbnormal;
       }
 
-      return true;
+      // Legacy fallback support
+      if (phaseFilter === 'PHASE_1') return status === 'SAMPLE';
+      if (phaseFilter === 'PHASE_2') return status === 'SAMPLE';
+      if (phaseFilter === 'PHASE_3') return status === 'ENTRY';
+      if (phaseFilter === 'PHASE_4') return status === 'SAVED' || status === 'RECEIVED' || status === 'CALCULATED';
+      if (phaseFilter === 'PHASE_5') return status === 'VERIFIED';
+
+      // Exact match for all 10 statuses
+      return status === phaseFilter;
     });
-  }, [reports, resultsState, searchTerm, phaseFilter, patient]);
+  }, [reports, resultsState, searchTerm, phaseFilter]);
 
   const handleInputChange = (reportId, field, val) => {
-    setResultsState((prev) => ({
-      ...prev,
-      [reportId]: {
-        ...prev[reportId],
-        [field]: val,
-      },
-    }));
+    setResultsState((prev) => {
+      const cur = prev[reportId] || {};
+      let nextStatus = cur.status;
+
+      // Real-time status progression when technician edits analyzer or calculated reading
+      if (field === 'resultData') {
+        const rep = reports.find((r) => r.reportId === reportId);
+        const origStatus = String(rep?.status || cur.status || '').toUpperCase().trim();
+        if (origStatus === 'RECEIVED') {
+          nextStatus = 'RECEIVED_EDITED';
+        } else if (origStatus === 'CALCULATED') {
+          nextStatus = 'CALCULATED_EDITED';
+        }
+      }
+
+      return {
+        ...prev,
+        [reportId]: {
+          ...cur,
+          [field]: val,
+          ...(nextStatus ? { status: nextStatus } : {}),
+        },
+      };
+    });
   };
 
   // Keyboard shortcut Ctrl+S or Cmd+S to save all
@@ -419,6 +472,154 @@ export default function ResultsEntry({
     setGuideModalOpen(true);
   };
 
+  // Sync Analyzer implementation (Manual + Automated background polling)
+  const handleSyncAnalyzer = async ({ silent = false } = {}) => {
+    const targetPid = patient?.patientId || patient?.slNo;
+    if (!targetPid) return;
+
+    if (!silent) setIsSyncing(true);
+
+    try {
+      const res = await api.get('/reports/patient-report', {
+        params: { patientId: targetPid, fresh: 'true' },
+      });
+
+      const serverReports = res.data?.reports || [];
+      let newReadingsCount = 0;
+      const updatedTestNames = [];
+
+      setResultsState((prev) => {
+        const next = { ...prev };
+
+        serverReports.forEach((sr) => {
+          const current = prev[sr.reportId];
+          const isDirty = dirtyReportIds.includes(sr.reportId);
+
+          if (!current) {
+            next[sr.reportId] = {
+              resultData: sr.resultData || '',
+              comment: sr.comment || '',
+              status: sr.status || 'SAVED',
+            };
+          } else if (!isDirty) {
+            const hasNewValue = sr.resultData && sr.resultData !== current.resultData;
+            const hasNewStatus = sr.status && sr.status !== current.status;
+
+            if (hasNewValue || hasNewStatus) {
+              if (hasNewValue) {
+                newReadingsCount++;
+                updatedTestNames.push(sr.testName);
+              }
+              next[sr.reportId] = {
+                resultData: sr.resultData || '',
+                comment: sr.comment || current.comment || '',
+                status: sr.status || current.status || 'SAVED',
+              };
+            }
+          }
+        });
+
+        return next;
+      });
+
+      const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      setLastSyncedTime(nowStr);
+
+      if (onRefresh) {
+        await onRefresh(true);
+      }
+
+      if (!silent) {
+        if (newReadingsCount > 0) {
+          setSuccessMsg(`Analyzer Sync Complete: Transmitted ${newReadingsCount} new test reading${newReadingsCount > 1 ? 's' : ''} (${updatedTestNames.slice(0, 3).join(', ')}${updatedTestNames.length > 3 ? '...' : ''}) at ${nowStr}`);
+        } else {
+          setSuccessMsg(`Analyzer Synchronized — All parameters up to date (${nowStr})`);
+        }
+      } else if (newReadingsCount > 0) {
+        setSuccessMsg(`Analyzer machine transmitted reading${newReadingsCount > 1 ? 's' : ''} for: ${updatedTestNames.slice(0, 3).join(', ')}`);
+      }
+    } catch (err) {
+      if (!silent) {
+        setErrorMsg(err.response?.data?.Message || 'Failed to sync with analyzer machine');
+      }
+    } finally {
+      if (!silent) setIsSyncing(false);
+    }
+  };
+
+  // Automated background polling every 10 seconds (respects document visibility & pauses during active user typing saves)
+  useEffect(() => {
+    if (!autoSyncEnabled) return;
+
+    const intervalId = setInterval(() => {
+      if (!document.hidden && !isSyncing && !savingAll) {
+        handleSyncAnalyzer({ silent: true });
+      }
+    }, 10000);
+
+    return () => clearInterval(intervalId);
+  }, [autoSyncEnabled, isSyncing, savingAll, patient?.patientId, dirtyReportIds.length]);
+
+  // Individual Report Delete Handler
+  const handleDeleteReport = async (report) => {
+    if (!report?.reportId) return;
+    const targetPid = patient?.patientId || patient?.slNo;
+    setDeletingId(report.reportId);
+    setErrorMsg('');
+
+    try {
+      await api.post('/reports/delete', {
+        patientId: targetPid,
+        reportId: report.reportId,
+      });
+
+      setResultsState((prev) => ({
+        ...prev,
+        [report.reportId]: {
+          ...(prev[report.reportId] || {}),
+          status: 'DELETED',
+        },
+      }));
+
+      setSuccessMsg(`Test parameter "${report.testName}" marked as DELETED. You can restore it anytime.`);
+      if (onRefresh) await onRefresh(true);
+    } catch (err) {
+      setErrorMsg(err.response?.data?.Message || 'Failed to delete test parameter');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  // Individual Report Restore Handler
+  const handleRestoreReport = async (report) => {
+    if (!report?.reportId) return;
+    const targetPid = patient?.patientId || patient?.slNo;
+    setDeletingId(report.reportId);
+    setErrorMsg('');
+
+    try {
+      await api.post('/reports/restore', {
+        patientId: targetPid,
+        reportId: report.reportId,
+      });
+
+      setResultsState((prev) => ({
+        ...prev,
+        [report.reportId]: {
+          ...(prev[report.reportId] || {}),
+          status: 'SAVED',
+        },
+      }));
+
+      setSuccessMsg(`Test parameter "${report.testName}" restored successfully!`);
+      if (onRefresh) await onRefresh(true);
+    } catch (err) {
+      setErrorMsg(err.response?.data?.Message || 'Failed to restore test parameter');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <div className="space-y-2.5 w-full">
       {/* 1. Streamlined Clinical Workstation Header & Command Bar */}
@@ -478,6 +679,46 @@ export default function ResultsEntry({
               </button>
             )}
           </div>
+
+          {/* Manual Analyzer Sync */}
+          <button
+            type="button"
+            onClick={() => handleSyncAnalyzer({ silent: false })}
+            disabled={isSyncing}
+            className="flex items-center gap-1.5 px-3 py-1 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-300 rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+            title={lastSyncedTime ? `Manual sync with lab analyzer (Last synced: ${lastSyncedTime})` : 'Sync results from analyzer machine'}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-sky-700 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? 'Syncing...' : 'Sync Analyzer'}</span>
+          </button>
+
+          {/* Automated Sync Toggle */}
+          <button
+            type="button"
+            onClick={() => {
+              const nextState = !autoSyncEnabled;
+              setAutoSyncEnabled(nextState);
+              if (nextState) {
+                setSuccessMsg('Automated analyzer sync activated (polling every 10s)');
+                handleSyncAnalyzer({ silent: true });
+              } else {
+                setSuccessMsg('Automated analyzer sync paused');
+              }
+            }}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+              autoSyncEnabled
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs'
+                : 'bg-slate-100 text-slate-500 border-slate-300'
+            }`}
+            title={autoSyncEnabled ? `Auto-sync active (every 10s)${lastSyncedTime ? ` • Last: ${lastSyncedTime}` : ''} — click to pause` : 'Auto-sync paused — click to activate'}
+          >
+            <span
+              className={`w-2 h-2 rounded-full ${
+                autoSyncEnabled ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
+              }`}
+            />
+            <span className="hidden sm:inline">{autoSyncEnabled ? 'Auto-Sync (10s)' : 'Auto-Sync: Off'}</span>
+          </button>
 
           {/* Clinical Reference Guide */}
           <button
@@ -577,33 +818,12 @@ export default function ResultsEntry({
         </div>
       </div>
 
-      {/* 2. Diagnostic Phase Stepper & Specimen Pipeline (Single-line compact) */}
+      {/* 2. Official Upstream LIS Status Filters (Live Numbers) */}
       <ResultsPhaseTracker
         phaseStats={phaseStats}
         activePhaseFilter={phaseFilter}
         onSelectPhaseFilter={setPhaseFilter}
-        onReceiveAllSamples={handleReceiveAllSamples}
-        receivingAll={receivingAll}
       />
-
-      {/* 3. High-Impact Abnormal Alert Strip (if flagged tests exist and not already filtering) */}
-      {phaseStats.abnormal > 0 && phaseFilter !== 'ABNORMAL' && (
-        <div className="bg-rose-50 border border-rose-300 rounded-lg px-3 py-1.5 flex items-center justify-between text-xs text-rose-900 animate-in fade-in">
-          <div className="flex items-center gap-2 font-semibold">
-            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 animate-bounce" />
-            <span>
-              <strong>{phaseStats.abnormal} test parameter{phaseStats.abnormal > 1 ? 's' : ''}</strong> flagged with abnormal or critical readings in this panel.
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setPhaseFilter('ABNORMAL')}
-            className="px-2.5 py-0.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded font-bold text-[11px] shadow-2xs transition-all cursor-pointer"
-          >
-            Show Only Flagged ({phaseStats.abnormal})
-          </button>
-        </div>
-      )}
 
       {/* Notifications */}
       {successMsg && (
@@ -662,12 +882,15 @@ export default function ResultsEntry({
           resultsState={resultsState}
           patient={patient}
           savingId={savingId}
+          deletingId={deletingId}
           onInputChange={handleInputChange}
           onSaveSingle={saveSingleReport}
           onCalculate={handleCalculate}
           onSetDefaultResult={handleSetDefaultResult}
           onOpenGuide={openClinicalGuide}
           onReceiveSample={handleReceiveSample}
+          onDeleteReport={handleDeleteReport}
+          onRestoreReport={handleRestoreReport}
         />
       ) : (
         <ResultsCardView
@@ -675,12 +898,15 @@ export default function ResultsEntry({
           resultsState={resultsState}
           patient={patient}
           savingId={savingId}
+          deletingId={deletingId}
           onInputChange={handleInputChange}
           onSaveSingle={saveSingleReport}
           onCalculate={handleCalculate}
           onSetDefaultResult={handleSetDefaultResult}
           onOpenGuide={openClinicalGuide}
           onReceiveSample={handleReceiveSample}
+          onDeleteReport={handleDeleteReport}
+          onRestoreReport={handleRestoreReport}
         />
       )}
 

@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { config } from '../config/config.env.js';
+import { sessionService } from '../services/service.session.js';
 
 export const requireAuth = (req, res, next) => {
   try {
@@ -20,12 +21,27 @@ export const requireAuth = (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, config.jwtSecret);
+
+    // Validate single active session concurrency:
+    // If the same user logged in from another browser/IP, this token's sessionId is superseded
+    if (decoded.loginId && decoded.sessionId) {
+      const validation = sessionService.validateSession(decoded.loginId, decoded.sessionId);
+      if (!validation.valid) {
+        return res.status(401).json({
+          STATUS: 'FAILED',
+          StatusCode: validation.reason === 'SESSION_SUPERSEDED' ? '1150' : '1140',
+          Message: validation.message || 'Session expired: You have been logged in from another browser.',
+          reason: validation.reason,
+        });
+      }
+    }
+
     req.user = decoded;
     next();
   } catch (err) {
     return res.status(401).json({
       STATUS: 'FAILED',
-      StatusCode: '401',
+      StatusCode: '1140',
       Message: 'Invalid or expired session. Please login again.',
       error: err.message,
     });

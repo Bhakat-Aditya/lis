@@ -34,7 +34,7 @@ export default function BillingPage() {
   const fetchBillingList = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/patients/list', { params: { allDates: 'true', withBilling: 'true' } });
+      const res = await api.get('/patients/list', { params: { allDates: 'true' } });
       setPatients(res.data?.patients || []);
     } catch (err) {
       console.warn('Billing list error:', err.message);
@@ -72,7 +72,8 @@ export default function BillingPage() {
       const billTotal = Number(p.totalBill || 0);
       const billPaid = Number(p.paidBill || 0);
       const billDue = Number(p.balance ?? Math.max(0, billTotal - billPaid));
-      const isPaid = billTotal > 0 && billDue <= 0 && (p.billPayStatus === 2 || p.billPayStatus === '2' || billPaid >= billTotal);
+      const statusNum = Number(p.billPayStatus);
+      const isPaid = statusNum === 2 || (billTotal > 0 && billDue <= 0 && billPaid >= billTotal);
 
       if (statusFilter === 'PAID' && !isPaid) return false;
       if (statusFilter === 'DUE' && isPaid) return false;

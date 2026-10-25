@@ -24,16 +24,35 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor: handle 401s gracefully
+// Response interceptor: handle 401s and superseded session invalidation gracefully
 api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response && error.response.status === 401) {
-      // Clear token and redirect to login if session expired
+  (response) => {
+    // If backend returns session invalid/logout code in a 200 wrapper
+    if (response.data && (response.data.StatusCode === '1140' || response.data.StatusCode === '1150')) {
       localStorage.removeItem('lis_auth_token');
       localStorage.removeItem('lis_user');
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        const reasonMsg = response.data.Message || 'Session expired: You have been logged in from another browser.';
+        window.location.href = `/login?reason=${encodeURIComponent(reasonMsg)}`;
+      }
+    }
+    return response;
+  },
+  (error) => {
+    if (
+      error.response &&
+      (error.response.status === 401 ||
+        error.response.data?.StatusCode === '1150' ||
+        error.response.data?.StatusCode === '1140')
+    ) {
+      // Clear token and redirect to login if session expired or logged in from another browser
+      localStorage.removeItem('lis_auth_token');
+      localStorage.removeItem('lis_user');
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        const reasonMsg =
+          error.response.data?.Message ||
+          'Session expired: You have been logged in from another browser or device.';
+        window.location.href = `/login?reason=${encodeURIComponent(reasonMsg)}`;
       }
     }
     return Promise.reject(error);

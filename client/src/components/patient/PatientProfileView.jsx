@@ -75,14 +75,17 @@ export default function PatientProfileView({
   const isBilled = testsTotal > 0;
   const discountAmount = Number(patient.discount || 0);
   const netDue = Math.max(0, testsTotal - discountAmount);
-  const depositsAmount = Number(patient.paidBill || 0);
+  const isStatusPaid = patient.billPayStatus === 2 || patient.billPayStatus === '2';
+  const depositsAmount = Number(patient.paidBill || 0) > 0
+    ? Number(patient.paidBill)
+    : (isStatusPaid && testsTotal > 0 ? testsTotal : Number(patient.paidBill || 0));
   const explicitDue = (patient.balance !== undefined && patient.balance !== null)
     ? Number(patient.balance)
     : (patient.dueAmount !== undefined ? Number(patient.dueAmount) : null);
   const balanceDue = isBilled
-    ? (explicitDue !== null ? explicitDue : Math.max(0, netDue - depositsAmount))
+    ? (isStatusPaid ? 0 : (explicitDue !== null ? explicitDue : Math.max(0, netDue - depositsAmount)))
     : 0;
-  const isPaid = isBilled && balanceDue <= 0 && (depositsAmount >= netDue || patient.billPayStatus === 2 || patient.billPayStatus === '2');
+  const isPaid = isBilled && (isStatusPaid || (balanceDue <= 0 && depositsAmount >= netDue));
   const advanceAmount = Number(patient.advance || 0);
   const paymentLines = patient.paymentLines || patient.payments || [];
 

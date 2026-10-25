@@ -1,5 +1,6 @@
 import { upstreamService } from '../services/service.upstream.js';
 import { cacheService, CACHE_KEYS } from '../services/service.cache.js';
+import { invalidateReportCache } from './controller.report.js';
 
 /**
  * Format date to YYYY-MM-DD
@@ -10,6 +11,48 @@ const formatDate = (date = new Date()) => {
   const day = `${d.getDate()}`.padStart(2, '0');
   const year = d.getFullYear();
   return [year, month, day].join('-');
+};
+
+// In-flight deduplication and short-lived cache (5s) for GETPATIENTLIST
+const patientListCache = new Map();
+const inFlightPatientList = new Map();
+
+export const invalidatePatientListCache = () => {
+  patientListCache.clear();
+};
+
+const fetchUpstreamPatientList = async (fromDate, toDate, sid) => {
+  const cacheKey = `${fromDate}_${toDate}_${sid || 'default'}`;
+
+  // 1. Check 5s memory cache to coalesce simultaneous calls
+  const cached = patientListCache.get(cacheKey);
+  if (cached && (Date.now() - cached.timestamp < 5000)) {
+    return cached.data;
+  }
+
+  // 2. In-flight request deduplication
+  if (inFlightPatientList.has(cacheKey)) {
+    return await inFlightPatientList.get(cacheKey);
+  }
+
+  const fetchPromise = upstreamService.get(
+    'GETPATIENTLIST',
+    { fromDate, toDate },
+    sid
+  ).then((res) => {
+    patientListCache.set(cacheKey, {
+      timestamp: Date.now(),
+      data: res,
+    });
+    inFlightPatientList.delete(cacheKey);
+    return res;
+  }).catch((err) => {
+    inFlightPatientList.delete(cacheKey);
+    throw err;
+  });
+
+  inFlightPatientList.set(cacheKey, fetchPromise);
+  return await fetchPromise;
 };
 
 export const getPatients = async (req, res, next) => {
@@ -26,9 +69,9 @@ export const getPatients = async (req, res, next) => {
     let fromDate = explicitFrom || (search || allDates ? '2026-01-01' : today);
     let toDate = explicitTo || (search || allDates ? '2026-12-31' : today);
 
-    let upstreamData = await upstreamService.get(
-      'GETPATIENTLIST',
-      { fromDate, toDate },
+    let upstreamData = await fetchUpstreamPatientList(
+      fromDate,
+      toDate,
       req.user?.upstreamSid
     );
 
@@ -36,9 +79,9 @@ export const getPatients = async (req, res, next) => {
 
     // If searched within a specific date range and no results, try searching broad date range
     if (search && patients.length === 0 && explicitFrom) {
-      const broadData = await upstreamService.get(
-        'GETPATIENTLIST',
-        { fromDate: '2026-01-01', toDate: '2026-12-31' },
+      const broadData = await fetchUpstreamPatientList(
+        '2026-01-01',
+        '2026-12-31',
         req.user?.upstreamSid
       );
       if (broadData?.payLoadJSON?.patients?.length > 0) {
@@ -48,9 +91,9 @@ export const getPatients = async (req, res, next) => {
 
     // If no explicit date was requested and today has 0 records, load recent records
     if (!explicitFrom && !search && !allDates && patients.length === 0) {
-      const broadData = await upstreamService.get(
-        'GETPATIENTLIST',
-        { fromDate: '2026-01-01', toDate: '2026-12-31' },
+      const broadData = await fetchUpstreamPatientList(
+        '2026-01-01',
+        '2026-12-31',
         req.user?.upstreamSid
       );
       if (broadData?.payLoadJSON?.patients?.length > 0) {
@@ -80,8 +123,60 @@ export const getPatients = async (req, res, next) => {
       patients = patients.filter((p) => String(p.branch) === String(branch));
     }
 
+    // Official Upstream Patient Directory Status Constants:
+    // STATUS_ENTRY = 'ENTRY', STATUS_SAMPLE = 'SAMPLE', STATUS_DATA_PART = 'RESULT PARTLY',
+    // STATUS_DATA_FULL = 'RESULT FULLY', STATUS_REPORT_PRINT = 'PRINTING', STATUS_REPORT_RELEASED = 'RELEASED'
+    const normalizePatientStatus = (raw) => {
+      const s = String(raw || '').toUpperCase().trim();
+      if (s === 'SAMPLE' || s.includes('SAMPLE')) return 'SAMPLE';
+      if (s === 'RESULT PARTLY' || s === 'DATA_PART' || s.includes('PART')) return 'RESULT PARTLY';
+      if (s === 'RESULT FULLY' || s === 'DATA_FULL' || s.includes('FULL')) return 'RESULT FULLY';
+      if (s === 'PRINTING' || s === 'PRINT' || s.includes('PRINT')) return 'PRINTING';
+      if (s === 'RELEASED' || s === 'RELEASE' || s === 'READY' || s.includes('RELEASE')) return 'RELEASED';
+      return 'ENTRY';
+    };
+
+    // Upstream Patient Status & Payment Status Constants
+    // PAYMENT_STATUS_CODE_NOBILL = 1, PAYMENT_STATUS_CODE_PAID = 2, PAYMENT_STATUS_CODE_UNPAID = 3
+    const PAYMENT_STATUS_CODE_NOBILL = 1;
+    const PAYMENT_STATUS_CODE_PAID = 2;
+    const PAYMENT_STATUS_CODE_UNPAID = 3;
+
+    // Use patient bill payment status directly from each patient JSON (do not call getBILL api)
+    // Strictly map status to one of the 6 official patient directory statuses
+    patients = patients.map((p) => {
+      const total = Number(p.totalBill || 0);
+
+      let statusNum = Number(p.billPayStatus);
+      if (!statusNum || isNaN(statusNum)) {
+        statusNum = total > 0 ? PAYMENT_STATUS_CODE_UNPAID : PAYMENT_STATUS_CODE_NOBILL;
+      }
+
+      const isPaid = statusNum === PAYMENT_STATUS_CODE_PAID;
+      const isUnpaid = statusNum === PAYMENT_STATUS_CODE_UNPAID;
+      const isNoBill = statusNum === PAYMENT_STATUS_CODE_NOBILL;
+
+      const paid = isPaid ? total : Number(p.paidBill || 0);
+      const due = (isPaid || isNoBill)
+        ? 0
+        : (p.balance !== undefined ? Number(p.balance) : Math.max(0, total - paid));
+
+      const normalizedStatus = normalizePatientStatus(p.status);
+
+      return {
+        ...p,
+        status: normalizedStatus,
+        totalBill: total,
+        paidBill: paid,
+        balance: due,
+        dueAmount: due,
+        billPayStatus: statusNum,
+      };
+    });
+
     if (status) {
-      patients = patients.filter((p) => String(p.status || '').toLowerCase() === status.toLowerCase());
+      const targetNorm = normalizePatientStatus(status);
+      patients = patients.filter((p) => p.status === targetNorm);
     }
 
     // Always sort patients so most recent date and newest PID are at the top
@@ -102,35 +197,6 @@ export const getPatients = async (req, res, next) => {
         latestDate = formatDate(d);
       }
     }
-
-    // Use patient billing status provided directly inside each patient JSON
-    // PAYMENT_STATUS_CODE_NOBILL = 1, PAYMENT_STATUS_CODE_PAID = 2, PAYMENT_STATUS_CODE_UNPAID = 3
-    patients = patients.map((p) => {
-      const pid = p.patientId || p.slNo;
-      const total = Number(p.totalBill || 0);
-      const cached = upstreamService.getCachedBilling(pid);
-
-      let statusNum = Number(p.billPayStatus);
-      if (!statusNum || isNaN(statusNum)) {
-        statusNum = total > 0 ? 3 : 1;
-      }
-
-      const isPaid = statusNum === 2;
-      const paid = cached ? (cached.paid || 0) : (isPaid ? total : Number(p.paidBill || 0));
-      const due = isPaid ? 0 : (cached ? cached.due : (p.balance !== undefined ? Number(p.balance) : Math.max(0, total - paid)));
-
-      return {
-        ...p,
-        totalBill: cached?.total || total,
-        discount: cached?.discount || 0,
-        roundoff: cached?.roundoff || 0,
-        grossTotal: cached?.gross || total,
-        paidBill: paid,
-        balance: due,
-        dueAmount: due,
-        billPayStatus: statusNum,
-      };
-    });
 
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
@@ -200,6 +266,8 @@ export const addPatient = async (req, res, next) => {
       if (match) patientId = match[0];
     }
 
+    invalidatePatientListCache();
+
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
       StatusCode: upstreamData?.StatusCode || '0000',
@@ -260,6 +328,8 @@ export const updatePatient = async (req, res, next) => {
 
     const upstreamData = await upstreamService.post('UPDATEPATIENT', params, null, req.user?.upstreamSid);
 
+    invalidatePatientListCache();
+
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
       StatusCode: upstreamData?.StatusCode || '0000',
@@ -283,6 +353,8 @@ export const deletePatient = async (req, res, next) => {
     }
 
     const upstreamData = await upstreamService.post('DELETEPATIENT', { patientId }, null, req.user?.upstreamSid);
+
+    invalidatePatientListCache();
 
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
@@ -611,6 +683,7 @@ export const addMultipleTests = async (req, res, next) => {
     };
 
     const upstreamData = await upstreamService.post('ADDTESTMULTIPLE', params, null, req.user?.upstreamSid);
+    invalidateReportCache(cleanPatientId);
 
     if (upstreamData?.StatusCode === '1211' || upstreamData?.STATUS === 'FAILED') {
       console.error('[AddTests] Upstream returned error (1211):', {

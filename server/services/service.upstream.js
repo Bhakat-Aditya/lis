@@ -1,6 +1,14 @@
 import axios from 'axios';
 import { config } from '../config/config.env.js';
 
+export const UPSTREAM_ERROR_MAP = {
+  '0001': 'API missing',
+  '1140': 'Session invalid',
+  '1150': 'Auto logout',
+  '8888': 'Limit exceeded',
+  '1210': 'No access / Access disabled',
+};
+
 class UpstreamService {
   constructor() {
     this.baseUrl = config.lab.url;
@@ -55,23 +63,36 @@ class UpstreamService {
   }
 
   /**
-   * User login via upstream APIServlet
+   * User login via upstream APIServlet with IP and User-Agent
    */ 
-  async userLogin(loginId, password, totp = null) {
+  async userLogin(loginId, password, totp = null, ip = null, userAgent = null) {
     try {
-      let apiAction = 'LOGIN';
       let queryParams = `api=LOGIN&loginid=${encodeURIComponent(loginId)}&password=${encodeURIComponent(password)}`;
       
       if (totp) {
-        apiAction = 'LOGIN2FA';
         queryParams = `api=LOGIN2FA&loginid=${encodeURIComponent(loginId)}&password=${encodeURIComponent(password)}&totp=${encodeURIComponent(totp)}`;
+      }
+      if (ip) {
+        queryParams += `&ip=${encodeURIComponent(ip)}`;
+      }
+      if (userAgent) {
+        queryParams += `&userAgent=${encodeURIComponent(userAgent)}`;
+      }
+
+      const headers = {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      };
+      if (userAgent) {
+        headers['User-Agent'] = userAgent;
+      }
+      if (ip) {
+        headers['X-Forwarded-For'] = ip;
+        headers['X-Real-IP'] = ip;
       }
 
       const url = `${this.baseUrl}/APIServlet?${queryParams}`;
       const res = await axios.post(url, null, {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
+        headers,
         timeout: 10000,
       });
 
@@ -128,23 +149,10 @@ class UpstreamService {
         timeout: 15000,
       });
 
-      // If session expired on upstream (1001, 1201, 1002), try re-login and retry once with master session
-      const isSessionError =
-        res.data?.StatusCode === '1001' ||
-        res.data?.StatusCode === '1201' ||
-        res.data?.StatusCode === '1002' ||
-        res.data?.Message?.toLowerCase().includes('session') ||
-        (sid && res.data?.STATUS === 'FAILED');
-
-      if (isSessionError) {
-        console.warn(`[Upstream] Session error (${res.data?.StatusCode || 'FAILED'}) on GET, refreshing master sid...`);
-        const newSid = await this.ensureMasterSession(true);
-        const retryUrl = `${this.baseUrl}/GetAPIServlet;jsessionid=${newSid}?${query}`;
-        const retryRes = await axios.get(retryUrl, {
-          headers: { 'Cookie': `JSESSIONID=${newSid}` },
-          timeout: 15000,
-        });
-        return retryRes.data;
+      if (res.data && res.data.StatusCode && UPSTREAM_ERROR_MAP[res.data.StatusCode]) {
+        if (!res.data.Message || res.data.Message === 'FAILED') {
+          res.data.Message = `${UPSTREAM_ERROR_MAP[res.data.StatusCode]} (${res.data.StatusCode})`;
+        }
       }
 
       return res.data;
@@ -171,26 +179,10 @@ class UpstreamService {
         timeout: 15000,
       });
 
-      // If session expired on upstream (1001, 1201, 1002), try re-login and retry once with master session
-      const isSessionError =
-        res.data?.StatusCode === '1001' ||
-        res.data?.StatusCode === '1201' ||
-        res.data?.StatusCode === '1002' ||
-        res.data?.Message?.toLowerCase().includes('session') ||
-        (sid && res.data?.STATUS === 'FAILED' && res.data?.StatusCode !== '0000');
-
-      if (isSessionError) {
-        console.warn(`[Upstream] Session error (${res.data?.StatusCode || 'FAILED'}) on POST, refreshing master sid...`);
-        const newSid = await this.ensureMasterSession(true);
-        const retryUrl = `${this.baseUrl}/APIServlet;jsessionid=${newSid}?${query}`;
-        const retryRes = await axios.post(retryUrl, body || query, {
-          headers: {
-            'Cookie': `JSESSIONID=${newSid}`,
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          timeout: 15000,
-        });
-        return retryRes.data;
+      if (res.data && res.data.StatusCode && UPSTREAM_ERROR_MAP[res.data.StatusCode]) {
+        if (!res.data.Message || res.data.Message === 'FAILED') {
+          res.data.Message = `${UPSTREAM_ERROR_MAP[res.data.StatusCode]} (${res.data.StatusCode})`;
+        }
       }
 
       return res.data;
@@ -225,7 +217,7 @@ class UpstreamService {
   }
 
   /**
-   * Fetch real-time billing summary (uses native GETBILLJSON first, fallbacks to billing.jsp)
+   * Fetch real-time billing summary (uses native GETBILLJSON)
    */
   async getBillingSummary(patientId, sid = null) {
     if (!patientId) return null;
@@ -236,19 +228,8 @@ class UpstreamService {
     // 1. Try native GETBILLJSON (accurate, structured JSON from upstream database)
     try {
       let billData = await this.get('GETBILLJSON', { patientId: cleanId }, activeSid);
-      if (!billData?.payLoadJSON?.billUrl && rawId !== cleanId) {
+      if (!billData?.payLoadJSON?.bill && rawId !== cleanId) {
         billData = await this.get('GETBILLJSON', { patientId: rawId }, activeSid);
-      }
-
-      // If GETBILLJSON has FAILED response, call BILLGENERATE to generate bill
-      if (billData?.STATUS === 'FAILED' || !billData?.payLoadJSON?.bill) {
-        try {
-          console.log(`[Upstream] GETBILLJSON failed/empty for ${cleanId}, invoking BILLGENERATE...`);
-          await this.post('BILLGENERATE', { patientId: cleanId }, null, activeSid);
-          billData = await this.get('GETBILLJSON', { patientId: cleanId }, activeSid);
-        } catch (bgErr) {
-          console.warn(`[Upstream] BILLGENERATE fallback note for ${cleanId}:`, bgErr.message);
-        }
       }
 
       const b = billData?.payLoadJSON?.bill;
@@ -290,51 +271,7 @@ class UpstreamService {
         return summary;
       }
     } catch (e) {
-      console.warn(`[Upstream] GETBILLJSON failed for ${cleanId}, attempting BILLGENERATE recovery:`, e.message);
-      try {
-        await this.post('BILLGENERATE', { patientId: cleanId }, null, activeSid);
-        const retryData = await this.get('GETBILLJSON', { patientId: cleanId }, activeSid);
-        const b = retryData?.payLoadJSON?.bill;
-        if (b && typeof b === 'object') {
-          const total = parseFloat(b['Total Bill']) || 0;
-          const gross = parseFloat(b['Total Amount']) || total;
-          const discount = parseFloat(b['Discount Amount']) || 0;
-          const roundoff = parseFloat(b['Round Off']) || 0;
-          const paid = parseFloat(b['Total Payment']) || 0;
-          const due = parseFloat(b['Total Outstanding']) || 0;
-          const isPaid = (total > 0 && due <= 0 && paid >= total) || (total === 0 && paid === 0 && due === 0);
-
-          const paymentLines = (b['Payment List'] || []).map((p) => ({
-            mode: p['Payment Mode'] || 'CASH',
-            amount: parseFloat(p['Amount']) || 0,
-            date: p['Payment Date'] || '',
-            info: p['Info'] || '',
-          }));
-
-          const summary = {
-            patientId: cleanId,
-            isPaid,
-            total,
-            gross,
-            discount,
-            roundoff,
-            paid,
-            due,
-            paymentLines,
-            testList: b['Test List'] || [],
-            billUrl: retryData?.payLoadJSON?.billUrl || '',
-            timestamp: Date.now(),
-          };
-
-          const uId = cleanId.toUpperCase();
-          const altId = uId.startsWith('P') ? uId.slice(1) : `P${uId}`;
-          this.billingCache.set(uId, summary);
-          this.billingCache.set(altId, summary);
-          return summary;
-        }
-      } catch (bgErr) {
-        console.warn(`[Upstream] BILLGENERATE recovery also failed for ${cleanId}:`, bgErr.message);
-      }
+      console.warn(`[Upstream] GETBILLJSON note for ${cleanId}:`, e.message);
     }
 
     // 2. Fallback to billing.jsp scraping

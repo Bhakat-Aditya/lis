@@ -12,6 +12,8 @@ import {
   downloadResult,
   sendWhatsApp,
   streamReportPdf,
+  deleteReport,
+  restoreReport,
 } from '../controllers/controller.report.js';
 import { requireAuth } from '../middleware/middleware.auth.js';
 import { requireRoles, ROLES } from '../middleware/middleware.role.js';
@@ -24,6 +26,8 @@ router.get('/patient-report', getPatientReport);
 router.get('/pdf', streamReportPdf);
 
 router.post('/update', requireRoles([ROLES.SUPER, ROLES.TECHNICIAN, ROLES.DOCTOR]), updateReport);
+router.post('/delete', requireRoles([ROLES.SUPER, ROLES.TECHNICIAN, ROLES.DOCTOR]), deleteReport);
+router.post('/restore', requireRoles([ROLES.SUPER, ROLES.TECHNICIAN, ROLES.DOCTOR]), restoreReport);
 router.post('/receive-sample', requireRoles([ROLES.SUPER, ROLES.TECHNICIAN, ROLES.RECEPTIONIST]), receiveSample);
 router.post('/verify', requireRoles([ROLES.SUPER, ROLES.DOCTOR, ROLES.TECHNICIAN]), verifyReport);
 router.post('/approve', requireRoles([ROLES.SUPER, ROLES.DOCTOR, ROLES.TECHNICIAN]), approveReport);

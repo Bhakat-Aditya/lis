@@ -155,8 +155,36 @@ export function getTestPhaseInfo(report = {}, patient = {}) {
   const pStatus = String(patient.status || '').toUpperCase().trim();
   const hasValue = Boolean(report.resultData && String(report.resultData).trim() !== '' && report.resultData !== '-');
 
-  // Phase 5: Verified & Pathologist Approved
-  if (rStatus === 'APPROVED' || rStatus === 'RELEASED' || rStatus === 'PRINTING' || pStatus === 'PRINTING' || pStatus === 'APPROVED') {
+  // Phase 0: Soft Deleted Test Parameter
+  if (rStatus === 'DELETED') {
+    return {
+      phase: 0,
+      phaseId: 'DELETED',
+      name: 'Deleted Parameter',
+      shortLabel: 'Deleted',
+      colorName: 'rose',
+      theme: {
+        badgeBg: 'bg-rose-100 text-rose-900 border-rose-300',
+        dot: 'bg-rose-600',
+        ring: 'ring-rose-400',
+        border: 'border-rose-300',
+        cardGlow: 'bg-rose-50/40 line-through opacity-75',
+        stepperBg: 'bg-rose-600 text-white',
+      },
+      icon: 'Trash2',
+      desc: 'Test parameter deleted from this panel — click Restore to recover',
+    };
+  }
+
+  // Phase 5: Verified & Pathologist Approved / Released / Printing
+  if (
+    rStatus === 'APPROVED' ||
+    rStatus === 'RELEASED' ||
+    rStatus === 'PRINTING' ||
+    pStatus === 'PRINTING' ||
+    pStatus === 'APPROVED' ||
+    pStatus === 'RELEASED'
+  ) {
     return {
       phase: 5,
       phaseId: 'APPROVED',
@@ -176,7 +204,7 @@ export function getTestPhaseInfo(report = {}, patient = {}) {
     };
   }
 
-  // Phase 4.1: Doctor Verified
+  // Phase 4.1: Doctor / Pathologist Verified
   if (rStatus === 'VERIFIED') {
     return {
       phase: 4,
@@ -193,11 +221,116 @@ export function getTestPhaseInfo(report = {}, patient = {}) {
         stepperBg: 'bg-teal-600 text-white',
       },
       icon: 'ShieldCheck',
-      desc: 'Technical & medical review complete — pending final digital sign-off',
+      desc: 'Technical & medical review complete — verified by doctor',
     };
   }
 
-  // Phase 4.2: Result Recorded / Saved
+  // Phase 4.2: Submitted for Verification
+  if (rStatus === 'SUBMITTED') {
+    return {
+      phase: 4,
+      phaseId: 'SUBMITTED',
+      name: 'Report Submitted',
+      shortLabel: 'Submitted',
+      colorName: 'blue',
+      theme: {
+        badgeBg: 'bg-blue-100 text-blue-950 border-blue-300',
+        dot: 'bg-blue-600',
+        ring: 'ring-blue-400',
+        border: 'border-blue-300',
+        cardGlow: 'bg-blue-50/40',
+        stepperBg: 'bg-blue-600 text-white',
+      },
+      icon: 'CheckCircle2',
+      desc: 'Results entered and submitted to pathologist for verification',
+    };
+  }
+
+  // Phase 4.3: Auto-Calculated Formula Result
+  if (rStatus === 'CALCULATED') {
+    return {
+      phase: 4,
+      phaseId: 'CALCULATED',
+      name: 'Calculated Result',
+      shortLabel: 'Calculated',
+      colorName: 'indigo',
+      theme: {
+        badgeBg: 'bg-indigo-100 text-indigo-950 border-indigo-300',
+        dot: 'bg-indigo-600',
+        ring: 'ring-indigo-400',
+        border: 'border-indigo-300',
+        cardGlow: 'bg-indigo-50/40',
+        stepperBg: 'bg-indigo-600 text-white',
+      },
+      icon: 'Calculator',
+      desc: 'Computed via laboratory automated formula algorithm',
+    };
+  }
+
+  // Phase 4.4: Calculated Result Edited by Technician
+  if (rStatus === 'CALCULATED_EDITED') {
+    return {
+      phase: 4,
+      phaseId: 'CALCULATED_EDITED',
+      name: 'Calculated (Edited)',
+      shortLabel: 'Calc Edited',
+      colorName: 'indigo',
+      theme: {
+        badgeBg: 'bg-indigo-50 text-indigo-900 border-indigo-200',
+        dot: 'bg-indigo-500',
+        ring: 'ring-indigo-400',
+        border: 'border-indigo-300',
+        cardGlow: 'bg-indigo-50/30',
+        stepperBg: 'bg-indigo-600 text-white',
+      },
+      icon: 'Calculator',
+      desc: 'Automated formula calculation adjusted by bench technician',
+    };
+  }
+
+  // Phase 4.5: Analyzer Machine Direct Feed Received
+  if (rStatus === 'RECEIVED') {
+    return {
+      phase: 4,
+      phaseId: 'RECEIVED',
+      name: 'Received from Analyzer',
+      shortLabel: 'Analyzer',
+      colorName: 'cyan',
+      theme: {
+        badgeBg: 'bg-cyan-100 text-cyan-950 border-cyan-300',
+        dot: 'bg-cyan-600',
+        ring: 'ring-cyan-400',
+        border: 'border-cyan-300',
+        cardGlow: 'bg-cyan-50/40',
+        stepperBg: 'bg-cyan-600 text-white',
+      },
+      icon: 'Cpu',
+      desc: 'Observed reading transmitted directly by automated analyzer machine',
+    };
+  }
+
+  // Phase 4.6: Analyzer Machine Result Edited by Technician
+  if (rStatus === 'RECEIVED_EDITED') {
+    return {
+      phase: 4,
+      phaseId: 'RECEIVED_EDITED',
+      name: 'Analyzer (Edited)',
+      shortLabel: 'Recd Edited',
+      colorName: 'cyan',
+      theme: {
+        badgeBg: 'bg-cyan-50 text-cyan-900 border-cyan-200',
+        dot: 'bg-cyan-500',
+        ring: 'ring-cyan-400',
+        border: 'border-cyan-300',
+        cardGlow: 'bg-cyan-50/30',
+        stepperBg: 'bg-cyan-600 text-white',
+      },
+      icon: 'Cpu',
+      desc: 'Machine analyzer result reviewed & edited by technician',
+    };
+  }
+
+  // Phase 4.7: Manually Saved / Recorded Reading
   if (rStatus === 'SAVED' || rStatus === 'RECORDED' || hasValue) {
     return {
       phase: 4,
@@ -235,15 +368,15 @@ export function getTestPhaseInfo(report = {}, patient = {}) {
         stepperBg: 'bg-violet-600 text-white',
       },
       icon: 'FlaskConical',
-      desc: 'Active testing on analyzer bench — awaiting reading entry',
+      desc: 'Active testing on analyzer bench — awaiting reading entry or machine sync',
     };
   }
 
   // Phase 2: Sample Received in Lab (Accessioned)
-  if (rStatus === 'RECEIVED' || rStatus === 'SAMPLE RECEIVED' || pStatus === 'RECEIVE') {
+  if (rStatus === 'SAMPLE RECEIVED' || pStatus === 'RECEIVE') {
     return {
       phase: 2,
-      phaseId: 'RECEIVED',
+      phaseId: 'IN_LAB',
       name: 'Sample in Lab',
       shortLabel: 'In Lab',
       colorName: 'sky',
@@ -265,7 +398,7 @@ export function getTestPhaseInfo(report = {}, patient = {}) {
     phase: 1,
     phaseId: 'SAMPLE',
     name: 'Sample Pending',
-    shortLabel: 'Pending Sample',
+    shortLabel: 'Sample',
     colorName: 'amber',
     theme: {
       badgeBg: 'bg-amber-100 text-amber-900 border-amber-300',

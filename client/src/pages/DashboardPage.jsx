@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useAuth } from '../context/context.auth.jsx';
-import api from '../services/api';
 import StatCards from '../components/dashboard/StatCards.jsx';
 import PatientsPage from './PatientsPage.jsx';
 import { UserPlus, RefreshCw } from 'lucide-react';
@@ -9,25 +8,9 @@ import { UserPlus, RefreshCw } from 'lucide-react';
 export default function DashboardPage({ onOpenNewPatient }) {
   const { user } = useAuth();
   const [patients, setPatients] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  const fetchTodayPatients = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await api.get('/patients/list', { params: { allDates: 'true' } });
-      setPatients(res.data?.patients || []);
-    } catch (err) {
-      console.warn('Dashboard patient load failed:', err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchTodayPatients();
-  }, [fetchTodayPatients]);
-
-  // Compute live clinical metrics
+  // Compute live clinical metrics from patients loaded by PatientsPage
   const totalCount = patients.length;
   const samplePending = patients.filter((p) => {
     const s = String(p.status || '').toUpperCase();
@@ -69,12 +52,11 @@ export default function DashboardPage({ onOpenNewPatient }) {
 
         <div className="flex items-center gap-2">
           <button
-            onClick={fetchTodayPatients}
-            disabled={loading}
+            onClick={() => setRefreshTrigger((prev) => prev + 1)}
             className="p-2 bg-white hover:bg-slate-50 border border-slate-300 rounded-xl text-slate-600 transition-colors cursor-pointer shadow-2xs"
             title="Refresh Queue"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className="w-3.5 h-3.5" />
           </button>
 
           {onOpenNewPatient && (
@@ -99,7 +81,11 @@ export default function DashboardPage({ onOpenNewPatient }) {
       />
 
       {/* Primary Worklist Table (Screenshot 1) */}
-      <PatientsPage onOpenNewPatient={onOpenNewPatient} />
+      <PatientsPage
+        onOpenNewPatient={onOpenNewPatient}
+        onPatientsLoaded={setPatients}
+        refreshTrigger={refreshTrigger}
+      />
     </section>
   );
 }

@@ -14,6 +14,9 @@ import {
   ShieldCheck,
   Check,
   Loader2,
+  Trash2,
+  RotateCcw,
+  Cpu,
 } from 'lucide-react';
 import {
   getSpecimenTubeInfo,
@@ -27,12 +30,15 @@ export default function ResultsCardView({
   resultsState = {},
   patient = {},
   savingId = null,
+  deletingId = null,
   onInputChange,
   onSaveSingle,
   onCalculate,
   onSetDefaultResult,
   onOpenGuide,
   onReceiveSample,
+  onDeleteReport,
+  onRestoreReport,
 }) {
 
   return (
@@ -45,14 +51,19 @@ export default function ResultsCardView({
         const enteredVal = current.resultData;
         const evalRes = evaluateResultValue(enteredVal, report.refRange, report.unit);
         const tube = getSpecimenTubeInfo(report.sampleType, report.testName);
-        const phase = getTestPhaseInfo(report, patient);
+        const phase = getTestPhaseInfo({ ...report, status: current.status || report.status, resultData: enteredVal }, patient);
         const isSaving = savingId === report.reportId;
+        const isDeleting = deletingId === report.reportId;
+        const isDeleted = report.status === 'DELETED' || current.status === 'DELETED' || phase.phaseId === 'DELETED';
         const hasUnsavedVal = current.resultData !== (report.resultData || '');
 
         let cardHighlightClass = 'bg-white border-slate-200/90 shadow-2xs hover:shadow-xs';
         let inputHighlightClass = 'border-slate-300 bg-slate-50/70 focus:bg-white focus:border-indigo-500 text-slate-800';
 
-        if (evalRes.status.includes('PANIC')) {
+        if (isDeleted) {
+          cardHighlightClass = 'bg-rose-50/60 border-rose-300 border-l-[6px] border-l-rose-500 opacity-80';
+          inputHighlightClass = 'border-rose-300 bg-rose-50/40 text-slate-500 line-through';
+        } else if (evalRes.status.includes('PANIC')) {
           cardHighlightClass = 'bg-rose-100/80 border-rose-400 border-l-[6px] border-l-rose-600 ring-2 ring-rose-500/30';
           inputHighlightClass = 'border-rose-600 ring-2 ring-rose-500/70 bg-rose-50 text-rose-950 font-black shadow-xs';
         } else if (evalRes.status === 'REACTIVE') {
@@ -85,9 +96,22 @@ export default function ResultsCardView({
                     className={`w-2.5 h-2.5 rounded-full shrink-0 border border-black/10 shadow-2xs ${tube.dotClass || 'bg-amber-500'}`}
                     title={`${tube.tubeName} (${tube.capColor})`}
                   />
-                  <h4 className="font-bold text-xs text-slate-900 tracking-tight truncate">
+                  <h4
+                    className={`font-bold text-xs tracking-tight truncate ${
+                      isDeleted ? 'line-through text-slate-400' : 'text-slate-900'
+                    }`}
+                  >
                     {report.testName}
                   </h4>
+                  {phase.phaseId === 'RECEIVED' && (
+                    <span
+                      className="inline-flex items-center gap-0.5 text-[9px] font-bold text-cyan-800 bg-cyan-100 border border-cyan-300 px-1 py-0.2 rounded shrink-0"
+                      title="Auto-received from laboratory analyzer"
+                    >
+                      <Cpu className="w-2.5 h-2.5 text-cyan-700" />
+                      <span>Machine</span>
+                    </span>
+                  )}
                   <button
                     type="button"
                     onClick={() => onOpenGuide(report.testName)}
@@ -238,27 +262,53 @@ export default function ResultsCardView({
               </div>
 
               <div className="flex items-center gap-1 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => onCalculate(report.reportId)}
-                  title="Calculate formula"
-                  className="p-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 hover:text-indigo-600 rounded-md transition-colors cursor-pointer"
-                >
-                  <Calculator className="w-3 h-3" />
-                </button>
+                {isDeleted ? (
+                  <button
+                    type="button"
+                    onClick={() => onRestoreReport && onRestoreReport(report)}
+                    disabled={isDeleting}
+                    title="Restore test parameter"
+                    className="inline-flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs px-2.5 py-1 rounded-md shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {isDeleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+                    <span>Restore</span>
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => onCalculate(report.reportId)}
+                      title="Calculate formula"
+                      className="p-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 hover:text-indigo-600 rounded-md transition-colors cursor-pointer"
+                    >
+                      <Calculator className="w-3 h-3" />
+                    </button>
 
-                <button
-                  type="button"
-                  onClick={() => onSaveSingle(report)}
-                  disabled={isSaving}
-                  className={`p-1 px-1.5 font-bold text-xs rounded-md shadow-2xs transition-all cursor-pointer ${
-                    hasUnsavedVal
-                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white active:scale-95'
-                      : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                  } disabled:opacity-50`}
-                >
-                  {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-                </button>
+                    <button
+                      type="button"
+                      onClick={() => onDeleteReport && onDeleteReport(report)}
+                      disabled={isDeleting}
+                      title="Delete test parameter"
+                      className="p-1 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-300 text-slate-400 hover:text-rose-600 rounded-md transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      {isDeleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => onSaveSingle(report)}
+                      disabled={isSaving}
+                      title="Save result"
+                      className={`p-1 px-1.5 font-bold text-xs rounded-md shadow-2xs transition-all cursor-pointer ${
+                        hasUnsavedVal
+                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white active:scale-95'
+                          : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                      } disabled:opacity-50`}
+                    >
+                      {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
