@@ -13,15 +13,18 @@ import {
   AlertCircle,
   CreditCard,
   Building,
+  Edit,
 } from 'lucide-react';
 import Modal from '../components/common/Modal.jsx';
 import BillPreviewModal from '../components/billing/BillPreviewModal.jsx';
+import EditBillModal from '../components/billing/EditBillModal.jsx';
 import { formatDisplayDate, sortPatientsByRecent } from '../utils/dateUtils.js';
 
 export default function BillingPage() {
   const navigate = useNavigate();
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [editingBillPatient, setEditingBillPatient] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL'); // ALL, PAID, DUE
   const [depositPatient, setDepositPatient] = useState(null);
@@ -328,6 +331,14 @@ export default function BillingPage() {
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
+                          onClick={() => setEditingBillPatient(p)}
+                          className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs py-1.5 px-3 rounded-xl shadow-xs cursor-pointer transition-all"
+                          title="Edit Invoice Particulars & Rates (BILLUPDATE)"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                          <span>Edit Bill</span>
+                        </button>
+                        <button
                           onClick={() => {
                             setDepositPatient(p);
                             const dueVal = Number(p.balance !== undefined ? p.balance : Math.max(0, (p.totalBill || 0) - (p.paidBill || 0)));
@@ -364,21 +375,27 @@ export default function BillingPage() {
       >
         <div className="space-y-4 text-xs">
           {depositPatient && (
-            <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl flex items-center justify-between text-xs">
+            <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl grid grid-cols-4 gap-2 text-center text-xs">
               <div>
                 <span className="text-slate-500 block text-[10px] font-bold uppercase">Total Bill</span>
                 <span className="font-extrabold text-slate-800 font-mono">
-                  ₹{Number(depositPatient.totalBill || 0).toLocaleString('en-IN')}
+                  ₹{Number(depositPatient.grossTotal || depositPatient.totalBill || 0).toLocaleString('en-IN')}
                 </span>
               </div>
               <div>
-                <span className="text-slate-500 block text-[10px] font-bold uppercase">Already Deposited</span>
-                <span className="font-extrabold text-emerald-700 font-mono">
+                <span className="text-emerald-700 block text-[10px] font-bold uppercase">Discount</span>
+                <span className={`font-extrabold font-mono ${Number(depositPatient.discount || 0) > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                  {Number(depositPatient.discount || 0) > 0 ? `(-) ₹${Number(depositPatient.discount).toLocaleString('en-IN')}` : '₹0'}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500 block text-[10px] font-bold uppercase">Deposited</span>
+                <span className="font-extrabold text-sky-700 font-mono">
                   ₹{Number(depositPatient.paidBill || 0).toLocaleString('en-IN')}
                 </span>
               </div>
-              <div>
-                <span className="text-slate-500 block text-[10px] font-bold uppercase">Remaining Due</span>
+              <div className="bg-amber-100/60 rounded-lg p-1 border border-amber-200">
+                <span className="text-amber-900 block text-[10px] font-bold uppercase">Remaining Due</span>
                 <span className="font-extrabold text-rose-700 font-mono">
                   ₹{Number(depositPatient.balance !== undefined ? depositPatient.balance : Math.max(0, (depositPatient.totalBill || 0) - (depositPatient.paidBill || 0))).toLocaleString('en-IN')}
                 </span>
@@ -441,6 +458,26 @@ export default function BillingPage() {
         patientId={previewPatient?.patientId}
         patientName={previewPatient?.name}
       />
+
+      {/* Edit Bill Modal Popup */}
+      {editingBillPatient && (
+        <EditBillModal
+          isOpen={!!editingBillPatient}
+          onClose={() => setEditingBillPatient(null)}
+          patient={editingBillPatient}
+          onBillUpdated={() => {
+            setNotification(`Bill invoice updated for ${editingBillPatient.name}`);
+            fetchBillingList();
+            setTimeout(() => setNotification(''), 4500);
+          }}
+          onOpenDeposit={(p) => {
+            setDepositPatient(p);
+            const dueVal = Number(p.balance !== undefined ? p.balance : Math.max(0, (p.totalBill || 0) - (p.paidBill || 0)));
+            setAmount(dueVal > 0 ? String(dueVal) : (p.totalBill ? String(p.totalBill) : '500'));
+          }}
+          onOpenPrint={(p) => setPreviewPatient(p)}
+        />
+      )}
     </section>
   );
 }

@@ -23,6 +23,9 @@ import {
   ExternalLink,
   Trash2,
   Cpu,
+  ChevronDown,
+  ChevronUp,
+  Loader2,
 } from 'lucide-react';
 
 import api from '../../services/api';
@@ -31,10 +34,12 @@ import ResultsTableView from './ResultsTableView.jsx';
 import ResultsCardView from './ResultsCardView.jsx';
 import ClinicalGuideModal from '../common/ClinicalGuideModal.jsx';
 import DoctorApprovalModal from './DoctorApprovalModal.jsx';
+import EditIndividualReportModal from './EditIndividualReportModal.jsx';
 import {
   getTestPhaseInfo,
   evaluateResultValue,
   getDefaultHealthyValue,
+  getSpecimenTubeInfo,
 } from '../../utils/labTestUtils.js';
 
 export default function ResultsEntry({
@@ -135,7 +140,11 @@ export default function ResultsEntry({
         } else {
           // If server status changed and user hasn't edited, update
           if (r.status && updated[r.reportId].status !== r.status) {
-            updated[r.reportId].status = r.status;
+            if (updated[r.reportId].status === 'DELETED' && r.status !== 'DELETED') {
+              // Retain local soft-delete until server or restore update
+            } else {
+              updated[r.reportId].status = r.status;
+            }
           }
           if (updated[r.reportId].resultData === '' && r.resultData) {
             updated[r.reportId].resultData = r.resultData;
@@ -147,6 +156,7 @@ export default function ResultsEntry({
   }, [activeReports]);
 
   const [savingId, setSavingId] = useState(null);
+  const [calculatingId, setCalculatingId] = useState(null);
   const [savingAll, setSavingAll] = useState(false);
   const [receivingAll, setReceivingAll] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
@@ -157,6 +167,8 @@ export default function ResultsEntry({
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
   const [lastSyncedTime, setLastSyncedTime] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+  const [uploadingId, setUploadingId] = useState(null);
+  const [downloadingId, setDownloadingId] = useState(null);
 
   // UI Filters and Modals - DEFAULT TO 'table' for maximum compactness
   const [searchTerm, setSearchTerm] = useState('');
@@ -165,6 +177,17 @@ export default function ResultsEntry({
   const [guideModalOpen, setGuideModalOpen] = useState(false);
   const [guideSearchTerm, setGuideSearchTerm] = useState('');
   const [approvalModalOpen, setApprovalModalOpen] = useState(false);
+  const [editingReport, setEditingReport] = useState(null);
+  const [showDeletedSection, setShowDeletedSection] = useState(true);
+
+  // List of all deleted reports
+  const deletedReports = useMemo(() => {
+    return activeReports.filter((r) => {
+      const cur = resultsState[r.reportId] || {};
+      const status = resolveStatus(r, cur);
+      return status === 'DELETED';
+    });
+  }, [activeReports, resultsState]);
 
   // Compute Unsaved Modifications
   const dirtyReportIds = useMemo(() => {
@@ -442,41 +465,106 @@ export default function ResultsEntry({
   };
 
   const handleCalculate = async (reportId) => {
+    if (calculatingId) return; // Prevent double click
+    setCalculatingId(reportId);
+    setErrorMsg('');
+    setSuccessMsg('');
+
     try {
+      // 1. If any component test inputs have been modified, save them first
+      // so upstream CALCULATERESULT has the latest parameters in database
+      const dirtyToSave = reports.filter(
+        (r) => dirtyReportIds.includes(r.reportId) && r.reportId !== reportId
+      );
+      if (dirtyToSave.length > 0) {
+        for (const report of dirtyToSave) {
+          const current = resultsState[report.reportId] || {};
+          await api.post('/reports/update', {
+            reportId: report.reportId,
+            patientId: patient.patientId,
+            sampleId: report.sampleId || patient.slNo,
+            testName: report.testName,
+            rate: report.rate,
+            sampletype: report.sampleType || 'Serum',
+            method: report.method || '',
+            refRange: report.refRange,
+            unitref: report.unit,
+            resultData: current.resultData !== undefined ? current.resultData : (report.resultData || ''),
+            unit: report.unit,
+            comment: current.comment !== undefined ? current.comment : (report.comment || ''),
+            profileName: report.profileName || '',
+            deptName: report.deptName || 'D1',
+          });
+        }
+      }
+
+      // 2. Execute calculation
       const res = await api.post('/reports/calculate-result', {
         patientId: patient.patientId,
         reportId,
       });
+
       if (res.data?.STATUS === 'FAILED' || res.data?.StatusCode === '1211') {
         setErrorMsg(res.data?.Message || 'This calculation is not available in the system');
       } else {
         setSuccessMsg(res.data?.Message || 'Result calculated successfully!');
-        if (onRefresh) onRefresh();
+        // 3. Immediately refresh and update React state so the newly calculated result appears on the first click
+        if (onRefresh) {
+          const freshData = await onRefresh();
+          if (freshData?.reports) {
+            const fresh = {};
+            freshData.reports.forEach((r) => {
+              fresh[r.reportId] = {
+                resultData: r.resultData || '',
+                comment: r.comment || '',
+                status: r.status || 'SAVED',
+              };
+            });
+            setResultsState(fresh);
+          }
+        }
       }
     } catch (err) {
       setErrorMsg(err.response?.data?.Message || 'Failed to run automated formula calculation');
+    } finally {
+      setCalculatingId(null);
     }
   };
 
   const handleSetDefaultResult = async (reportId, resultVersion) => {
     try {
       // Optimistically update local input reading immediately
-      const rep = reports.find((r) => r.reportId === reportId);
+      const rep = (reports || []).find((r) => r.reportId === reportId);
       const chosenVal = rep ? rep[`resultData${resultVersion}`] : null;
       if (chosenVal !== undefined && chosenVal !== null) {
         handleInputChange(reportId, 'resultData', chosenVal);
       }
 
       const res = await api.post('/reports/set-default-result', {
-        patientId: patient.patientId,
+        patientId: patient?.patientId || rep?.patientId,
         reportId,
         resultVersion,
+        resultData: chosenVal,
       });
+
       if (res.data?.STATUS === 'FAILED') {
         setErrorMsg(res.data?.Message || 'Failed to set default result version');
       } else {
-        setSuccessMsg(res.data?.Message || `Default result set to version ${resultVersion}`);
-        if (onRefresh) onRefresh();
+        setSuccessMsg(res.data?.Message || `Default result set to version v${resultVersion} (${chosenVal})`);
+        if (onRefresh) {
+          const freshData = await onRefresh();
+          if (freshData?.reports) {
+            const fresh = {};
+            freshData.reports.forEach((r) => {
+              fresh[r.reportId] = {
+                resultData: r.resultData || '',
+                comment: r.comment || '',
+                status: r.status || 'SAVED',
+              };
+            });
+            setResultsState(fresh);
+          }
+        }
       }
     } catch (err) {
       setErrorMsg(err.response?.data?.Message || 'Failed to set default result version');
@@ -653,10 +741,21 @@ export default function ResultsEntry({
     setErrorMsg('');
 
     try {
-      await api.post('/reports/delete', {
+      const res = await api.post('/reports/delete', {
         patientId: targetPid,
         reportId: report.reportId,
+        testName: report.testName,
+        profileName: report.profileName || '',
+        deptName: report.deptName || '',
+        sampleId: report.sampleId || '',
+        rate: report.rate || '',
+        sampletype: report.sampleType || '',
+        reportType: 1,
       });
+
+      if (res.data?.STATUS === 'FAILED') {
+        throw new Error(res.data?.Message || 'Failed to delete test parameter');
+      }
 
       setResultsState((prev) => ({
         ...prev,
@@ -666,10 +765,11 @@ export default function ResultsEntry({
         },
       }));
 
-      setSuccessMsg(`Test parameter "${report.testName}" marked as DELETED. You can restore it anytime.`);
+      setShowDeletedSection(true);
+      setSuccessMsg(`Test parameter "${report.testName}" marked as DELETED. You can restore it anytime from the Deleted Tests section below.`);
       if (onRefresh) await onRefresh(true);
     } catch (err) {
-      setErrorMsg(err.response?.data?.Message || 'Failed to delete test parameter');
+      setErrorMsg(err.response?.data?.Message || err.message || 'Failed to delete test parameter');
     } finally {
       setDeletingId(null);
     }
@@ -683,25 +783,90 @@ export default function ResultsEntry({
     setErrorMsg('');
 
     try {
-      await api.post('/reports/restore', {
+      const res = await api.post('/reports/restore', {
         patientId: targetPid,
         reportId: report.reportId,
+        testName: report.testName,
+        profileName: report.profileName || '',
+        deptName: report.deptName || '',
+        sampleId: report.sampleId || '',
+        rate: report.rate || '',
+        sampletype: report.sampleType || '',
+        reportType: 1,
       });
+
+      if (res.data?.STATUS === 'FAILED') {
+        throw new Error(res.data?.Message || 'Failed to restore test parameter');
+      }
 
       setResultsState((prev) => ({
         ...prev,
         [report.reportId]: {
           ...(prev[report.reportId] || {}),
-          status: 'SAVED',
+          status: 'ENTRY',
         },
       }));
 
-      setSuccessMsg(`Test parameter "${report.testName}" restored successfully!`);
+      setSuccessMsg(`Test parameter "${report.testName}" restored successfully back to worklist!`);
       if (onRefresh) await onRefresh(true);
     } catch (err) {
-      setErrorMsg(err.response?.data?.Message || 'Failed to restore test parameter');
+      setErrorMsg(err.response?.data?.Message || err.message || 'Failed to restore test parameter');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  // Individual Report Upload Order Handler (UPLOADORDER)
+  const handleUploadOrder = async (report) => {
+    if (!report?.reportId) return;
+    const targetPid = patient?.patientId || patient?.slNo;
+    setUploadingId(report.reportId);
+    setErrorMsg('');
+
+    try {
+      const res = await api.post('/reports/upload-order', {
+        patientId: targetPid,
+        reportId: report.reportId,
+        reportType: 1,
+      });
+
+      if (res.data?.STATUS === 'FAILED') {
+        throw new Error(res.data?.Message || 'Failed to upload order to analyzer equipment');
+      }
+
+      setSuccessMsg(`Work order for "${report.testName}" uploaded to analyzer equipment successfully!`);
+      if (onRefresh) await onRefresh(true);
+    } catch (err) {
+      setErrorMsg(err.response?.data?.Message || err.message || 'Failed to upload order to analyzer equipment');
+    } finally {
+      setUploadingId(null);
+    }
+  };
+
+  // Individual Report Download Result Handler (DOWNLOADRESULT)
+  const handleDownloadResult = async (report) => {
+    if (!report?.reportId) return;
+    const targetPid = patient?.patientId || patient?.slNo;
+    setDownloadingId(report.reportId);
+    setErrorMsg('');
+
+    try {
+      const res = await api.post('/reports/download-result', {
+        patientId: targetPid,
+        reportId: report.reportId,
+        reportType: 1,
+      });
+
+      if (res.data?.STATUS === 'FAILED') {
+        throw new Error(res.data?.Message || 'Failed to download reading from analyzer');
+      }
+
+      setSuccessMsg(`Result for "${report.testName}" downloaded from analyzer equipment successfully!`);
+      if (onRefresh) await onRefresh(true);
+    } catch (err) {
+      setErrorMsg(err.response?.data?.Message || err.message || 'Failed to download reading from analyzer');
+    } finally {
+      setDownloadingId(null);
     }
   };
 
@@ -1027,7 +1192,10 @@ export default function ResultsEntry({
           resultsState={resultsState}
           patient={patient}
           savingId={savingId}
+          calculatingId={calculatingId}
           deletingId={deletingId}
+          uploadingId={uploadingId}
+          downloadingId={downloadingId}
           onInputChange={handleInputChange}
           onSaveSingle={saveSingleReport}
           onCalculate={handleCalculate}
@@ -1036,6 +1204,9 @@ export default function ResultsEntry({
           onReceiveSample={handleReceiveSample}
           onDeleteReport={handleDeleteReport}
           onRestoreReport={handleRestoreReport}
+          onUploadOrder={handleUploadOrder}
+          onDownloadResult={handleDownloadResult}
+          onOpenEditReport={(rep) => setEditingReport(rep)}
         />
       ) : (
         <ResultsCardView
@@ -1043,7 +1214,10 @@ export default function ResultsEntry({
           resultsState={resultsState}
           patient={patient}
           savingId={savingId}
+          calculatingId={calculatingId}
           deletingId={deletingId}
+          uploadingId={uploadingId}
+          downloadingId={downloadingId}
           onInputChange={handleInputChange}
           onSaveSingle={saveSingleReport}
           onCalculate={handleCalculate}
@@ -1052,7 +1226,115 @@ export default function ResultsEntry({
           onReceiveSample={handleReceiveSample}
           onDeleteReport={handleDeleteReport}
           onRestoreReport={handleRestoreReport}
+          onUploadOrder={handleUploadOrder}
+          onDownloadResult={handleDownloadResult}
+          onOpenEditReport={(rep) => setEditingReport(rep)}
         />
+      )}
+
+      {/* 4b. Dedicated Deleted Tests Section */}
+      {phaseFilter !== 'DELETED' && deletedReports.length > 0 && (
+        <div className="bg-white rounded-xl border border-rose-200 shadow-2xs overflow-hidden mt-4">
+          <div
+            onClick={() => setShowDeletedSection((prev) => !prev)}
+            className="px-4 py-3 bg-rose-50/70 border-b border-rose-200/70 flex items-center justify-between cursor-pointer hover:bg-rose-100/60 transition-colors select-none"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center font-bold text-xs shadow-2xs">
+                <Trash2 className="w-3.5 h-3.5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-bold text-rose-950">
+                    Deleted Tests ({deletedReports.length})
+                  </h3>
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-200 text-rose-800">
+                    Excluded from Final Report
+                  </span>
+                </div>
+                <p className="text-[11px] text-rose-700/80">
+                  These test parameters were removed from reporting. You can restore any test back to the active list anytime.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold text-rose-700">
+                {showDeletedSection ? 'Hide' : 'Show & Restore'}
+              </span>
+              {showDeletedSection ? (
+                <ChevronUp className="w-4 h-4 text-rose-600" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-rose-600" />
+              )}
+            </div>
+          </div>
+
+          {showDeletedSection && (
+            <div className="p-2 sm:p-3 overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-500 text-[11px] font-bold">
+                    <th className="py-2 px-3 w-12">#</th>
+                    <th className="py-2 px-3">Test Parameter Name</th>
+                    <th className="py-2 px-3 hidden sm:table-cell">Specimen Tube</th>
+                    <th className="py-2 px-3 hidden md:table-cell">Reference Range</th>
+                    <th className="py-2 px-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {deletedReports.map((report, idx) => {
+                    const tube = getSpecimenTubeInfo(report.sampleType, report.testName);
+                    const isDeleting = deletingId === report.reportId;
+
+                    return (
+                      <tr key={report.reportId} className="hover:bg-rose-50/40 transition-colors">
+                        <td className="py-2.5 px-3 font-mono text-slate-400 text-xs">
+                          {idx + 1}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="font-bold text-slate-700 line-through">
+                            {report.testName}
+                          </div>
+                          {report.profileName && (
+                            <div className="text-[10px] text-slate-400 font-medium">
+                              Panel: {report.profileName}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 hidden sm:table-cell">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs">{tube.icon}</span>
+                            <span className="text-slate-600 font-medium text-[11px]">{tube.tubeName}</span>
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 hidden md:table-cell text-slate-500 font-mono text-[11px]">
+                          {report.refRange || 'Standard'} {report.unit || ''}
+                        </td>
+                        <td className="py-2.5 px-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleRestoreReport(report)}
+                            disabled={isDeleting}
+                            className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                            title="Restore this test parameter back to active worklist"
+                          >
+                            {isDeleting ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            )}
+                            <span>Restore</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       )}
 
       {/* 5. Floating Sticky Unsaved Changes Action Bar */}
@@ -1105,6 +1387,42 @@ export default function ResultsEntry({
           setSuccessMsg('Diagnostic report clinically verified and approved by doctor!');
         }}
       />
+
+      {/* 7. Individual Report / Test Parameter Edit Modal */}
+      {editingReport && (
+        <EditIndividualReportModal
+          isOpen={!!editingReport}
+          onClose={() => setEditingReport(null)}
+          report={{
+            ...editingReport,
+            resultData: resultsState[editingReport.reportId]?.resultData !== undefined
+              ? resultsState[editingReport.reportId].resultData
+              : editingReport.resultData,
+            comment: resultsState[editingReport.reportId]?.comment !== undefined
+              ? resultsState[editingReport.reportId].comment
+              : editingReport.comment,
+          }}
+          patient={patient}
+          onSaveSuccess={async (updatedReport) => {
+            setSuccessMsg(`Test parameter "${updatedReport.testName || editingReport.testName}" updated successfully!`);
+            setEditingReport(null);
+            if (onRefresh) {
+              const freshData = await onRefresh();
+              if (freshData?.reports) {
+                const fresh = {};
+                freshData.reports.forEach((r) => {
+                  fresh[r.reportId] = {
+                    resultData: r.resultData || '',
+                    comment: r.comment || '',
+                    status: r.status || 'SAVED',
+                  };
+                });
+                setResultsState(fresh);
+              }
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

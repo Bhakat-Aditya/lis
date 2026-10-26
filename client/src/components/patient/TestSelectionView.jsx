@@ -20,7 +20,11 @@ import {
   EyeOff,
   ListTree,
   X,
+  Edit,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
+import Modal from '../common/Modal.jsx';
 import { useMaster } from '../../context/context.master.jsx';
 import api from '../../services/api';
 import { groupInvestigationsIntoLots } from '../../utils/labTestUtils.js';
@@ -214,6 +218,111 @@ export default function TestSelectionView({
   const [saveError, setSaveError] = useState('');
   const [duplicateWarning, setDuplicateWarning] = useState(null); // { item, message }
 
+  // Rate/Price editing state for ordered investigation lots
+  const [editingLotRate, setEditingLotRate] = useState(null);
+  const [editRateValue, setEditRateValue] = useState('');
+  const [savingRate, setSavingRate] = useState(false);
+  const [rateError, setRateError] = useState('');
+
+  const handleOpenEditRateModal = (lot) => {
+    setEditingLotRate(lot);
+    setEditRateValue(String(lot.amount !== undefined ? lot.amount : '0'));
+    setRateError('');
+  };
+
+  const handleSaveLotRate = async (e) => {
+    if (e) e.preventDefault();
+    const newPrice = parseFloat(editRateValue);
+    if (isNaN(newPrice) || newPrice < 0) {
+      setRateError('Please enter a valid price amount');
+      return;
+    }
+
+    setSavingRate(true);
+    setRateError('');
+
+    try {
+      const rawPid = patient?.patientId || patient?.id;
+      const cleanPid = rawPid
+        ? String(rawPid).toUpperCase().startsWith('P')
+          ? `P${String(rawPid).replace(/^P+/i, '')}`
+          : `P${rawPid}`
+        : '';
+
+      // Check if this lot corresponds to an existing report
+      const matchingRep = (reports || []).find(
+        (r) =>
+          String(r.testName || '').toLowerCase().trim() === String(editingLotRate.name || '').toLowerCase().trim() ||
+          String(r.testId || '') === String(editingLotRate.testId || '') ||
+          String(r.profileName || '').toLowerCase().trim() === String(editingLotRate.name || '').toLowerCase().trim()
+      );
+
+      if (matchingRep) {
+        // Update report rate (which also automatically synchronizes the bill in backend via syncPatientBillFromReportRate)
+        await api.post('/reports/update', {
+          ...matchingRep,
+          patientId: cleanPid,
+          rate: String(newPrice),
+        });
+      } else {
+        // Update bill directly via /billing/update-bill
+        let items = [];
+        try {
+          const resBill = await api.get('/billing/bill-json', { params: { patientId: cleanPid || rawPid } });
+          const bill = resBill.data?.payLoadJSON?.bill;
+          if (bill && Array.isArray(bill['Test List'])) {
+            items = bill['Test List'].map((t) => ({
+              name: t['Bill Particulars'] || '',
+              amount: parseFloat(t.Amount) || 0,
+              date: t['Bill Date'] || '',
+            }));
+          }
+        } catch (err) {
+          console.warn('[TestSelection] bill-json fetch error:', err.message);
+        }
+
+        if (items.length === 0) {
+          items = selectedTests.map((t) => ({
+            name: t.name,
+            amount: t.id === editingLotRate.id ? newPrice : Number(t.amount || 0),
+            date: '',
+          }));
+        }
+
+        const targetName = String(editingLotRate.name).toLowerCase().trim();
+        let idx = items.findIndex((it) => String(it.name).toLowerCase().trim() === targetName);
+        if (idx !== -1) {
+          items[idx].amount = newPrice;
+        } else {
+          items.push({ name: editingLotRate.name, amount: newPrice, date: '' });
+        }
+
+        await api.post('/billing/update-bill', {
+          patientId: cleanPid || rawPid,
+          items,
+        });
+      }
+
+      // Update local state immediately
+      setSelectedTests((prev) =>
+        prev.map((lot) => {
+          if (lot.id === editingLotRate.id || String(lot.testId) === String(editingLotRate.testId) || lot.name === editingLotRate.name) {
+            return { ...lot, amount: newPrice };
+          }
+          return lot;
+        })
+      );
+
+      setSaveSuccess(`Price for "${editingLotRate.name}" updated to ₹${newPrice.toFixed(2)} and synchronized across invoices & ledger!`);
+      setEditingLotRate(null);
+      if (onRefresh) await onRefresh();
+    } catch (err) {
+      setRateError(err.response?.data?.Message || 'Failed to update price');
+    } finally {
+      setSavingRate(false);
+    }
+  };
+
   // Map and Sets of already booked investigations for this patient
   const alreadyBookedInfo = useMemo(() => {
     const bookedTestIds = new Set();
@@ -352,9 +461,9 @@ export default function TestSelectionView({
       : null;
   const balanceDue =
     totalAmount > 0
-      ? explicitDue !== null && selectedTests.filter((t) => t.isNew).length === 0
-        ? explicitDue
-        : Math.max(0, totalAmount - totalDeposits)
+      ? (patient?.billPayStatus === 2 || patient?.billPayStatus === '2'
+          ? 0
+          : Math.max(0, totalAmount - totalDeposits))
       : 0;
 
   // Filter matched suggestions: shows catalog items immediately on focus, and filters as user types
@@ -1013,8 +1122,20 @@ export default function TestSelectionView({
                             </td>
 
                             {/* Lot Total Amount */}
-                            <td className="py-3 px-3 text-right font-mono font-extrabold text-slate-900 text-xs">
-                              ₹{Number(t.amount || 0).toFixed(2)}
+                            <td className="py-3 px-3 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <span className="font-mono font-extrabold text-slate-900 text-xs">
+                                  ₹{Number(t.amount || 0).toFixed(2)}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditRateModal(t)}
+                                  title="Edit Rate / Price for this investigation"
+                                  className="p-1 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                                >
+                                  <Edit className="w-3 h-3" />
+                                </button>
+                              </div>
                             </td>
 
                             {/* Actions / Status */}
@@ -1029,13 +1150,24 @@ export default function TestSelectionView({
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                               ) : (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                                  <Check className="w-3 h-3 text-emerald-600" />
-                                  Booked
-                                </span>
+                                <div className="flex items-center justify-center gap-1">
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                                    <Check className="w-3 h-3 text-emerald-600" />
+                                    Booked
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenEditRateModal(t)}
+                                    title="Edit Price (BILLUPDATE & Report Rate)"
+                                    className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors cursor-pointer"
+                                  >
+                                    <Edit className="w-3 h-3" />
+                                  </button>
+                                </div>
                               )}
                             </td>
                           </tr>
+
 
                           {/* Expanded sub-test chips */}
                           {isExpanded && hasSubTests && (
@@ -1150,6 +1282,92 @@ export default function TestSelectionView({
           </div>
         </div>
       </div>
+
+      {/* Edit Lot Rate Modal */}
+      {editingLotRate && (
+        <Modal
+          isOpen={!!editingLotRate}
+          onClose={() => !savingRate && setEditingLotRate(null)}
+          title={`Update Price / Rate — ${editingLotRate.name}`}
+          maxWidth="max-w-md"
+        >
+          <form onSubmit={handleSaveLotRate} className="space-y-4 text-xs">
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1.5">
+              <div className="flex items-center justify-between text-slate-600">
+                <span>Investigation Lot:</span>
+                <span className="font-bold text-slate-800">{editingLotRate.name}</span>
+              </div>
+              <div className="flex items-center justify-between text-slate-600">
+                <span>Category:</span>
+                <span className="font-semibold text-indigo-700">{editingLotRate.category || 'Test'}</span>
+              </div>
+              <div className="flex items-center justify-between text-slate-600">
+                <span>Current Price:</span>
+                <span className="font-mono font-bold text-slate-800">₹{Number(editingLotRate.amount || 0).toFixed(2)}</span>
+              </div>
+            </div>
+
+            {rateError && (
+              <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 font-semibold flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                <span>{rateError}</span>
+              </div>
+            )}
+
+            <div>
+              <label className="font-bold text-slate-700 block mb-1">
+                New Price / Rate (₹)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={editRateValue}
+                onChange={(e) => {
+                  setEditRateValue(e.target.value);
+                  setRateError('');
+                }}
+                disabled={savingRate}
+                autoFocus
+                placeholder="e.g. 500"
+                className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-mono text-base font-extrabold text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20"
+              />
+              <p className="text-[10px] text-slate-500 mt-1.5">
+                Updating this price synchronizes the diagnostic invoice, the deposit balance due, and the patient directory.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setEditingLotRate(null)}
+                disabled={savingRate}
+                className="px-4 py-2 border border-slate-300 rounded-xl text-slate-700 font-semibold hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={savingRate}
+                className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
+              >
+                {savingRate ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Updating...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Save Price</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 }
+

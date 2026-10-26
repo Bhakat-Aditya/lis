@@ -3,7 +3,7 @@ import Modal from '../common/Modal.jsx';
 import { MinusCircle, Loader2, ArrowRight } from 'lucide-react';
 import api from '../../services/api.js';
 
-export default function DiscountModal({ isOpen, onClose, patient, onDiscountApplied }) {
+export default function DiscountModal({ isOpen, onClose, patient, totalAmount, onDiscountApplied }) {
   const [discountType, setDiscountType] = useState('flat'); // 'flat' or 'percent'
   const [discountVal, setDiscountVal] = useState('100');
   const [reason, setReason] = useState('Doctor Recommended');
@@ -17,7 +17,11 @@ export default function DiscountModal({ isOpen, onClose, patient, onDiscountAppl
     ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
     : '';
 
-  const grossTotal = Number(patient.grossTotal || patient.totalBill || 0);
+  const grossTotal = Number(
+    totalAmount !== undefined && totalAmount !== null && Number(totalAmount) > 0
+      ? totalAmount
+      : (patient.grossTotal || patient.totalBill || 0)
+  );
   const val = Number(discountVal) || 0;
   const calculatedDiscount = discountType === 'percent'
     ? Math.round(((grossTotal * Math.min(100, Math.max(0, val))) / 100) * 100) / 100

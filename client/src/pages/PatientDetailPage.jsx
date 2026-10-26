@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
@@ -12,6 +12,8 @@ import BillPreviewModal from '../components/billing/BillPreviewModal.jsx';
 import BarcodeModal from '../components/patient/BarcodeModal.jsx';
 import DiscountModal from '../components/patient/DiscountModal.jsx';
 import DoctorApprovalModal from '../components/results/DoctorApprovalModal.jsx';
+import PatientEditModal from '../components/patient/PatientEditModal.jsx';
+import EditBillModal from '../components/billing/EditBillModal.jsx';
 import Modal from '../components/common/Modal.jsx';
 import { useMaster } from '../context/context.master.jsx';
 import { groupInvestigationsIntoLots } from '../utils/labTestUtils.js';
@@ -57,17 +59,49 @@ export default function PatientDetailPage() {
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [showBarcodeModal, setShowBarcodeModal] = useState(false);
   const [showBillPreviewModal, setShowBillPreviewModal] = useState(false);
+  const [showEditBillModal, setShowEditBillModal] = useState(false);
+  const [showEditPatientModal, setShowEditPatientModal] = useState(false);
   const [depositAmount, setDepositAmount] = useState('');
   const [paymentMode, setPaymentMode] = useState('Cash');
   const [notification, setNotification] = useState('');
   const [submittingDeposit, setSubmittingDeposit] = useState(false);
   const [depositError, setDepositError] = useState('');
 
+  const patientLots = useMemo(() => {
+    return groupInvestigationsIntoLots(reports, patient, catalogProfiles, catalogPackages, catalogTests);
+  }, [reports, patient, catalogProfiles, catalogPackages, catalogTests]);
+
+  const lotsTotal = useMemo(() => {
+    return patientLots.reduce((acc, l) => acc + (Number(l.amount) || 0), 0);
+  }, [patientLots]);
+
+  const effectiveTotal = lotsTotal > 0
+    ? lotsTotal
+    : Number(patient?.grossTotal || patient?.totalBill || 0);
 
   // Accurately calculate outstanding balance due for deposit modal
   const calculateDueAmount = (pt = patient, repList = reports) => {
     if (!pt) return 0;
     if (Number(pt.billPayStatus) === 2) return 0;
+
+    const discount = Number(pt.discount || 0);
+    const paid = Number(pt.paidBill || 0);
+
+    let baseTotal = 0;
+    if (Array.isArray(repList) && repList.length > 0) {
+      const lots = groupInvestigationsIntoLots(repList, pt, catalogProfiles, catalogPackages, catalogTests);
+      const lotsTotal = lots.reduce((acc, l) => acc + (Number(l.amount) || 0), 0);
+      if (lotsTotal > 0) baseTotal = lotsTotal;
+    }
+
+    if (baseTotal === 0 && Number(pt.totalBill || 0) > 0) {
+      baseTotal = Number(pt.totalBill);
+    }
+
+    if (baseTotal > 0) {
+      return Math.max(0, baseTotal - discount - paid);
+    }
+
     const explicitDue =
       pt.balance !== undefined && pt.balance !== null && pt.balance !== ''
         ? Number(pt.balance)
@@ -77,20 +111,6 @@ export default function PatientDetailPage() {
 
     if (explicitDue !== null && !isNaN(explicitDue)) {
       return Math.max(0, explicitDue);
-    }
-
-    const total = Number(pt.totalBill || 0);
-    const discount = Number(pt.discount || 0);
-    const paid = Number(pt.paidBill || 0);
-
-    if (total > 0) {
-      return Math.max(0, total - discount - paid);
-    }
-
-    if (Array.isArray(repList) && repList.length > 0) {
-      const lots = groupInvestigationsIntoLots(repList, pt, catalogProfiles, catalogPackages, catalogTests);
-      const lotsTotal = lots.reduce((acc, l) => acc + (Number(l.amount) || 0), 0);
-      return Math.max(0, lotsTotal - discount - paid);
     }
 
     return 0;
@@ -224,19 +244,13 @@ export default function PatientDetailPage() {
     }
 
     const itemsSum = items.reduce((acc, it) => acc + it.amount, 0);
-    const grossTotal = Number(p?.grossTotal || p?.totalBill || 0) || itemsSum;
+    const grossTotal = itemsSum > 0 ? itemsSum : (Number(p?.grossTotal || p?.totalBill || 0));
     const discount = Number(p?.discount || 0);
     const roundoff = Number(p?.roundoff || 0);
     const netTotal = Math.max(0, grossTotal - discount - roundoff);
     const isPaid = (p?.billPayStatus === 2 || p?.billPayStatus === '2') && netTotal > 0;
     const paid = isPaid ? netTotal : Number(p?.paidBill || 0);
-    const explicitDue =
-      p?.balance !== undefined && p?.balance !== null && p?.balance !== ''
-        ? Number(p.balance)
-        : p?.dueAmount !== undefined && p?.dueAmount !== null && p?.dueAmount !== ''
-        ? Number(p.dueAmount)
-        : null;
-    const due = explicitDue !== null ? explicitDue : Math.max(0, netTotal - paid);
+    const due = isPaid ? 0 : Math.max(0, netTotal - paid);
 
     return {
       clinic: {
@@ -378,7 +392,7 @@ export default function PatientDetailPage() {
               </span>
             </div>
             <span className="text-[11px] text-slate-500 font-medium">
-              Ref by: <strong className="text-slate-700">{patient?.referedDr || 'Self'}</strong> • Date: {formatDisplayDate(patient?.collectionDate || patient?.regDate)}
+              Ref by: <strong className="text-slate-700">{patient?.referedDr || 'Self'}</strong> • Reg: {formatDisplayDate(patient?.regDate || patient?.collectionDate)}{patient?.sampleTime ? ` • Sample: ${patient.sampleTime}` : ''}
             </span>
           </div>
         </div>
@@ -429,6 +443,15 @@ export default function PatientDetailPage() {
           </div>
 
           <button
+            onClick={() => setShowEditPatientModal(true)}
+            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shadow-xs"
+            title="Edit Patient Demographic Details"
+          >
+            <Edit className="w-3.5 h-3.5" />
+            <span>Edit Patient</span>
+          </button>
+
+          <button
             onClick={() => setShowApproval(true)}
             className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shadow-xs"
           >
@@ -467,6 +490,8 @@ export default function PatientDetailPage() {
           onAddDeposit={handleOpenDepositModal}
           onAddDiscount={() => setShowDiscountModal(true)}
           onOpenSettings={() => setShowBarcodeModal(true)}
+          onEditPatient={() => setShowEditPatientModal(true)}
+          onEditBill={() => setShowEditBillModal(true)}
         />
       )}
 
@@ -491,11 +516,26 @@ export default function PatientDetailPage() {
       )}
 
       {activeTab === 'invoice' && (
-        <AwsBillViewer
-          patientId={id}
-          onBack={() => setSearchParams({ tab: 'profile' })}
-          title="Official Diagnostic Bill & Receipt (AWS Server)"
-        />
+        <div className="space-y-3">
+          <div className="flex items-center justify-between bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
+            <div>
+              <h4 className="text-xs font-bold text-slate-800">Diagnostic Invoice Particulars & Ledger</h4>
+              <p className="text-[11px] text-slate-500">Modify test billing rates, add items, or adjust charges</p>
+            </div>
+            <button
+              onClick={() => setShowEditBillModal(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+            >
+              <Edit className="w-3.5 h-3.5" />
+              <span>Edit Bill Particulars (BILLUPDATE)</span>
+            </button>
+          </div>
+          <AwsBillViewer
+            patientId={id}
+            onBack={() => setSearchParams({ tab: 'profile' })}
+            title="Official Diagnostic Bill & Receipt (AWS Server)"
+          />
+        </div>
       )}
 
       {/* Barcode Modal */}
@@ -510,6 +550,7 @@ export default function PatientDetailPage() {
         isOpen={showDiscountModal}
         onClose={() => setShowDiscountModal(false)}
         patient={patient}
+        totalAmount={effectiveTotal}
         onDiscountApplied={handleDiscountApplied}
       />
 
@@ -533,26 +574,40 @@ export default function PatientDetailPage() {
       >
         <div className="space-y-4 text-xs">
           {/* Financial context card */}
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 grid grid-cols-3 gap-2 text-center">
-            <div>
-              <span className="text-[10px] text-slate-500 font-semibold block">Total Billed</span>
-              <span className="font-mono font-bold text-slate-800 text-xs">
-                ₹{Number(patient?.totalBill || 0).toFixed(2)}
-              </span>
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-500 font-semibold block">Deposited</span>
-              <span className="font-mono font-bold text-emerald-600 text-xs">
-                ₹{Number(patient?.paidBill || 0).toFixed(2)}
-              </span>
-            </div>
-            <div className="bg-amber-100/60 rounded-lg p-1 border border-amber-200">
-              <span className="text-[10px] text-amber-900 font-bold block">Balance Due</span>
-              <span className="font-mono font-extrabold text-rose-700 text-xs">
-                ₹{calculateDueAmount().toFixed(2)}
-              </span>
-            </div>
-          </div>
+          {(() => {
+            const discount = Number(patient?.discount || 0);
+            const due = calculateDueAmount(patient, reports);
+            const paid = Number(patient?.paidBill || 0);
+
+            return (
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 grid grid-cols-4 gap-2 text-center">
+                <div>
+                  <span className="text-[10px] text-slate-500 font-semibold block">Total Billed</span>
+                  <span className="font-mono font-bold text-slate-800 text-xs">
+                    ₹{effectiveTotal.toFixed(2)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-emerald-700 font-semibold block">Discount</span>
+                  <span className={`font-mono font-bold text-xs ${discount > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                    {discount > 0 ? `(-) ₹${discount.toFixed(2)}` : '₹0.00'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 font-semibold block">Deposited</span>
+                  <span className="font-mono font-bold text-sky-700 text-xs">
+                    ₹{paid.toFixed(2)}
+                  </span>
+                </div>
+                <div className="bg-amber-100/60 rounded-lg p-1 border border-amber-200">
+                  <span className="text-[10px] text-amber-900 font-bold block">Balance Due</span>
+                  <span className="font-mono font-extrabold text-rose-700 text-xs">
+                    ₹{due.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
 
           {depositError && (
             <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 font-semibold flex items-center gap-1.5">
@@ -638,7 +693,38 @@ export default function PatientDetailPage() {
         onClose={() => setShowBillPreviewModal(false)}
         patientId={id}
         patientName={patient?.name}
+        onOpenEditBill={() => setShowEditBillModal(true)}
       />
+
+      {/* Patient Demographic Details Edit Modal */}
+      {showEditPatientModal && patient && (
+        <PatientEditModal
+          isOpen={showEditPatientModal}
+          onClose={() => setShowEditPatientModal(false)}
+          patient={patient}
+          onPatientUpdated={async () => {
+            setNotification('Patient demographic details updated successfully!');
+            await fetchPatientData();
+            setShowEditPatientModal(false);
+          }}
+        />
+      )}
+
+      {/* Invoice Particulars / Bill Edit Modal (BILLUPDATE) */}
+      {showEditBillModal && patient && (
+        <EditBillModal
+          isOpen={showEditBillModal}
+          onClose={() => setShowEditBillModal(false)}
+          patient={patient}
+          onBillUpdated={async () => {
+            setNotification('Bill invoice updated successfully via BILLUPDATE!');
+            await fetchPatientData();
+            setShowEditBillModal(false);
+          }}
+          onOpenDeposit={handleOpenDepositModal}
+          onOpenPrint={() => setShowBillPreviewModal(true)}
+        />
+      )}
     </section>
   );
 }

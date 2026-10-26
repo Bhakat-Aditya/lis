@@ -99,6 +99,43 @@ export const getPatientTime = (patient) => {
 };
 
 /**
+ * Format sample collection time distinctly from registration date.
+ * If sampleTime is missing or empty, returns null (no fake fallback time!).
+ * If sample collection date differs from registration date, includes the date (e.g. '26 Oct, 06:54 AM').
+ * Otherwise returns time only (e.g. '05:56 PM').
+ */
+export const getSampleTimeDisplay = (sampleTime, regDate = null) => {
+  if (!sampleTime || String(sampleTime).trim() === '') return null;
+  const raw = String(sampleTime).trim();
+
+  // Match time part e.g. '05:56 PM' or '06:54 AM'
+  const timeMatch = raw.match(/(\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM|am|pm)?)/i);
+  const timeOnly = timeMatch ? timeMatch[1].trim().toUpperCase() : raw;
+
+  // Check if sample date differs from regDate
+  const dateMatch = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (dateMatch && regDate) {
+    const [, d, m, y] = dateMatch;
+    const sampleDateObj = new Date(Number(y), Number(m) - 1, Number(d));
+    const regDateObj = parseLISDate(regDate);
+
+    if (
+      regDateObj &&
+      (sampleDateObj.getDate() !== regDateObj.getDate() ||
+       sampleDateObj.getMonth() !== regDateObj.getMonth() ||
+       sampleDateObj.getFullYear() !== regDateObj.getFullYear())
+    ) {
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const smDay = String(sampleDateObj.getDate()).padStart(2, '0');
+      const smMon = monthNames[sampleDateObj.getMonth()];
+      return `${smDay} ${smMon}, ${timeOnly}`;
+    }
+  }
+
+  return timeOnly;
+};
+
+/**
  * Format registration date and time together for table rows
  */
 export const formatPatientDateTime = (patient) => {

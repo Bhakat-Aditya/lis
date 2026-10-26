@@ -7,6 +7,7 @@ import {
   RefreshCw,
   FileText,
   AlertCircle,
+  Edit,
 } from 'lucide-react';
 import api from '../../services/api';
 
@@ -15,6 +16,7 @@ export default function BillPreviewModal({
   onClose,
   patientId,
   patientName = '',
+  onOpenEditBill,
 }) {
   const [blobUrl, setBlobUrl] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -154,6 +156,20 @@ export default function BillPreviewModal({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            {onOpenEditBill && (
+              <button
+                onClick={() => {
+                  onClose();
+                  onOpenEditBill(cleanPid);
+                }}
+                className="px-2.5 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 active:scale-95 rounded-lg transition-all cursor-pointer shadow-xs flex items-center gap-1.5"
+                title="Edit invoice particulars and pricing (BILLUPDATE)"
+              >
+                <Edit className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Edit Bill</span>
+              </button>
+            )}
+
             <button
               onClick={loadBillPdf}
               disabled={loading}

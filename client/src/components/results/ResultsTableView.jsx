@@ -14,6 +14,9 @@ import {
   Trash2,
   RotateCcw,
   Cpu,
+  Edit,
+  Upload,
+  Download,
 } from 'lucide-react';
 import {
   getSpecimenTubeInfo,
@@ -27,7 +30,10 @@ export default function ResultsTableView({
   resultsState = {},
   patient = {},
   savingId = null,
+  calculatingId = null,
   deletingId = null,
+  uploadingId = null,
+  downloadingId = null,
   onInputChange,
   onSaveSingle,
   onCalculate,
@@ -36,6 +42,9 @@ export default function ResultsTableView({
   onReceiveSample,
   onDeleteReport,
   onRestoreReport,
+  onUploadOrder,
+  onDownloadResult,
+  onOpenEditReport,
 }) {
   const [focusedIndex, setFocusedIndex] = useState(null);
   const inputRefs = useRef([]);
@@ -360,7 +369,7 @@ export default function ResultsTableView({
                   </td>
 
                   {/* Actions */}
-                  <td className="py-1.5 px-2.5 text-right w-28">
+                  <td className="py-1.5 px-2.5 text-right w-auto min-w-[170px]">
                     <div className="flex items-center justify-end gap-1">
                       {isDeleted ? (
                         <button
@@ -379,6 +388,45 @@ export default function ResultsTableView({
                         </button>
                       ) : (
                         <>
+                          <button
+                            type="button"
+                            onClick={() => onOpenEditReport && onOpenEditReport(report)}
+                            title="Edit Test Details (Name, Rate, Specimen, Method, Range, Unit, Comment)"
+                            className="p-1 rounded-lg border font-bold text-xs bg-white hover:bg-blue-50 text-slate-600 hover:text-blue-600 border-slate-200 hover:border-blue-300 transition-all cursor-pointer shadow-2xs"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Upload Order to Analyzer (UPLOADORDER) */}
+                          <button
+                            type="button"
+                            onClick={() => onUploadOrder && onUploadOrder(report)}
+                            disabled={uploadingId === report.reportId || isSaving || isDeleting}
+                            title="Upload order to analyzer equipment (UPLOADORDER)"
+                            className="p-1 rounded-lg border font-bold text-xs bg-white hover:bg-sky-50 text-sky-600 hover:text-sky-700 border-slate-200 hover:border-sky-300 transition-all cursor-pointer shadow-2xs disabled:opacity-50"
+                          >
+                            {uploadingId === report.reportId ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-600" />
+                            ) : (
+                              <Upload className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+
+                          {/* Download Result from Analyzer (DOWNLOADRESULT) */}
+                          <button
+                            type="button"
+                            onClick={() => onDownloadResult && onDownloadResult(report)}
+                            disabled={downloadingId === report.reportId || isSaving || isDeleting}
+                            title="Download reading from analyzer equipment (DOWNLOADRESULT)"
+                            className="p-1 rounded-lg border font-bold text-xs bg-white hover:bg-violet-50 text-violet-600 hover:text-violet-700 border-slate-200 hover:border-violet-300 transition-all cursor-pointer shadow-2xs disabled:opacity-50"
+                          >
+                            {downloadingId === report.reportId ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-600" />
+                            ) : (
+                              <Download className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+
                           <button
                             type="button"
                             onClick={() => onSaveSingle(report)}
@@ -400,10 +448,15 @@ export default function ResultsTableView({
                           <button
                             type="button"
                             onClick={() => onCalculate(report.reportId)}
+                            disabled={calculatingId === report.reportId || isSaving}
                             title="Evaluate automated formula calculation"
-                            className="p-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 hover:text-indigo-600 rounded-lg transition-colors cursor-pointer"
+                            className="p-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 hover:text-indigo-600 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                           >
-                            <Calculator className="w-3.5 h-3.5" />
+                            {calculatingId === report.reportId ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+                            ) : (
+                              <Calculator className="w-3.5 h-3.5" />
+                            )}
                           </button>
 
                           <button

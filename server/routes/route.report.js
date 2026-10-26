@@ -10,6 +10,7 @@ import {
   calculateResult,
   setDefaultResult,
   downloadResult,
+  uploadOrder,
   sendWhatsApp,
   streamReportPdf,
   deleteReport,
@@ -34,8 +35,10 @@ router.post('/approve', requireRoles([ROLES.SUPER, ROLES.DOCTOR, ROLES.TECHNICIA
 router.post('/reject', requireRoles([ROLES.SUPER, ROLES.DOCTOR, ROLES.TECHNICIAN]), rejectReport);
 router.post('/release', requireRoles([ROLES.SUPER, ROLES.DOCTOR, ROLES.TECHNICIAN, ROLES.RECEPTIONIST]), releaseReport);
 router.post('/calculate-result', requireRoles([ROLES.SUPER, ROLES.TECHNICIAN]), calculateResult);
-router.post('/set-default-result', requireRoles([ROLES.SUPER, ROLES.TECHNICIAN]), setDefaultResult);
-router.post('/download', downloadResult);
+router.post('/set-default-result', requireRoles([ROLES.SUPER, ROLES.TECHNICIAN, ROLES.DOCTOR, ROLES.RECEPTIONIST, ROLES.BRANCH]), setDefaultResult);
+router.post('/download', requireRoles([ROLES.SUPER, ROLES.TECHNICIAN, ROLES.DOCTOR]), downloadResult);
+router.post('/download-result', requireRoles([ROLES.SUPER, ROLES.TECHNICIAN, ROLES.DOCTOR]), downloadResult);
+router.post('/upload-order', requireRoles([ROLES.SUPER, ROLES.TECHNICIAN, ROLES.DOCTOR]), uploadOrder);
 router.post('/send-whatsapp', requireRoles([ROLES.SUPER, ROLES.RECEPTIONIST, ROLES.DOCTOR]), sendWhatsApp);
 
 export default router;

@@ -366,6 +366,20 @@ class UpstreamService {
     this.billingCache.set(clean, entry);
     this.billingCache.set(alt, entry);
   }
+
+  /**
+   * Clear billing cache for a specific patient or all
+   */
+  clearBillingCache(patientId = null) {
+    if (!patientId) {
+      this.billingCache.clear();
+      return;
+    }
+    const clean = String(patientId).trim().toUpperCase();
+    const alt = clean.startsWith('P') ? clean.slice(1) : `P${clean}`;
+    this.billingCache.delete(clean);
+    this.billingCache.delete(alt);
+  }
 }
 
 export const upstreamService = new UpstreamService();

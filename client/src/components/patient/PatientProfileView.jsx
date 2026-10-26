@@ -24,6 +24,7 @@ import {
   ChevronDown,
   ChevronUp,
   ListTree,
+  Edit,
 } from 'lucide-react';
 import { formatDisplayDate } from '../../utils/dateUtils.js';
 import { useMaster } from '../../context/context.master.jsx';
@@ -43,6 +44,8 @@ export default function PatientProfileView({
   onAddDeposit,
   onAddDiscount,
   onOpenSettings,
+  onEditPatient,
+  onEditBill,
 }) {
   const [activeTab, setActiveTab] = useState('tests'); // 'tests' or 'deposits'
 
@@ -69,9 +72,9 @@ export default function PatientProfileView({
   const reportsTotal = hasReports
     ? reports.reduce((acc, r) => acc + (Number(r.rate) || 0), 0)
     : 0;
-  const testsTotal = Number(patient.totalBill) > 0
-    ? Number(patient.totalBill)
-    : (lotsTotal > 0 ? lotsTotal : (hasReports ? reportsTotal : 0));
+  const testsTotal = lotsTotal > 0
+    ? lotsTotal
+    : (Number(patient.totalBill) > 0 ? Number(patient.totalBill) : (hasReports ? reportsTotal : 0));
   const isBilled = testsTotal > 0;
   const discountAmount = Number(patient.discount || 0);
   const netDue = Math.max(0, testsTotal - discountAmount);
@@ -79,11 +82,8 @@ export default function PatientProfileView({
   const depositsAmount = Number(patient.paidBill || 0) > 0
     ? Number(patient.paidBill)
     : (isStatusPaid && testsTotal > 0 ? testsTotal : Number(patient.paidBill || 0));
-  const explicitDue = (patient.balance !== undefined && patient.balance !== null)
-    ? Number(patient.balance)
-    : (patient.dueAmount !== undefined ? Number(patient.dueAmount) : null);
   const balanceDue = isBilled
-    ? (isStatusPaid ? 0 : (explicitDue !== null ? explicitDue : Math.max(0, netDue - depositsAmount)))
+    ? (isStatusPaid ? 0 : Math.max(0, netDue - depositsAmount))
     : 0;
   const isPaid = isBilled && (isStatusPaid || (balanceDue <= 0 && depositsAmount >= netDue));
   const advanceAmount = Number(patient.advance || 0);
@@ -111,13 +111,24 @@ export default function PatientProfileView({
                 <div className="text-[11px] text-blue-700 font-mono font-bold">PID: #{pid}</div>
               </div>
             </div>
-            <button
-              onClick={onOpenSettings}
-              className="p-1.5 hover:bg-slate-200/70 rounded-lg transition-colors text-slate-500 cursor-pointer"
-              title="Patient Settings"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => onEditPatient && onEditPatient(patient)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                title="Edit Patient Demographic Details"
+              >
+                <Edit className="w-3.5 h-3.5" />
+                <span>Edit</span>
+              </button>
+              <button
+                onClick={onOpenSettings}
+                className="p-1.5 hover:bg-slate-200/70 rounded-lg transition-colors text-slate-500 cursor-pointer"
+                title="Patient Settings / Barcode"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
           {/* Demographic Rows matching Screenshot 2 */}
@@ -147,9 +158,17 @@ export default function PatientProfileView({
 
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4 text-sky-600 shrink-0" />
-              <span className="font-semibold text-slate-500 w-28 shrink-0">Collection Date:</span>
+              <span className="font-semibold text-slate-500 w-28 shrink-0">Reg Date:</span>
               <span className="font-semibold text-slate-800">
-                {formatDisplayDate(patient.collectionDate || patient.regDate) || '—'}
+                {formatDisplayDate(patient.regDate || patient.collectionDate) || '—'}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <FlaskConical className="w-4 h-4 text-amber-600 shrink-0" />
+              <span className="font-semibold text-slate-500 w-28 shrink-0">Sample Time:</span>
+              <span className={patient.sampleTime ? "font-semibold text-slate-800" : "text-slate-400 font-normal italic"}>
+                {patient.sampleTime || 'Pending Collection'}
               </span>
             </div>
 
@@ -300,8 +319,20 @@ export default function PatientProfileView({
 
         {/* Financial Summary 4-Metric Cards matching Screenshot 2 */}
         <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-xs">
-          <div className="text-xs font-bold text-slate-700 mb-3 flex items-center gap-1.5">
-            <span>💳</span> Financial Summary
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+              <span>💳</span> Financial Summary
+            </div>
+            {onEditBill && (
+              <button
+                onClick={onEditBill}
+                className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold text-xs rounded-lg transition-colors cursor-pointer"
+                title="Edit bill particulars and rates (BILLUPDATE)"
+              >
+                <Edit className="w-3.5 h-3.5" />
+                <span>Edit Bill</span>
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

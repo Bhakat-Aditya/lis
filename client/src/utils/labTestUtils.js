@@ -715,12 +715,15 @@ export function groupInvestigationsIntoLots(
         processedLotKeys.add(`PKG|${pkgId.toUpperCase()}`);
         processedLotNames.add(String(matchedPkg.Name || name).toLowerCase().trim());
 
+        const repWithRate = pkgReports.find((r) => r.rate !== undefined && r.rate !== '' && !isNaN(Number(r.rate)) && Number(r.rate) > 0);
+        const effectivePkgAmount = repWithRate ? Number(repWithRate.rate) : (amount || Number(matchedPkg.Rate) || 0);
+
         lots.push({
           id: `EXISTING_PKG_${pkgId || idx + 1}`,
           testId: pkgId,
           type: 'PKG',
           name: matchedPkg.Name || name,
-          amount: amount || Number(matchedPkg.Rate) || 0,
+          amount: effectivePkgAmount,
           category: 'Package',
           isNew: false,
           subTestCount: subTests.length,
@@ -747,12 +750,15 @@ export function groupInvestigationsIntoLots(
         processedLotKeys.add(`PROF|${profId.toUpperCase()}`);
         processedLotNames.add(String(matchedProf.Name || name).toLowerCase().trim());
 
+        const profRepWithRate = profReports.find((r) => r.rate !== undefined && r.rate !== '' && !isNaN(Number(r.rate)) && Number(r.rate) > 0);
+        const effectiveProfAmount = profRepWithRate ? Number(profRepWithRate.rate) : (amount || Number(matchedProf.Rate) || 0);
+
         lots.push({
           id: `EXISTING_PROF_${profId || idx + 1}`,
           testId: profId,
           type: 'PROF',
           name: matchedProf.Name || name,
-          amount: amount || Number(matchedProf.Rate) || 0,
+          amount: effectiveProfAmount,
           category: 'Profile',
           isNew: false,
           subTestCount: subTests.length,
@@ -762,9 +768,10 @@ export function groupInvestigationsIntoLots(
       }
 
       // Standalone Individual Test: resolve actual testId from catalog or reports
-      const matchedReport = (reports || []).find(
-        (r) => String(r.testName || '').toLowerCase().trim() === lower
-      );
+      const matchedReport = (reports || []).find((r) => {
+        const rName = String(r.testName || '').toLowerCase().trim();
+        return rName === lower || (rName && (lower.includes(rName) || rName.includes(lower)));
+      });
       if (matchedReport) processedReports.add(matchedReport.reportId);
 
       const matchedTestId =
@@ -775,12 +782,21 @@ export function groupInvestigationsIntoLots(
       processedLotKeys.add(`TEST|${String(matchedTestId).toUpperCase()}`);
       processedLotNames.add(lower);
 
+      const matchedReportRate =
+        matchedReport &&
+        matchedReport.rate !== undefined &&
+        matchedReport.rate !== '' &&
+        !isNaN(Number(matchedReport.rate))
+          ? Number(matchedReport.rate)
+          : null;
+      const finalTestAmount = matchedReportRate !== null ? matchedReportRate : amount;
+
       lots.push({
         id: `EXISTING_TEST_${matchedTestId || idx + 1}`,
         testId: matchedTestId,
         type: 'TEST',
         name: name,
-        amount: amount,
+        amount: finalTestAmount,
         category: 'Test',
         isNew: false,
         subTestCount: 0,

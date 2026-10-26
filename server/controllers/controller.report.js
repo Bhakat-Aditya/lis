@@ -1,5 +1,7 @@
 import axios from 'axios';
 import { upstreamService } from '../services/service.upstream.js';
+import { reportOverrideService } from '../services/service.reportOverride.js';
+import { invalidatePatientListCache } from './controller.patient.js';
 
 // Deduplication and short-lived cache (5s) to eliminate duplicate calls
 const reportCache = new Map();
@@ -13,6 +15,9 @@ export const invalidateReportCache = (patientId) => {
   reportCache.delete(rawPid);
   const alt = cleanPid.startsWith('P') ? cleanPid.slice(1) : cleanPid;
   reportCache.delete(alt);
+  upstreamService.clearBillingCache(cleanPid);
+  upstreamService.clearBillingCache(rawPid);
+  upstreamService.clearBillingCache(alt);
 };
 
 export const getPatientReport = async (req, res, next) => {
@@ -95,11 +100,31 @@ export const getPatientReport = async (req, res, next) => {
     }
 
     const payload = upstreamData?.payLoadJSON || {};
-    const reports = payload.reports || [];
+    const rawReports = payload.reports || [];
     const patient = payload.patient || null;
     const printPDFUrl = payload.printPDFUrl || '';
     const printPDFUrlWithHeader = printPDFUrl ? printPDFUrl.replace('addHeader=false', 'addHeader=true') : '';
     const printPDFUrlWithoutHeader = printPDFUrl ? printPDFUrl.replace('addHeader=true', 'addHeader=false') : '';
+
+    // Apply persisted soft-deleted and status overrides so deleted tests persist across page refreshes
+    let overrides = {};
+    try {
+      overrides = await reportOverrideService.getOverrides(cleanPatientId);
+    } catch (e) {
+      console.warn(`[Report] Error fetching overrides for ${cleanPatientId}:`, e.message);
+    }
+
+    const reports = rawReports.map((r) => {
+      const rid = String(r.reportId || '').trim();
+      if (overrides[rid]) {
+        return {
+          ...r,
+          status: overrides[rid].status || 'DELETED',
+          isDeleted: (overrides[rid].status || 'DELETED') === 'DELETED',
+        };
+      }
+      return r;
+    });
 
     const templates = (payload.templates || []).map((t) => {
       let parsed = null;
@@ -127,9 +152,21 @@ export const getPatientReport = async (req, res, next) => {
     const billUrl = billing?.billUrl || '';
 
     const patientTotal = Number(patient?.totalBill || 0);
+    const discountVal = Number(billing?.discount || patient?.discount || 0);
+    const roundoffVal = Number(billing?.roundoff || patient?.roundoff || 0);
+
+    const effectiveGross = Number(billing?.gross || 0) > 0
+      ? Number(billing.gross)
+      : (Number(billing?.total || 0) > 0 ? Number(billing.total) : patientTotal);
+
+    const effectiveTotal = Number(billing?.total || 0) > 0
+      ? Number(billing.total)
+      : patientTotal;
+
     const statusNum = Number(patient?.billPayStatus);
-    const isPaid = statusNum === 2 || (billing && billing.total > 0 && billing.due <= 0 && billing.paid >= billing.total);
-    const isUnpaid = statusNum === 3 || (!isPaid && statusNum !== 1 && patientTotal > 0);
+    const paidAmount = billing ? Number(billing.paid) : Number(patient?.paidBill || 0);
+    const isPaid = statusNum === 2 || (effectiveTotal > 0 && paidAmount >= effectiveTotal);
+    const isUnpaid = statusNum === 3 || (!isPaid && statusNum !== 1 && effectiveTotal > 0);
     const resolvedPayStatus = isPaid ? 2 : (isUnpaid ? 3 : 1);
 
     const normalizePatientStatus = (raw) => {
@@ -142,19 +179,23 @@ export const getPatientReport = async (req, res, next) => {
       return 'ENTRY';
     };
 
+    const effectiveDue = isPaid
+      ? 0
+      : (billing && Math.abs(Number(billing.total || 0) - effectiveTotal) < 0.01
+          ? Number(billing.due)
+          : Math.max(0, effectiveTotal - paidAmount));
+
     const patientWithBilling = patient
       ? {
           ...patient,
           status: normalizePatientStatus(patient.status),
-          grossTotal: billing?.gross || (billing?.total && billing.total > 0 ? billing.total : patientTotal),
-          totalBill: (billing?.total && billing.total > 0) ? billing.total : patientTotal,
-          discount: billing?.discount || 0,
-          roundoff: billing?.roundoff || 0,
-          paidBill: billing ? billing.paid : (isPaid ? patientTotal : Number(patient.paidBill || 0)),
-          balance: billing
-            ? billing.due
-            : (isPaid ? 0 : (patient.balance !== undefined ? Number(patient.balance) : Math.max(0, patientTotal - Number(patient.paidBill || 0)))),
-          dueAmount: billing ? billing.due : (isPaid ? 0 : patientTotal),
+          grossTotal: effectiveGross > 0 ? effectiveGross : patientTotal,
+          totalBill: effectiveTotal > 0 ? effectiveTotal : patientTotal,
+          discount: discountVal,
+          roundoff: roundoffVal,
+          paidBill: isPaid && paidAmount === 0 && effectiveTotal > 0 ? effectiveTotal : paidAmount,
+          balance: effectiveDue,
+          dueAmount: effectiveDue,
           billPayStatus: resolvedPayStatus,
           paymentLines: billing?.paymentLines || [],
           payments: billing?.paymentLines || [],
@@ -191,6 +232,150 @@ export const getPatientReport = async (req, res, next) => {
 };
 
 
+/**
+ * Synchronize the upstream bill (BILLUPDATE) whenever a test/report rate is updated
+ */
+export const syncPatientBillFromReportRate = async (cleanPatientId, reportId, testName, rate, profileName, sid) => {
+  try {
+    const newRate = parseFloat(rate);
+    if (isNaN(newRate)) return;
+
+    // 1. Fetch current bill from GETBILLJSON
+    let billData = null;
+    const altPid = cleanPatientId.startsWith('P') ? cleanPatientId.slice(1) : cleanPatientId;
+    try {
+      billData = await upstreamService.get('GETBILLJSON', { patientId: cleanPatientId }, sid);
+      if (!billData?.payLoadJSON?.bill && altPid !== cleanPatientId) {
+        billData = await upstreamService.get('GETBILLJSON', { patientId: altPid }, sid);
+      }
+    } catch (e) {
+      console.warn('[SyncBill] GETBILLJSON fetch error:', e.message);
+    }
+
+    const b = billData?.payLoadJSON?.bill;
+    let items = [];
+    let billHeading = 'TXN/RECEIPT';
+    let discPerc = 0;
+    let discAmt = 0;
+    let roundoff = 0;
+
+    if (b && Array.isArray(b['Test List']) && b['Test List'].length > 0) {
+      billHeading = b['Bill Name'] || b['billname'] || 'TXN/RECEIPT';
+      discPerc = parseFloat(b['disc'] || b['Discount Percent'] || 0) || 0;
+      discAmt = parseFloat(b['Discount'] || b['discamt'] || 0) || 0;
+      roundoff = parseFloat(b['Round Off'] || b['roundoff'] || 0) || 0;
+
+      items = b['Test List'].map((t) => ({
+        name: t['Bill Particulars'] || '',
+        amount: parseFloat(t.Amount || 0) || 0,
+        date: t['Bill Date'] || '',
+      }));
+
+      const targetTest = String(testName || '').toLowerCase().trim();
+      const targetProf = String(profileName || '').toLowerCase().trim();
+
+      // Find matching item in bill list
+      let matchedIdx = items.findIndex((it) => {
+        const itName = String(it.name || '').toLowerCase().trim();
+        return (
+          itName === targetTest ||
+          (targetTest && (itName.includes(targetTest) || targetTest.includes(itName))) ||
+          (targetProf && itName === targetProf)
+        );
+      });
+
+      if (matchedIdx !== -1) {
+        items[matchedIdx].amount = newRate;
+      } else if (items.length === 1) {
+        items[0].amount = newRate;
+      } else {
+        items.push({
+          name: testName || 'Test',
+          amount: newRate,
+          date: '',
+        });
+      }
+    } else {
+      // No existing bill in GETBILLJSON, retrieve patient report and construct bill items
+      let pReport = null;
+      try {
+        pReport = await upstreamService.get('GETPATIENTREPORT', { patientId: cleanPatientId }, sid);
+      } catch (e) {
+        console.warn('[SyncBill] GETPATIENTREPORT fetch error:', e.message);
+      }
+      const pReports = pReport?.payLoadJSON?.reports || [];
+      const seenLots = new Map();
+
+      pReports.forEach((r) => {
+        const lotKey = r.packageName || r.profileName || r.testName || `rep_${r.reportId}`;
+        const lotName = r.packageName || r.profileName || r.testName;
+        const isTarget =
+          String(r.reportId) === String(reportId) ||
+          String(r.testName || '').toLowerCase().trim() === String(testName || '').toLowerCase().trim();
+        const lotRate = isTarget ? newRate : parseFloat(r.rate) || 0;
+
+        if (!seenLots.has(lotKey)) {
+          seenLots.set(lotKey, { name: lotName, amount: lotRate, date: '' });
+        }
+      });
+
+      items = Array.from(seenLots.values());
+    }
+
+    if (items.length > 0) {
+      const today = new Date();
+      const d = String(today.getDate()).padStart(2, '0');
+      const m = String(today.getMonth() + 1).padStart(2, '0');
+      const y = today.getFullYear();
+      const formattedDate = `${d}/${m}/${y}`;
+
+      const grossTotal = items.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
+      if (discPerc > 0 && discAmt === 0) {
+        discAmt = Math.round(((grossTotal * discPerc) / 100) * 100) / 100;
+      } else {
+        discAmt = Math.min(grossTotal, discAmt);
+      }
+
+      const remainder = grossTotal - discAmt;
+      const rounded = Math.round(remainder);
+      const computedRo = Math.round((remainder - rounded) * 100) / 100;
+      const finalBillAmount = Math.max(0, rounded);
+
+      const billParams = {
+        patientId: cleanPatientId,
+        isNew: '0',
+        action: 'addbill',
+        billname: billHeading,
+        count: String(items.length),
+        totalamt: grossTotal.toFixed(2),
+        disc: String(discPerc),
+        discamt: discAmt.toFixed(2),
+        roundoff: (computedRo >= 0 ? computedRo : -computedRo).toFixed(2),
+        billamount: finalBillAmount.toFixed(2),
+      };
+
+      items.forEach((it, i) => {
+        const n = i + 1;
+        billParams[`name${n}`] = String(it.name || '').trim();
+        billParams[`date${n}`] = it.date || formattedDate;
+        billParams[`amt${n}`] = String(it.amount !== undefined ? it.amount : 0);
+      });
+
+      await upstreamService.post('BILLUPDATE', billParams, null, sid);
+
+      upstreamService.clearBillingCache(cleanPatientId);
+      upstreamService.clearBillingCache(altPid);
+      try {
+        await upstreamService.getBillingSummary(cleanPatientId, sid);
+      } catch (e) {
+        // ignore
+      }
+    }
+  } catch (err) {
+    console.warn('[SyncBill] Error synchronizing bill from report rate:', err.message);
+  }
+};
+
 export const updateReport = async (req, res, next) => {
   try {
     const {
@@ -201,14 +386,15 @@ export const updateReport = async (req, res, next) => {
       sampleId = '',
       testName = '',
       rate = '',
-      sampletype = 'Serum',
       method = '',
       refRange = '',
-      unitref = '',
       resultData = '',
-      unit = '',
       comment = '',
     } = req.body;
+
+    const resolvedSampleType = req.body.sampletype || req.body.sampleType || 'Serum';
+    const resolvedUnit = req.body.unit || req.body.unitref || '';
+    const resolvedUnitRef = req.body.unitref || req.body.unit || '';
 
     if (!reportId || !patientId) {
       return res.status(400).json({
@@ -218,25 +404,46 @@ export const updateReport = async (req, res, next) => {
       });
     }
 
+    const rawPid = String(patientId).trim();
+    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+      ? `P${rawPid.replace(/^P+/i, '')}`
+      : `P${rawPid}`;
+
     const params = {
       profileName,
       deptName,
       reportId,
-      patientId,
+      patientId: cleanPatientId,
       sampleId,
       testName,
       rate,
-      sampletype,
+      sampletype: resolvedSampleType,
+      sampleType: resolvedSampleType,
       method,
       refRange,
-      unitref,
+      unitref: resolvedUnitRef,
       resultData,
-      unit,
+      unit: resolvedUnit,
       comment,
     };
 
     const upstreamData = await upstreamService.post('UPDATEREPORT', params, null, req.user?.upstreamSid);
+
+    // If a rate was provided or changed, automatically sync the patient's bill (BILLUPDATE)
+    if (rate !== undefined && rate !== null && String(rate).trim() !== '') {
+      await syncPatientBillFromReportRate(
+        cleanPatientId,
+        reportId,
+        testName,
+        rate,
+        profileName,
+        req.user?.upstreamSid
+      );
+    }
+
     invalidateReportCache(patientId);
+    invalidateReportCache(cleanPatientId);
+    invalidatePatientListCache();
 
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
@@ -248,6 +455,7 @@ export const updateReport = async (req, res, next) => {
     next(err);
   }
 };
+
 
 export const receiveSample = async (req, res, next) => {
   try {
@@ -446,6 +654,10 @@ export const calculateResult = async (req, res, next) => {
     const isSuccess = upstreamData?.STATUS === 'SUCCESS' && upstreamData?.StatusCode === '0000';
     const message = upstreamData?.Message || (isSuccess ? 'Result calculated' : 'This calculation is not available in the system');
 
+    // Invalidate report cache so frontend gets freshly calculated results on first click
+    invalidateReportCache(cleanPatientId);
+    invalidateReportCache(rawPid);
+
     return res.json({
       STATUS: upstreamData?.STATUS || (isSuccess ? 'SUCCESS' : 'FAILED'),
       StatusCode: upstreamData?.StatusCode || (isSuccess ? '0000' : '1211'),
@@ -459,7 +671,7 @@ export const calculateResult = async (req, res, next) => {
 
 export const setDefaultResult = async (req, res, next) => {
   try {
-    const { patientId, reportId, resultVersion = 1 } = req.body;
+    const { patientId, reportId, resultVersion = 1, resultData } = req.body;
     if (!patientId || !reportId) {
       return res.status(400).json({
         STATUS: 'FAILED',
@@ -473,33 +685,156 @@ export const setDefaultResult = async (req, res, next) => {
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
 
+    const numVersion = Number(resultVersion) || 1;
+
+    const params = {
+      patientId: cleanPatientId,
+      patientid: cleanPatientId,
+      reportId: String(reportId).trim(),
+      reportid: String(reportId).trim(),
+      resultVersion: numVersion,
+      resultversion: numVersion,
+      version: numVersion,
+      defaultVersion: numVersion,
+      resultNum: numVersion,
+    };
+
+    if (resultData !== undefined && resultData !== null && String(resultData).trim() !== '') {
+      params.resultData = String(resultData).trim();
+      params.result = String(resultData).trim();
+    }
+
     const upstreamData = await upstreamService.post(
       'SETDEFAULTRESULT',
-      { patientId: cleanPatientId, reportId: String(reportId).trim(), resultVersion: Number(resultVersion) || 1 },
+      params,
       null,
       req.user?.upstreamSid
     );
 
+    // Also update report resultData so PDF and all views reflect the chosen default result immediately
+    if (resultData !== undefined && resultData !== null && String(resultData).trim() !== '') {
+      try {
+        await upstreamService.post(
+          'UPDATEREPORT',
+          {
+            patientId: cleanPatientId,
+            reportId: String(reportId).trim(),
+            resultData: String(resultData).trim(),
+          },
+          null,
+          req.user?.upstreamSid
+        );
+      } catch (e) {
+        console.warn('[Report] Fallback UPDATEREPORT during SETDEFAULTRESULT:', e.message);
+      }
+    }
+
+    invalidateReportCache(cleanPatientId);
+    invalidateReportCache(rawPid);
+
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
       StatusCode: upstreamData?.StatusCode || '0000',
-      Message: upstreamData?.Message || `Default result set to version ${resultVersion}`,
+      Message: upstreamData?.Message || `Default result set to version v${numVersion}`,
       data: upstreamData,
+      chosenVersion: numVersion,
+      chosenResult: resultData,
     });
   } catch (err) {
     next(err);
   }
 };
 
+/**
+ * Download result for individual report parameter from analyzer (DOWNLOADRESULT)
+ */
 export const downloadResult = async (req, res, next) => {
   try {
-    const { patientId, reportId } = req.body;
-    const upstreamData = await upstreamService.post('DOWNLOADRESULT', { patientId, reportId }, null, req.user?.upstreamSid);
+    const { patientId, reportId, reportType = 1 } = req.body;
+    if (!patientId || !reportId) {
+      return res.status(400).json({
+        STATUS: 'FAILED',
+        StatusCode: '400',
+        Message: 'patientId and reportId are required',
+      });
+    }
+
+    const rawPid = String(patientId).trim();
+    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+      ? `P${rawPid.replace(/^P+/i, '')}`
+      : `P${rawPid}`;
+    const cleanReportId = String(reportId).trim();
+    const resolvedReportType = String(reportType || 1);
+
+    const upstreamData = await upstreamService.post(
+      'DOWNLOADRESULT',
+      {
+        patientId: cleanPatientId,
+        reportId: cleanReportId,
+        reportType: resolvedReportType,
+      },
+      null,
+      req.user?.upstreamSid
+    );
+
+    invalidateReportCache(cleanPatientId);
+    invalidateReportCache(rawPid);
+
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
       StatusCode: upstreamData?.StatusCode || '0000',
-      Message: upstreamData?.Message || 'Download initiated',
+      Message: upstreamData?.Message || 'Result downloaded from analyzer successfully',
       data: upstreamData,
+      patientId: cleanPatientId,
+      reportId: cleanReportId,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Upload work order for individual report parameter to analyzer (UPLOADORDER)
+ */
+export const uploadOrder = async (req, res, next) => {
+  try {
+    const { patientId, reportId, reportType = 1 } = req.body;
+    if (!patientId || !reportId) {
+      return res.status(400).json({
+        STATUS: 'FAILED',
+        StatusCode: '400',
+        Message: 'patientId and reportId are required',
+      });
+    }
+
+    const rawPid = String(patientId).trim();
+    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+      ? `P${rawPid.replace(/^P+/i, '')}`
+      : `P${rawPid}`;
+    const cleanReportId = String(reportId).trim();
+    const resolvedReportType = String(reportType || 1);
+
+    const upstreamData = await upstreamService.post(
+      'UPLOADORDER',
+      {
+        patientId: cleanPatientId,
+        reportId: cleanReportId,
+        reportType: resolvedReportType,
+      },
+      null,
+      req.user?.upstreamSid
+    );
+
+    invalidateReportCache(cleanPatientId);
+    invalidateReportCache(rawPid);
+
+    return res.json({
+      STATUS: upstreamData?.STATUS || 'SUCCESS',
+      StatusCode: upstreamData?.StatusCode || '0000',
+      Message: upstreamData?.Message || 'Work order uploaded to analyzer successfully',
+      data: upstreamData,
+      patientId: cleanPatientId,
+      reportId: cleanReportId,
     });
   } catch (err) {
     next(err);
@@ -574,11 +909,12 @@ export const streamReportPdf = async (req, res, next) => {
 
 /**
  * Delete individual test report parameter
- * Status: DELETED
+ * Calls native upstream DELETEREPORT API with reportType=1,
+ * and persists status to DELETED in local and database storage.
  */
 export const deleteReport = async (req, res, next) => {
   try {
-    const { patientId, reportId } = req.body;
+    const { patientId, reportId, testName, profileName, deptName, rate, reportType = 1 } = req.body;
     if (!patientId || !reportId) {
       return res.status(400).json({
         STATUS: 'FAILED',
@@ -592,48 +928,44 @@ export const deleteReport = async (req, res, next) => {
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
     const cleanReportId = String(reportId).trim();
+    const resolvedReportType = String(reportType || 1);
 
+    // 1. Call upstream native DELETEREPORT API (as per main server specification)
     let upstreamData = null;
-    let successful = false;
-
-    // 1. Try REPORTDELETE
     try {
-      upstreamData = await upstreamService.post('REPORTDELETE', { patientId: cleanPatientId, reportId: cleanReportId }, null, req.user?.upstreamSid);
-      if (upstreamData?.STATUS === 'SUCCESS') successful = true;
-    } catch (e1) {
-      // ignore and try next
-    }
-
-    // 2. Try DELETEREPORT
-    if (!successful) {
-      try {
-        upstreamData = await upstreamService.post('DELETEREPORT', { patientId: cleanPatientId, reportId: cleanReportId }, null, req.user?.upstreamSid);
-        if (upstreamData?.STATUS === 'SUCCESS') successful = true;
-      } catch (e2) {
-        // ignore and try next
-      }
-    }
-
-    // 3. Fallback: UPDATEREPORT with status = 'DELETED'
-    if (!successful) {
-      try {
-        upstreamData = await upstreamService.post('UPDATEREPORT', {
+      upstreamData = await upstreamService.post(
+        'DELETEREPORT',
+        {
           patientId: cleanPatientId,
           reportId: cleanReportId,
-          status: 'DELETED',
-        }, null, req.user?.upstreamSid);
-        if (upstreamData?.STATUS === 'SUCCESS') successful = true;
-      } catch (e3) {
-        console.warn('[Report] Fallback UPDATEREPORT status=DELETED failed:', e3.message);
-      }
+          reportType: resolvedReportType,
+        },
+        null,
+        req.user?.upstreamSid
+      );
+      console.log(`[ReportDelete] Upstream DELETEREPORT response for ${cleanReportId}:`, upstreamData);
+    } catch (e) {
+      console.warn(`[ReportDelete] Upstream DELETEREPORT note for ${cleanReportId}:`, e.message);
     }
 
+    // 2. Persist soft-deletion in robust local + MongoDB store
+    await reportOverrideService.markDeleted(cleanPatientId, cleanReportId, {
+      testName,
+      profileName,
+      deptName,
+      rate,
+    });
+
     invalidateReportCache(cleanPatientId);
+    invalidateReportCache(rawPid);
 
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
       StatusCode: upstreamData?.StatusCode || '0000',
-      Message: upstreamData?.Message || 'Test parameter deleted successfully',
+      Message: upstreamData?.Message || `Test parameter "${testName || cleanReportId}" marked as DELETED successfully`,
+      patientId: cleanPatientId,
+      reportId: cleanReportId,
+      status: 'DELETED',
       data: upstreamData,
     });
   } catch (err) {
@@ -643,11 +975,12 @@ export const deleteReport = async (req, res, next) => {
 
 /**
  * Restore individual test report parameter
- * Reverts status from DELETED to SAVED / ENTRY
+ * Calls native upstream RESTOREREPORT API with reportType=1,
+ * and restores status back to active in local and database storage.
  */
 export const restoreReport = async (req, res, next) => {
   try {
-    const { patientId, reportId } = req.body;
+    const { patientId, reportId, testName, reportType = 1 } = req.body;
     if (!patientId || !reportId) {
       return res.status(400).json({
         STATUS: 'FAILED',
@@ -661,48 +994,39 @@ export const restoreReport = async (req, res, next) => {
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
     const cleanReportId = String(reportId).trim();
+    const resolvedReportType = String(reportType || 1);
 
+    // 1. Call upstream native RESTOREREPORT API (as per main server specification)
     let upstreamData = null;
-    let successful = false;
-
-    // 1. Try REPORTRESTORE
     try {
-      upstreamData = await upstreamService.post('REPORTRESTORE', { patientId: cleanPatientId, reportId: cleanReportId }, null, req.user?.upstreamSid);
-      if (upstreamData?.STATUS === 'SUCCESS') successful = true;
-    } catch (e1) {
-      // ignore and try next
-    }
-
-    // 2. Try RESTOREREPORT
-    if (!successful) {
-      try {
-        upstreamData = await upstreamService.post('RESTOREREPORT', { patientId: cleanPatientId, reportId: cleanReportId }, null, req.user?.upstreamSid);
-        if (upstreamData?.STATUS === 'SUCCESS') successful = true;
-      } catch (e2) {
-        // ignore and try next
-      }
-    }
-
-    // 3. Fallback: UPDATEREPORT with status = 'SAVED'
-    if (!successful) {
-      try {
-        upstreamData = await upstreamService.post('UPDATEREPORT', {
+      upstreamData = await upstreamService.post(
+        'RESTOREREPORT',
+        {
           patientId: cleanPatientId,
           reportId: cleanReportId,
-          status: 'SAVED',
-        }, null, req.user?.upstreamSid);
-        if (upstreamData?.STATUS === 'SUCCESS') successful = true;
-      } catch (e3) {
-        console.warn('[Report] Fallback UPDATEREPORT status=SAVED failed:', e3.message);
-      }
+          reportType: resolvedReportType,
+        },
+        null,
+        req.user?.upstreamSid
+      );
+      console.log(`[ReportRestore] Upstream RESTOREREPORT response for ${cleanReportId}:`, upstreamData);
+    } catch (e) {
+      console.warn(`[ReportRestore] Upstream RESTOREREPORT note for ${cleanReportId}:`, e.message);
     }
 
+    // 2. Remove soft-deletion from store
+    await reportOverrideService.restoreDeleted(cleanPatientId, cleanReportId);
+
     invalidateReportCache(cleanPatientId);
+    invalidateReportCache(rawPid);
 
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
       StatusCode: upstreamData?.StatusCode || '0000',
-      Message: upstreamData?.Message || 'Test parameter restored successfully',
+      Message: upstreamData?.Message || `Test parameter "${testName || cleanReportId}" restored successfully`,
+      patientId: cleanPatientId,
+      reportId: cleanReportId,
+      status: 'ENTRY',
       data: upstreamData,
     });
   } catch (err) {

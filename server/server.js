@@ -55,12 +55,20 @@ app.use('/api/master', masterRoutes);
 // Global Error Handler
 app.use(errorHandler);
 
+// Process safety handlers to prevent unexpected crashes
+process.on('unhandledRejection', (reason) => {
+  console.warn('[Process] Unhandled Rejection:', reason?.message || reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[Process] Uncaught Exception:', err.message);
+});
+
 // Start server
 const startServer = async () => {
   try {
     await connectDB();
 
-    app.listen(config.port, () => {
+    const server = app.listen(config.port, () => {
       console.log(`=======================================================`);
       console.log(`🚀 LIS Middleman Server running on port ${config.port}`);
       console.log(`🏥 Clinic Upstream Target: ${config.lab.url}`);
@@ -72,6 +80,14 @@ const startServer = async () => {
       cacheService.warmAllCaches().catch((err) => {
         console.warn('[Cache] Background warming note:', err.message);
       });
+    });
+
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error(`[Server] Port ${config.port} is already in use. Waiting for port release...`);
+      } else {
+        console.error('[Server] Server error:', err.message);
+      }
     });
   } catch (err) {
     console.error('Failed to start server:', err);

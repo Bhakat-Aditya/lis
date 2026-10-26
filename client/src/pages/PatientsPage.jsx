@@ -23,7 +23,14 @@ import {
   ExternalLink,
   FlaskConical,
   Filter,
+  Edit,
+  Package,
+  Layers,
+  ListTree,
 } from 'lucide-react';
+
+import { useMaster } from '../context/context.master.jsx';
+import { groupInvestigationsIntoLots } from '../utils/labTestUtils.js';
 
 import {
   getLocalDateString,
@@ -32,9 +39,11 @@ import {
   formatDisplayDate,
   formatPatientDateTime,
   getPatientTime,
+  getSampleTimeDisplay,
   sortPatientsByRecent,
 } from '../utils/dateUtils.js';
 import BillPreviewModal from '../components/billing/BillPreviewModal.jsx';
+import PatientEditModal from '../components/patient/PatientEditModal.jsx';
 
 // Upstream LIS Payment Constants
 export const PAYMENT_STATUS_CODE_NOBILL = 1;
@@ -142,6 +151,7 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
   // Mode: 'recent' (default: loads all recent active records), 'today', 'yesterday', 'custom'
   const [dateMode, setDateMode] = useState('recent');
   const [previewBillPatient, setPreviewBillPatient] = useState(null);
+  const [editingPatient, setEditingPatient] = useState(null);
   const [selectedDate, setSelectedDate] = useState(todayStr);
   const [latestFoundDate, setLatestFoundDate] = useState(null);
   const [searchTerm, setSearchTerm] = useState(urlSearch);
@@ -153,6 +163,11 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
   const [rowDetails, setRowDetails] = useState({});
   const rowDetailsRef = useRef({});
   const fetchAbortRef = useRef(null);
+
+  // Master catalog investigations for grouping into packages & groups
+  const { profiles = [], packages = [], tests = [] } = useMaster();
+  const [expandedLotsMap, setExpandedLotsMap] = useState({});
+  const [lotsViewMode, setLotsViewMode] = useState({}); // pid -> 'grouped' | 'flat'
 
   // Sync state if URL query param changes
   useEffect(() => {
@@ -547,7 +562,10 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                 <th className="py-2.5 px-3 min-w-[75px] text-center text-slate-500">Gender</th>
                 <th className="py-2.5 px-3 min-w-[180px]">Doctor</th>
                 <th className="py-2.5 px-3 w-16 text-slate-500">Center</th>
-                <th className="py-2.5 px-3 min-w-[125px]">Date / Time</th>
+                <th className="py-2.5 px-3 min-w-[140px]">
+                  <div className="text-[11px] font-bold text-slate-700 leading-tight">Reg / Sample Time</div>
+                  <div className="text-[9px] font-medium text-slate-400">Date & Collection</div>
+                </th>
                 <th className="py-2.5 px-2 w-8 text-center text-slate-500">M</th>
                 <th className="py-2.5 px-2 w-8 text-center text-slate-500">P</th>
                 <th className="py-2.5 px-2 w-8 text-center text-slate-500">₹</th>
@@ -583,9 +601,6 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                   const isBilled = !isNoBill && billTotal > 0;
                   const isExpanded = expandedRowId === pid;
                   const details = rowDetails[pid];
-
-                  // Formatted time or fallback
-                  const timeStr = p.sampleTime || p.regTime || '03:15 PM';
 
                   return (
                     <React.Fragment key={pid}>
@@ -646,13 +661,38 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                           {p.center || 'Main'}
                         </td>
 
-                        {/* Date / Time: Both Date and Time displayed */}
-                        <td className="py-2.5 px-3 text-[11px] font-medium text-slate-700 whitespace-nowrap">
-                          <div className="font-semibold text-slate-900">
-                            {formatDisplayDate(p.regDate || p.collectionDate)}
+                        {/* Reg Date & Sample Time: Clearly separated without confusion */}
+                        <td className="py-2.5 px-3 text-[11px] font-medium whitespace-nowrap">
+                          <div className="flex items-center gap-1.5 leading-snug">
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 border border-indigo-200/70 rounded px-1 py-0.5">
+                              REG
+                            </span>
+                            <span className="font-semibold text-slate-900 text-xs">
+                              {formatDisplayDate(p.regDate || p.collectionDate)}
+                            </span>
                           </div>
-                          <div className="text-[10px] text-slate-500 font-mono">
-                            {getPatientTime(p)}
+                          <div className="flex items-center gap-1.5 leading-snug mt-1">
+                            <span
+                              className={`text-[9px] font-bold uppercase tracking-wider rounded px-1 py-0.5 ${
+                                p.sampleTime
+                                  ? 'text-amber-700 bg-amber-50 border border-amber-200/70'
+                                  : 'text-slate-400 bg-slate-50 border border-slate-200'
+                              }`}
+                            >
+                              SMPL
+                            </span>
+                            {p.sampleTime ? (
+                              <span
+                                className="font-mono text-[11px] font-semibold text-slate-700"
+                                title={`Sample collected: ${p.sampleTime}`}
+                              >
+                                {getSampleTimeDisplay(p.sampleTime, p.regDate)}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-slate-400 italic">
+                                Pending
+                              </span>
+                            )}
                           </div>
                         </td>
 
@@ -697,14 +737,27 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                           {renderPatientStatus(p.status)}
                         </td>
 
-                        {/* Open Button (Vibrant Blue) */}
+                        {/* Action Buttons: Open & Edit */}
                         <td className="py-2.5 px-2 text-center">
-                          <button
-                            onClick={(e) => handleOpenPatient(p, e)}
-                            className="bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-bold px-3 py-1 rounded-lg transition-all cursor-pointer shadow-xs"
-                          >
-                            Open
-                          </button>
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={(e) => handleOpenPatient(p, e)}
+                              className="bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-bold px-2.5 py-1 rounded-lg transition-all cursor-pointer shadow-xs"
+                            >
+                              Open
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingPatient(p);
+                              }}
+                              title="Edit Patient Details"
+                              className="p-1 text-slate-500 hover:text-blue-600 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-lg transition-all cursor-pointer shadow-2xs"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
 
                         {/* More Accordion Button matching screenshot */}
@@ -730,9 +783,20 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
                               {/* Card 1: Patient Details */}
                               <div className="space-y-2 border-r border-slate-100 pr-3">
-                                <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-700">
-                                  <User className="w-3.5 h-3.5" />
-                                  <span>Patient Details</span>
+                                <div className="flex items-center justify-between text-xs font-bold text-indigo-700">
+                                  <div className="flex items-center gap-1.5">
+                                    <User className="w-3.5 h-3.5" />
+                                    <span>Patient Details</span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingPatient(p)}
+                                    className="inline-flex items-center gap-1 text-[10px] text-blue-600 hover:text-blue-800 font-bold hover:underline cursor-pointer"
+                                    title="Edit Patient Details"
+                                  >
+                                    <Edit className="w-3 h-3" />
+                                    <span>Edit</span>
+                                  </button>
                                 </div>
                                 <div className="text-xs space-y-1 text-slate-700">
                                   <div>
@@ -747,6 +811,18 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                                       {p.age || '3'}{!String(p.age || '').toLowerCase().includes('year') && !String(p.age || '').toLowerCase().includes('day') ? ` ${p.age_unit || 'Days'}` : ''} / {p.gender || 'Male'}
                                     </strong>
                                   </div>
+                                  <div>
+                                    <span className="text-slate-400">Reg Date:</span>{' '}
+                                    <strong className="text-slate-800">
+                                      {formatDisplayDate(p.regDate || p.collectionDate)}
+                                    </strong>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-400">Sample Time:</span>{' '}
+                                    <strong className={p.sampleTime ? 'text-slate-800' : 'text-slate-400 font-normal italic'}>
+                                      {p.sampleTime || 'Pending Collection'}
+                                    </strong>
+                                  </div>
                                   <div className="flex items-center gap-1.5 pt-0.5">
                                     <span className="text-slate-400">Status:</span>{' '}
                                     {renderPatientStatus(p.status)}
@@ -754,63 +830,204 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                                 </div>
                               </div>
 
-                              {/* Card 2: Tests List */}
-                              <div className="space-y-2 border-r border-slate-100 pr-3">
-                                <div className="flex items-center justify-between text-xs font-bold text-indigo-700">
-                                  <div className="flex items-center gap-1.5">
-                                    <FileText className="w-3.5 h-3.5" />
-                                    <span>Tests ({details?.reports?.length || 0})</span>
-                                  </div>
-                                  {loadingRowPid === pid && (
-                                    <RefreshCw className="w-3 h-3 animate-spin text-indigo-500" />
-                                  )}
-                                </div>
-                                <div className="text-xs space-y-1.5 max-h-28 overflow-y-auto pr-1">
-                                  {details?.reports && details.reports.length > 0 ? (
-                                    details.reports.map((rep, rIdx) => (
-                                      <div
-                                        key={rIdx}
-                                        className="flex items-center justify-between text-[11px] text-slate-700 gap-2"
-                                      >
-                                        <span className="truncate">
-                                          {rIdx + 1}. {rep.testName || rep.profileName}
-                                        </span>
-                                        <span className="bg-sky-50 text-sky-700 px-1.5 py-0.2 rounded font-mono font-bold text-[10px] shrink-0">
-                                          ₹{Number(rep.rate || 0)}
+                              {/* Card 2: Tests & Investigation Lots (Packages, Groups & Tests) */}
+                              {(() => {
+                                const currentPatient = details?.patient || p;
+                                const patientLots = groupInvestigationsIntoLots(
+                                  details?.reports || [],
+                                  currentPatient,
+                                  profiles,
+                                  packages,
+                                  tests
+                                );
+                                const isFlatMode = lotsViewMode[pid] === 'flat';
+                                const reportsCount = details?.reports?.length || 0;
+
+                                return (
+                                  <div className="space-y-2 border-r border-slate-100 pr-3">
+                                    <div className="flex items-center justify-between text-xs font-bold text-indigo-700">
+                                      <div className="flex items-center gap-1.5">
+                                        <Layers className="w-3.5 h-3.5" />
+                                        <span>
+                                          Investigations ({isFlatMode ? `${reportsCount} Tests` : `${patientLots.length} Lots`})
                                         </span>
                                       </div>
-                                    ))
-                                  ) : loadingRowPid === pid ? (
-                                    <div className="text-[11px] text-indigo-500 italic py-2 flex items-center gap-1.5">
-                                      <RefreshCw className="w-3 h-3 animate-spin" />
-                                      <span>Loading investigations...</span>
+                                      <div className="flex items-center gap-1.5">
+                                        {loadingRowPid === pid && (
+                                          <RefreshCw className="w-3 h-3 animate-spin text-indigo-500" />
+                                        )}
+                                        {patientLots.length > 0 && reportsCount > 0 && (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setLotsViewMode((prev) => ({
+                                                ...prev,
+                                                [pid]: isFlatMode ? 'grouped' : 'flat',
+                                              }));
+                                            }}
+                                            className="text-[10px] font-semibold text-slate-500 hover:text-indigo-600 bg-slate-100 hover:bg-indigo-50 px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+                                            title="Toggle Grouped Lots (Packages & Groups) vs All Flat Tests"
+                                          >
+                                            {isFlatMode ? 'Show Grouped' : 'Show All'}
+                                          </button>
+                                        )}
+                                      </div>
                                     </div>
-                                  ) : (
-                                    <div className="text-[11px] text-slate-400 italic py-2">
-                                      No tests ordered yet
+
+                                    <div
+                                      data-lenis-prevent="true"
+                                      className="text-xs space-y-1.5 max-h-36 overflow-y-auto pr-1"
+                                    >
+                                      {loadingRowPid === pid ? (
+                                        <div className="text-[11px] text-indigo-500 italic py-2 flex items-center gap-1.5">
+                                          <RefreshCw className="w-3 h-3 animate-spin" />
+                                          <span>Loading investigations...</span>
+                                        </div>
+                                      ) : isFlatMode ? (
+                                        // Flat View of all individual test parameters
+                                        details?.reports && details.reports.length > 0 ? (
+                                          details.reports.map((rep, rIdx) => (
+                                            <div
+                                              key={rIdx}
+                                              className="flex items-center justify-between text-[11px] text-slate-700 gap-2 p-1 rounded hover:bg-slate-50 transition-colors"
+                                            >
+                                              <span className="truncate">
+                                                {rIdx + 1}. {rep.testName || rep.profileName}
+                                              </span>
+                                              <span className="bg-sky-50 text-sky-700 px-1.5 py-0.2 rounded font-mono font-bold text-[10px] shrink-0">
+                                                ₹{Number(rep.rate || 0)}
+                                              </span>
+                                            </div>
+                                          ))
+                                        ) : (
+                                          <div className="text-[11px] text-slate-400 italic py-2">
+                                            No tests ordered yet
+                                          </div>
+                                        )
+                                      ) : (
+                                        // Grouped Lots View: All Packages, Groups & Standalone Tests shown at once
+                                        patientLots.length > 0 ? (
+                                          patientLots.map((lot, lIdx) => {
+                                            const isLotExpanded = Boolean(expandedLotsMap[`${pid}_${lot.id}`]);
+                                            const hasSubTests = Array.isArray(lot.subTests) && lot.subTests.length > 0;
+
+                                            let badgeColor = 'bg-sky-50 text-sky-800 border-sky-300';
+                                            let icon = <FlaskConical className="w-3 h-3 text-sky-600 shrink-0" />;
+                                            let label = 'Test';
+                                            if (lot.category === 'Package') {
+                                              badgeColor = 'bg-amber-50 text-amber-900 border-amber-300';
+                                              icon = <Package className="w-3 h-3 text-amber-600 shrink-0" />;
+                                              label = 'Package';
+                                            } else if (lot.category === 'Profile') {
+                                              badgeColor = 'bg-purple-50 text-purple-900 border-purple-300';
+                                              icon = <Layers className="w-3 h-3 text-purple-600 shrink-0" />;
+                                              label = 'Group';
+                                            }
+
+                                            return (
+                                              <div
+                                                key={lIdx}
+                                                className="border border-slate-100 rounded-lg p-1.5 bg-slate-50/50 hover:bg-slate-50 transition-all space-y-1"
+                                              >
+                                                <div className="flex items-center justify-between text-[11px] text-slate-800 gap-1.5">
+                                                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                                    <span
+                                                      className={`inline-flex items-center gap-0.5 text-[9px] font-extrabold px-1.5 py-0.2 rounded-full border ${badgeColor} shrink-0`}
+                                                    >
+                                                      {icon}
+                                                      <span>{label}</span>
+                                                    </span>
+                                                    <span className="font-semibold text-slate-900 truncate" title={lot.name}>
+                                                      {lot.name}
+                                                    </span>
+                                                  </div>
+
+                                                  <div className="flex items-center gap-1.5 shrink-0">
+                                                    {hasSubTests && (
+                                                      <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                          e.stopPropagation();
+                                                          setExpandedLotsMap((prev) => ({
+                                                            ...prev,
+                                                            [`${pid}_${lot.id}`]: !prev[`${pid}_${lot.id}`],
+                                                          }));
+                                                        }}
+                                                        className={`text-[9px] font-bold px-1.5 py-0.2 rounded border transition-colors flex items-center gap-0.5 cursor-pointer ${
+                                                          isLotExpanded
+                                                            ? 'bg-indigo-600 text-white border-indigo-600'
+                                                            : 'bg-white text-indigo-700 border-indigo-200 hover:bg-indigo-50'
+                                                        }`}
+                                                        title="Toggle included investigations"
+                                                      >
+                                                        <span>{lot.subTestCount} Tests</span>
+                                                        {isLotExpanded ? (
+                                                          <ChevronUp className="w-2.5 h-2.5" />
+                                                        ) : (
+                                                          <ChevronDown className="w-2.5 h-2.5" />
+                                                        )}
+                                                      </button>
+                                                    )}
+                                                    <span className="bg-sky-50 text-sky-700 px-1.5 py-0.2 rounded font-mono font-bold text-[10px]">
+                                                      ₹{Number(lot.amount || 0)}
+                                                    </span>
+                                                  </div>
+                                                </div>
+
+                                                {/* Expanded sub-test chips */}
+                                                {isLotExpanded && hasSubTests && (
+                                                  <div className="pt-1 border-t border-slate-200/60 mt-1 pl-1 flex flex-wrap gap-1 animate-in fade-in duration-100">
+                                                    {lot.subTests.map((sub, sIdx) => (
+                                                      <span
+                                                        key={sIdx}
+                                                        className="text-[9px] bg-white text-slate-700 border border-slate-200 px-1.5 py-0.2 rounded font-medium truncate max-w-[140px]"
+                                                        title={sub}
+                                                      >
+                                                        • {sub}
+                                                      </span>
+                                                    ))}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            );
+                                          })
+                                        ) : (
+                                          <div className="text-[11px] text-slate-400 italic py-2">
+                                            No tests ordered yet
+                                          </div>
+                                        )
+                                      )}
                                     </div>
-                                  )}
-                                </div>
-                              </div>
+                                  </div>
+                                );
+                              })()}
 
                               {/* Card 3: Financial Summary */}
                               {(() => {
                                 const effectivePatient = details?.patient || p;
-                                const reportsRateTotal = details?.reports && details.reports.length > 0
-                                  ? details.reports.reduce((acc, rep) => acc + Number(rep.rate || 0), 0)
-                                  : 0;
+                                const patientLots = groupInvestigationsIntoLots(
+                                  details?.reports || [],
+                                  effectivePatient,
+                                  profiles,
+                                  packages,
+                                  tests
+                                );
+                                const lotsRateTotal = patientLots && patientLots.length > 0
+                                  ? patientLots.reduce((acc, lot) => acc + Number(lot.amount || 0), 0)
+                                  : (details?.reports && details.reports.length > 0 ? details.reports.reduce((acc, rep) => acc + Number(rep.rate || 0), 0) : 0);
 
-                                const effectiveTotal = Number(effectivePatient.totalBill) > 0
-                                  ? Number(effectivePatient.totalBill)
-                                  : (reportsRateTotal > 0 ? reportsRateTotal : billTotal);
+                                const effectiveTotal = lotsRateTotal > 0
+                                  ? lotsRateTotal
+                                  : (Number(effectivePatient.totalBill) > 0 ? Number(effectivePatient.totalBill) : billTotal);
 
                                 const effectivePaid = effectivePatient.paidBill !== undefined && effectivePatient.paidBill !== null
                                   ? Number(effectivePatient.paidBill)
                                   : (effectivePatient.billPayStatus === PAYMENT_STATUS_CODE_PAID ? effectiveTotal : billPaid);
 
-                                const effectiveBalance = effectivePatient.balance !== undefined && effectivePatient.balance !== null
-                                  ? Number(effectivePatient.balance)
-                                  : (effectivePatient.billPayStatus === PAYMENT_STATUS_CODE_PAID ? 0 : Math.max(0, effectiveTotal - effectivePaid));
+                                const effectiveBalance = effectivePatient.billPayStatus === PAYMENT_STATUS_CODE_PAID
+                                  ? 0
+                                  : Math.max(0, effectiveTotal - effectivePaid);
 
                                 const effectiveIsPaid = effectivePatient.billPayStatus === PAYMENT_STATUS_CODE_PAID || (effectiveTotal > 0 && effectiveBalance <= 0 && effectivePaid >= effectiveTotal);
                                 const effectiveIsBilled = effectiveTotal > 0;
@@ -861,6 +1078,14 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                                   Quick Actions
                                 </div>
                                 <div className="space-y-1.5">
+                                  <button
+                                    onClick={() => setEditingPatient(p)}
+                                    className="w-full flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1.5 px-3 rounded-lg shadow-xs cursor-pointer transition-all"
+                                  >
+                                    <Edit className="w-3.5 h-3.5" />
+                                    <span>Edit Patient Details</span>
+                                  </button>
+
                                   <button
                                     onClick={() => {
                                       setActivePatient(p);
@@ -977,6 +1202,19 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
         patientId={previewBillPatient?.patientId || previewBillPatient?.slNo}
         patientName={previewBillPatient?.name}
       />
+
+      {/* Patient Demographic Details Edit Modal */}
+      {editingPatient && (
+        <PatientEditModal
+          isOpen={!!editingPatient}
+          onClose={() => setEditingPatient(null)}
+          patient={editingPatient}
+          onPatientUpdated={() => {
+            fetchPatients();
+            setEditingPatient(null);
+          }}
+        />
+      )}
     </section>
   );
 }

@@ -43,7 +43,7 @@ export default function BarcodeModal({ isOpen, onClose, patient }) {
           </div>
 
           <div className="text-[10px] text-slate-400">
-            Collection: {formatDisplayDate(patient.collectionDate || patient.regDate)} • Center: {patient.center || 'Main'}
+            {patient.sampleTime ? `Collection: ${patient.sampleTime}` : `Reg: ${formatDisplayDate(patient.regDate || patient.collectionDate)}`} • Center: {patient.center || 'Main'}
           </div>
         </div>
 

@@ -329,6 +329,7 @@ export const updatePatient = async (req, res, next) => {
     const upstreamData = await upstreamService.post('UPDATEPATIENT', params, null, req.user?.upstreamSid);
 
     invalidatePatientListCache();
+    invalidateReportCache(patientId);
 
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',

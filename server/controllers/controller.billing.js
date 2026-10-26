@@ -301,6 +301,150 @@ export const applyDiscount = async (req, res, next) => {
 };
 
 /**
+ * Update Invoice / Bill directly using native BILLUPDATE API
+ * Matches user's exact specification:
+ * api=BILLUPDATE&patientId=...&isNew=0&action=addbill&billname=TXN/RECEIPT
+ * &name1=...&date1=...&amt1=...
+ * &count=...&totalamt=...&disc=...&discamt=...&roundoff=...&billamount=...
+ */
+export const updateBill = async (req, res, next) => {
+  try {
+    const {
+      patientId,
+      billname = 'TXN/RECEIPT',
+      items = [],
+      isNew = '0',
+      action = 'addbill',
+      discountPercent = 0,
+      discountAmount = 0,
+      roundoff = 0,
+      billamount,
+      totalamt,
+    } = req.body;
+
+    if (!patientId) {
+      return res.status(400).json({ STATUS: 'FAILED', Message: 'patientId is required' });
+    }
+
+    const rawPid = String(patientId).trim();
+    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+      ? `P${rawPid.replace(/^P+/i, '')}`
+      : `P${rawPid}`;
+
+    // Filter out completely blank rows
+    const validItems = (items || []).filter(
+      (item) => item && (String(item.name || '').trim() !== '' || Number(item.amount) > 0)
+    );
+
+    const today = new Date();
+    const d = String(today.getDate()).padStart(2, '0');
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const y = today.getFullYear();
+    const formattedDate = `${d}/${m}/${y}`;
+
+    // Calculate gross total
+    const computedGross = validItems.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
+    const finalGross = totalamt !== undefined && !isNaN(Number(totalamt)) ? Number(totalamt) : computedGross;
+
+    const discPerc = Number(discountPercent) || 0;
+    let discAmtVal = Number(discountAmount) || 0;
+    if (discPerc > 0 && discAmtVal === 0) {
+      discAmtVal = Math.round(((finalGross * discPerc) / 100) * 100) / 100;
+    }
+
+    const computedRemainder = finalGross - discAmtVal;
+    let computedRoundoff = Number(roundoff) || 0;
+    if (computedRoundoff === 0 && computedRemainder > 0) {
+      const rounded = Math.round(computedRemainder);
+      computedRoundoff = Math.round((computedRemainder - rounded) * 100) / 100;
+    }
+
+    const computedNet =
+      billamount !== undefined && !isNaN(Number(billamount))
+        ? Number(billamount)
+        : Math.max(0, Math.round(finalGross - discAmtVal - computedRoundoff));
+
+    const params = {
+      patientId: cleanPatientId,
+      isNew: String(isNew),
+      action: String(action),
+      billname: String(billname || 'TXN/RECEIPT').trim(),
+      count: String(validItems.length),
+      totalamt: finalGross.toFixed(2),
+      disc: String(discPerc),
+      discamt: discAmtVal.toFixed(2),
+      roundoff: (computedRoundoff >= 0 ? computedRoundoff : -computedRoundoff).toFixed(2),
+      billamount: computedNet.toFixed(2),
+    };
+
+    validItems.forEach((item, idx) => {
+      const num = idx + 1;
+      params[`name${num}`] = String(item.name || '').trim();
+      params[`date${num}`] = item.date || formattedDate;
+      params[`amt${num}`] = String(item.amount !== undefined ? item.amount : 0);
+    });
+
+    const updateRes = await upstreamService.post('BILLUPDATE', params, null, req.user?.upstreamSid);
+
+    // Two-way synchronization: update corresponding report rates in upstream
+    try {
+      const pRep = await upstreamService.get('GETPATIENTREPORT', { patientId: cleanPatientId }, req.user?.upstreamSid);
+      const repList = pRep?.payLoadJSON?.reports || [];
+      for (const item of validItems) {
+        const itName = String(item.name || '').toLowerCase().trim();
+        const matchedRep = repList.find(
+          (r) =>
+            String(r.testName || '').toLowerCase().trim() === itName ||
+            String(r.profileName || '').toLowerCase().trim() === itName
+        );
+        if (matchedRep && parseFloat(matchedRep.rate) !== parseFloat(item.amount)) {
+          await upstreamService.post(
+            'UPDATEREPORT',
+            {
+              ...matchedRep,
+              patientId: cleanPatientId,
+              rate: String(item.amount),
+            },
+            null,
+            req.user?.upstreamSid
+          );
+        }
+      }
+    } catch (e) {
+      console.warn('[Billing] Error syncing reports from bill update:', e.message);
+    }
+
+    invalidateReportCache(cleanPatientId);
+    invalidateReportCache(rawPid);
+    invalidatePatientListCache();
+
+    let freshSummary = null;
+    try {
+      freshSummary = await upstreamService.getBillingSummary(cleanPatientId, req.user?.upstreamSid);
+    } catch (e) {
+      console.warn('[Billing] getBillingSummary error after BILLUPDATE:', e.message);
+    }
+
+    return res.json({
+      STATUS: updateRes?.STATUS || 'SUCCESS',
+      StatusCode: updateRes?.StatusCode || '0000',
+      Message: updateRes?.Message || 'Bill updated successfully',
+      data: updateRes,
+      summary: freshSummary,
+      financials: {
+        totalAmount: finalGross,
+        discount: discAmtVal,
+        discountPercent: discPerc,
+        roundoff: computedRoundoff,
+        netBill: computedNet,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
  * Get native GETBILLJSON payload
  */
 export const getBillJson = async (req, res, next) => {
