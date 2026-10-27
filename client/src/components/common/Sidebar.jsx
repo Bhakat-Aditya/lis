@@ -182,7 +182,7 @@ export default function Sidebar({ onOpenNewPatient }) {
             </div>
 
             <div className="text-[10px] text-slate-500 mb-2 font-mono flex items-center justify-between">
-              <span>PID: #{activePatient.patientId || activePatient.slNo}</span>
+              <span>Barcode: #{activePatient.slNo || activePatient.barcode || '-'}</span>
               <span className="font-semibold text-slate-700">₹{activePatient.totalBill || 0}</span>
             </div>
 

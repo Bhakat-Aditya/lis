@@ -30,6 +30,7 @@ export default function EditBillModal({
   const [discountAmount, setDiscountAmount] = useState('0');
   const [discountMode, setDiscountMode] = useState('percent'); // 'percent' | 'flat'
   const [roundoff, setRoundoff] = useState('0');
+  const [isManualRoundoff, setIsManualRoundoff] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -69,20 +70,24 @@ export default function EditBillModal({
         let discPct = '0';
         let discAmt = '0';
         let roundoffVal = '0';
+        let manualRo = false;
 
         if (billJson) {
           billHeading = billJson['Bill Name'] || billJson['billname'] || 'TXN/RECEIPT';
           discAmt = String(billJson['Discount'] || billJson['discamt'] || '0');
           roundoffVal = String(billJson['Round Off'] || billJson['roundoff'] || '0');
+          manualRo = roundoffVal !== '0' && roundoffVal !== '0.00' && Boolean(roundoffVal);
 
           const rawList = billJson['Test List'] || [];
           if (Array.isArray(rawList) && rawList.length > 0) {
-            parsedItems = rawList.map((t, idx) => ({
-              id: idx + 1,
-              name: t['Bill Particulars'] || '',
-              amount: t.Amount !== undefined ? String(t.Amount) : '0',
-              date: t['Bill Date'] || '',
-            }));
+            parsedItems = rawList
+              .filter((t) => t && String(t['Bill Particulars'] || t.name || '').trim() !== '')
+              .map((t, idx) => ({
+                id: idx + 1,
+                name: t['Bill Particulars'] || t.name || '',
+                amount: t.Amount !== undefined ? String(t.Amount) : (t.amount !== undefined ? String(t.amount) : '0'),
+                date: t['Bill Date'] || t.date || '',
+              }));
           }
         }
 
@@ -94,22 +99,24 @@ export default function EditBillModal({
             });
             const invData = invoiceRes.data;
             if (Array.isArray(invData?.items) && invData.items.length > 0) {
-              parsedItems = invData.items.map((it, idx) => ({
-                id: idx + 1,
-                name: it.testName || it.name || '',
-                amount: String(it.rate || it.amount || 0),
-                date: '',
-              }));
+              parsedItems = invData.items
+                .filter((it) => it && String(it.testName || it.name || '').trim() !== '')
+                .map((it, idx) => ({
+                  id: idx + 1,
+                  name: it.testName || it.name || '',
+                  amount: String(it.rate !== undefined ? it.rate : (it.amount || 0)),
+                  date: '',
+                }));
             }
           } catch (err) {
             console.warn('[EditBill] invoice fallback error:', err.message);
           }
         }
 
-        // Pad with empty rows up to at least 6 rows like in the screenshot
-        while (parsedItems.length < 6) {
+        // If completely empty, supply at least 1 row to edit
+        if (parsedItems.length === 0) {
           parsedItems.push({
-            id: parsedItems.length + 1,
+            id: 1,
             name: '',
             amount: '',
             date: '',
@@ -120,6 +127,7 @@ export default function EditBillModal({
         setItems(parsedItems);
         setDiscountAmount(discAmt);
         setRoundoff(roundoffVal);
+        setIsManualRoundoff(manualRo);
       } catch (err) {
         if (isMounted) setError('Failed to load bill details');
       } finally {
@@ -153,18 +161,37 @@ export default function EditBillModal({
   }, [grossTotal, discountPercent, discountAmount, discountMode]);
 
   const computedRoundoff = useMemo(() => {
-    const customRo = parseFloat(roundoff);
-    if (!isNaN(customRo) && customRo !== 0) return customRo;
+    if (isManualRoundoff) {
+      const customRo = parseFloat(roundoff);
+      return isNaN(customRo) ? 0 : customRo;
+    }
     const remainder = grossTotal - computedDiscountAmount;
     if (remainder <= 0) return 0;
     const rounded = Math.round(remainder);
     return Math.round((remainder - rounded) * 100) / 100;
-  }, [grossTotal, computedDiscountAmount, roundoff]);
+  }, [grossTotal, computedDiscountAmount, roundoff, isManualRoundoff]);
 
   const netBillAmount = useMemo(() => {
     const net = grossTotal - computedDiscountAmount - computedRoundoff;
     return Math.max(0, Math.round(net));
   }, [grossTotal, computedDiscountAmount, computedRoundoff]);
+
+  const handleAutoRoundoff = () => {
+    setIsManualRoundoff(false);
+    const remainder = grossTotal - computedDiscountAmount;
+    if (remainder <= 0) {
+      setRoundoff('0');
+      return;
+    }
+    const rounded = Math.round(remainder);
+    const autoRo = Math.round((remainder - rounded) * 100) / 100;
+    setRoundoff(String(autoRo));
+  };
+
+  const handleZeroRoundoff = () => {
+    setIsManualRoundoff(true);
+    setRoundoff('0');
+  };
 
   const handleItemChange = (index, field, value) => {
     setItems((prev) => {
@@ -275,7 +302,7 @@ export default function EditBillModal({
               <h3 className="text-base font-extrabold text-slate-900 leading-tight flex items-center gap-2">
                 <span>👤+ Edit Bill</span>
                 <span className="text-xs font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
-                  #{patient?.patientId}
+                  Barcode: #{patient?.slNo || patient?.barcode || '-'}
                 </span>
               </h3>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
@@ -375,7 +402,7 @@ export default function EditBillModal({
                       type="text"
                       value={item.name}
                       onChange={(e) => handleItemChange(index, 'name', e.target.value)}
-                      placeholder={`Particular ${index + 1} (e.g. THYROID PROFILE, FREE T3)`}
+                      placeholder="Enter test / bill particular name"
                       className="flex-1 px-3.5 py-2 text-xs font-bold text-slate-900 bg-white border-2 border-blue-500 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 outline-none transition-all shadow-2xs"
                     />
 
@@ -420,12 +447,41 @@ export default function EditBillModal({
 
             {/* Bottom Row: Billing Summary Box matching Screenshot */}
             <div className="flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4 pt-3 border-t border-slate-100">
-              {/* Optional Quick Discount Panel */}
-              <div className="w-full sm:w-72 bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-                  Adjustment / Concession
-                </span>
-                <div className="grid grid-cols-2 gap-2">
+              {/* Quick Discount & Round Off Panel */}
+              <div className="w-full sm:w-88 bg-slate-50 border border-slate-200 rounded-2xl p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                    Adjustment / Concession
+                  </span>
+                  <div className="flex items-center gap-1.5 text-[10px]">
+                    <button
+                      type="button"
+                      onClick={handleAutoRoundoff}
+                      className={`px-1.5 py-0.5 rounded font-bold transition-all cursor-pointer ${
+                        !isManualRoundoff
+                          ? 'bg-blue-600 text-white shadow-2xs'
+                          : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                      }`}
+                      title="Automatically round to nearest whole rupee"
+                    >
+                      Auto Round
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleZeroRoundoff}
+                      className={`px-1.5 py-0.5 rounded font-bold transition-all cursor-pointer ${
+                        isManualRoundoff && (roundoff === '0' || parseFloat(roundoff) === 0)
+                          ? 'bg-slate-700 text-white shadow-2xs'
+                          : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                      }`}
+                      title="Set round off to 0"
+                    >
+                      Zero
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
                   <div>
                     <label className="text-[10px] text-slate-500 font-semibold block mb-0.5">Discount %</label>
                     <input
@@ -451,6 +507,20 @@ export default function EditBillModal({
                         setDiscountMode('flat');
                       }}
                       className="w-full px-2 py-1 text-xs font-bold font-mono border border-slate-300 rounded-lg outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-500 font-semibold block mb-0.5">Round Off ₹</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={isManualRoundoff ? roundoff : computedRoundoff}
+                      onChange={(e) => {
+                        setRoundoff(e.target.value);
+                        setIsManualRoundoff(true);
+                      }}
+                      placeholder="0.00"
+                      className="w-full px-2 py-1 text-xs font-bold font-mono border border-slate-300 rounded-lg outline-none focus:border-blue-500 bg-white"
                     />
                   </div>
                 </div>
@@ -482,14 +552,21 @@ export default function EditBillModal({
                   </div>
                 )}
 
-                {computedRoundoff !== 0 && (
-                  <div className="flex items-center justify-between text-xs text-slate-600 px-1">
+                <div className="flex items-center justify-between text-xs text-slate-600 px-1">
+                  <div className="flex items-center gap-1.5">
                     <span>Round Off</span>
-                    <span className="font-mono font-bold text-slate-700">
-                      {computedRoundoff > 0 ? `+ ₹ ${computedRoundoff.toFixed(2)}` : `- ₹ ${Math.abs(computedRoundoff).toFixed(2)}`}
+                    <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                      !isManualRoundoff ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-700'
+                    }`}>
+                      {!isManualRoundoff ? 'Auto' : 'Manual'}
                     </span>
                   </div>
-                )}
+                  <span className="font-mono font-bold text-slate-700">
+                    {computedRoundoff !== 0
+                      ? (computedRoundoff > 0 ? `- ₹ ${computedRoundoff.toFixed(2)}` : `+ ₹ ${Math.abs(computedRoundoff).toFixed(2)}`)
+                      : '₹ 0.00'}
+                  </span>
+                </div>
 
                 <div className="flex items-center justify-between pt-2 border-t border-slate-100 px-1 font-bold">
                   <span className="text-xs text-slate-800">Net Payable</span>

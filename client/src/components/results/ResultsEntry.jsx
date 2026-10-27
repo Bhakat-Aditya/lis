@@ -26,6 +26,10 @@ import {
   ChevronDown,
   ChevronUp,
   Loader2,
+  Upload,
+  Send,
+  MessageSquare,
+  TestTube,
 } from 'lucide-react';
 
 import api from '../../services/api';
@@ -35,12 +39,23 @@ import ResultsCardView from './ResultsCardView.jsx';
 import ClinicalGuideModal from '../common/ClinicalGuideModal.jsx';
 import DoctorApprovalModal from './DoctorApprovalModal.jsx';
 import EditIndividualReportModal from './EditIndividualReportModal.jsx';
+import ConfirmationModal from '../common/ConfirmationModal.jsx';
 import {
   getTestPhaseInfo,
   evaluateResultValue,
   getDefaultHealthyValue,
   getSpecimenTubeInfo,
+  getTestOperationPermissions,
 } from '../../utils/labTestUtils.js';
+import { useMaster } from '../../context/context.master.jsx';
+
+const formatGender = (raw) => {
+  const s = String(raw || '').trim().toLowerCase();
+  if (s.startsWith('m')) return 'Male';
+  if (s.startsWith('f')) return 'Female';
+  if (s.startsWith('t') || s.startsWith('o')) return 'Transgender';
+  return raw || '-';
+};
 
 export default function ResultsEntry({
   patient = {},
@@ -48,6 +63,7 @@ export default function ResultsEntry({
   templates = [],
   onRefresh,
 }) {
+  const { tests: masterTests = [] } = useMaster();
   // Helper to normalize status into one of 10 official upstream LIS statuses
   const resolveStatus = (report = {}, current = {}) => {
     const raw = String(current.status || report.status || '').toUpperCase().trim();
@@ -179,6 +195,17 @@ export default function ResultsEntry({
   const [approvalModalOpen, setApprovalModalOpen] = useState(false);
   const [editingReport, setEditingReport] = useState(null);
   const [showDeletedSection, setShowDeletedSection] = useState(true);
+  const [confirmDialog, setConfirmDialog] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    description: null,
+    confirmText: 'Confirm',
+    cancelText: 'Cancel',
+    variant: 'warning',
+    icon: null,
+    onConfirm: null,
+  });
 
   // List of all deleted reports
   const deletedReports = useMemo(() => {
@@ -427,6 +454,8 @@ export default function ResultsEntry({
     setResultsState((prev) => {
       const updated = { ...prev };
       reports.forEach((r) => {
+        const perms = getTestOperationPermissions(r, masterTests);
+        if (!perms.possibleEntry) return; // Skip tests where result entry is disabled
         const curVal = updated[r.reportId]?.resultData;
         if (!curVal || curVal.trim() === '' || curVal === '-') {
           const defaultVal = getDefaultHealthyValue(r.refRange, r.testName);
@@ -572,31 +601,57 @@ export default function ResultsEntry({
   };
 
 
-  const handleReceiveSample = async (report) => {
-    try {
-      await api.post('/reports/receive-sample', {
-        patientId: patient.patientId,
-      });
-      setSuccessMsg(`Sample accessioned successfully!`);
-      if (onRefresh) onRefresh();
-    } catch (err) {
-      setErrorMsg('Failed to receive sample');
-    }
+  const handleReceiveSample = (report) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Receive Sample Specimen',
+      message: `Confirm accession of sample specimen for "${report?.testName || 'diagnostic test'}"?`,
+      description: 'This operation will mark the test specimen as received at the accession bench and update upstream tracking (RECEIVESAMPLE).',
+      confirmText: 'Receive Sample',
+      variant: 'indigo',
+      icon: TestTube,
+      onConfirm: async () => {
+        try {
+          await api.post('/reports/receive-sample', {
+            patientId: patient.patientId,
+          });
+          setSuccessMsg(`Sample accessioned successfully!`);
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+          if (onRefresh) onRefresh();
+        } catch (err) {
+          setErrorMsg('Failed to receive sample');
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
   };
 
-  const handleReceiveAllSamples = async () => {
-    setReceivingAll(true);
-    try {
-      await api.post('/reports/receive-sample', {
-        patientId: patient.patientId,
-      });
-      setSuccessMsg('All pending samples marked received in accession desk!');
-      if (onRefresh) onRefresh();
-    } catch (err) {
-      setErrorMsg('Failed to receive all samples');
-    } finally {
-      setReceivingAll(false);
-    }
+  const handleReceiveAllSamples = () => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Receive All Pending Samples',
+      message: `Confirm receipt of all ordered sample specimens for ${patient.name || 'Patient'}?`,
+      description: 'All pending specimen tubes will be accessioned and verified in the lab intake queue (RECEIVESAMPLE).',
+      confirmText: 'Receive All Samples',
+      variant: 'indigo',
+      icon: TestTube,
+      onConfirm: async () => {
+        setReceivingAll(true);
+        try {
+          await api.post('/reports/receive-sample', {
+            patientId: patient.patientId,
+          });
+          setSuccessMsg('All pending samples marked received in accession desk!');
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+          if (onRefresh) onRefresh();
+        } catch (err) {
+          setErrorMsg('Failed to receive all samples');
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        } finally {
+          setReceivingAll(false);
+        }
+      },
+    });
   };
 
   const openClinicalGuide = (name) => {
@@ -734,45 +789,58 @@ export default function ResultsEntry({
   }, [autoSyncEnabled, isSyncing, savingAll, patient?.patientId, dirtyReportIds.length]);
 
   // Individual Report Delete Handler
-  const handleDeleteReport = async (report) => {
+  const handleDeleteReport = (report) => {
     if (!report?.reportId) return;
-    const targetPid = patient?.patientId || patient?.slNo;
-    setDeletingId(report.reportId);
-    setErrorMsg('');
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Test Parameter',
+      message: `Are you sure you want to delete test "${report.testName}"?`,
+      description: 'The parameter will be removed from this patient\'s active worklist. You can restore it anytime from the Deleted Tests section below.',
+      confirmText: 'Delete Parameter',
+      variant: 'danger',
+      icon: Trash2,
+      onConfirm: async () => {
+        const targetPid = patient?.patientId || patient?.slNo;
+        setDeletingId(report.reportId);
+        setErrorMsg('');
 
-    try {
-      const res = await api.post('/reports/delete', {
-        patientId: targetPid,
-        reportId: report.reportId,
-        testName: report.testName,
-        profileName: report.profileName || '',
-        deptName: report.deptName || '',
-        sampleId: report.sampleId || '',
-        rate: report.rate || '',
-        sampletype: report.sampleType || '',
-        reportType: 1,
-      });
+        try {
+          const res = await api.post('/reports/delete', {
+            patientId: targetPid,
+            reportId: report.reportId,
+            testName: report.testName,
+            profileName: report.profileName || '',
+            deptName: report.deptName || '',
+            sampleId: report.sampleId || '',
+            rate: report.rate || '',
+            sampletype: report.sampleType || '',
+            reportType: 1,
+          });
 
-      if (res.data?.STATUS === 'FAILED') {
-        throw new Error(res.data?.Message || 'Failed to delete test parameter');
-      }
+          if (res.data?.STATUS === 'FAILED') {
+            throw new Error(res.data?.Message || 'Failed to delete test parameter');
+          }
 
-      setResultsState((prev) => ({
-        ...prev,
-        [report.reportId]: {
-          ...(prev[report.reportId] || {}),
-          status: 'DELETED',
-        },
-      }));
+          setResultsState((prev) => ({
+            ...prev,
+            [report.reportId]: {
+              ...(prev[report.reportId] || {}),
+              status: 'DELETED',
+            },
+          }));
 
-      setShowDeletedSection(true);
-      setSuccessMsg(`Test parameter "${report.testName}" marked as DELETED. You can restore it anytime from the Deleted Tests section below.`);
-      if (onRefresh) await onRefresh(true);
-    } catch (err) {
-      setErrorMsg(err.response?.data?.Message || err.message || 'Failed to delete test parameter');
-    } finally {
-      setDeletingId(null);
-    }
+          setShowDeletedSection(true);
+          setSuccessMsg(`Test parameter "${report.testName}" marked as DELETED. You can restore it anytime from the Deleted Tests section below.`);
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+          if (onRefresh) await onRefresh(true);
+        } catch (err) {
+          setErrorMsg(err.response?.data?.Message || err.message || 'Failed to delete test parameter');
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        } finally {
+          setDeletingId(null);
+        }
+      },
+    });
   };
 
   // Individual Report Restore Handler
@@ -817,30 +885,112 @@ export default function ResultsEntry({
   };
 
   // Individual Report Upload Order Handler (UPLOADORDER)
-  const handleUploadOrder = async (report) => {
+  const handleUploadOrder = (report) => {
     if (!report?.reportId) return;
-    const targetPid = patient?.patientId || patient?.slNo;
-    setUploadingId(report.reportId);
-    setErrorMsg('');
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Upload Order to Analyzer',
+      message: `Upload test order for "${report.testName}" (Report #${report.reportId}) to analyzer equipment?`,
+      description: 'This will transmit the test requisition and barcode ID directly to the interfacing clinical analyzer (UPLOADORDER).',
+      confirmText: 'Upload Order',
+      variant: 'indigo',
+      icon: Upload,
+      onConfirm: async () => {
+        const targetPid = patient?.patientId || patient?.slNo;
+        setUploadingId(report.reportId);
+        setErrorMsg('');
 
-    try {
-      const res = await api.post('/reports/upload-order', {
-        patientId: targetPid,
-        reportId: report.reportId,
-        reportType: 1,
-      });
+        try {
+          const res = await api.post('/reports/upload-order', {
+            patientId: targetPid,
+            reportId: report.reportId,
+            reportType: 1,
+          });
 
-      if (res.data?.STATUS === 'FAILED') {
-        throw new Error(res.data?.Message || 'Failed to upload order to analyzer equipment');
-      }
+          if (res.data?.STATUS === 'FAILED') {
+            throw new Error(res.data?.Message || 'Failed to upload order to analyzer equipment');
+          }
 
-      setSuccessMsg(`Work order for "${report.testName}" uploaded to analyzer equipment successfully!`);
-      if (onRefresh) await onRefresh(true);
-    } catch (err) {
-      setErrorMsg(err.response?.data?.Message || err.message || 'Failed to upload order to analyzer equipment');
-    } finally {
-      setUploadingId(null);
-    }
+          setSuccessMsg(`Work order for "${report.testName}" uploaded to analyzer equipment successfully!`);
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+          if (onRefresh) await onRefresh(true);
+        } catch (err) {
+          setErrorMsg(err.response?.data?.Message || err.message || 'Failed to upload order to analyzer equipment');
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        } finally {
+          setUploadingId(null);
+        }
+      },
+    });
+  };
+
+  // Release Report Handler (RELEASEREPORT)
+  const handleReleaseReport = () => {
+    const rawPid = patient?.patientId || patient?.slNo;
+    const cleanPid = rawPid
+      ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
+      : '';
+
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Release Diagnostic Report',
+      message: `Are you sure you want to release the diagnostic report for ${patient?.name || 'Patient'} (${cleanPid || rawPid})?`,
+      description: 'Releasing will mark the report as finalized, making it ready for patient delivery, portal access, and official printing (RELEASEREPORT).',
+      confirmText: 'Release Report',
+      variant: 'teal',
+      icon: Send,
+      onConfirm: async () => {
+        setErrorMsg('');
+        setSuccessMsg('');
+        try {
+          const res = await api.post('/reports/release', { patientId: cleanPid || rawPid });
+          if (res.data?.STATUS === 'FAILED' || res.data?.StatusCode === '1211') {
+            throw new Error(res.data?.Message || 'Failed to release report (1211)');
+          }
+          setSuccessMsg(res.data?.Message || 'Diagnostic report released successfully!');
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+          if (onRefresh) await onRefresh(true);
+        } catch (err) {
+          setErrorMsg(err.response?.data?.Message || err.message || 'Failed to release report');
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
+  };
+
+  // WhatsApp Send / Resend Handler (SENDWHATSAPP)
+  const handleSendWhatsApp = () => {
+    const rawPid = patient?.patientId || patient?.slNo;
+    const cleanPid = rawPid
+      ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
+      : '';
+    const phone = patient?.mobile || patient?.phone || '';
+
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Send Report via WhatsApp',
+      message: `Send diagnostic report PDF via WhatsApp to ${patient?.name || 'Patient'}${phone ? ` (${phone})` : ''}?`,
+      description: 'An automated WhatsApp notification and PDF download link will be dispatched to the registered mobile number (SENDWHATSAPP).',
+      confirmText: 'Send WhatsApp',
+      variant: 'whatsapp',
+      icon: MessageSquare,
+      onConfirm: async () => {
+        setErrorMsg('');
+        setSuccessMsg('');
+        try {
+          const res = await api.post('/reports/send-whatsapp', { patientId: cleanPid || rawPid });
+          if (res.data?.STATUS === 'FAILED' || res.data?.StatusCode === '1211') {
+            throw new Error(res.data?.Message || 'Failed to send report via WhatsApp (1211)');
+          }
+          setSuccessMsg(res.data?.Message || 'Diagnostic report dispatched to WhatsApp successfully!');
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+          if (onRefresh) await onRefresh(true);
+        } catch (err) {
+          setErrorMsg(err.response?.data?.Message || err.message || 'Failed to send report via WhatsApp');
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
   };
 
   // Individual Report Download Result Handler (DOWNLOADRESULT)
@@ -881,12 +1031,12 @@ export default function ResultsEntry({
             <span className="text-sm font-extrabold tracking-tight">Results Bench</span>
           </div>
 
-          <span className="text-[11px] font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.2 rounded-md">
-            PID #{patient.patientId || patient.slNo}
+          <span className="text-[11px] font-mono font-bold bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.2 rounded-md">
+            Barcode: #{patient.slNo || patient.barcode || '-'}
           </span>
 
           <span className="text-xs font-semibold text-slate-800">
-            {patient.name} ({patient.gender || '-'} / {patient.age || '-'}Y)
+            {patient.name} ({formatGender(patient.gender)} / {patient.age || '-'}Y)
           </span>
 
           <span className="text-slate-400 hidden sm:inline">•</span>
@@ -1043,6 +1193,40 @@ export default function ResultsEntry({
             <span>AWS Report PDF</span>
           </button>
 
+          {/* Receive Pending Samples Button with Confirmation */}
+          <button
+            type="button"
+            onClick={handleReceiveAllSamples}
+            disabled={receivingAll}
+            className="flex items-center gap-1.5 px-3 py-1 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+            title="Receive and accession all pending specimen tubes for this patient (RECEIVESAMPLE)"
+          >
+            <TestTube className={`w-3.5 h-3.5 ${receivingAll ? 'animate-spin' : ''}`} />
+            <span>{receivingAll ? 'Receiving...' : 'Receive Samples'}</span>
+          </button>
+
+          {/* Release Report Button with Confirmation */}
+          <button
+            type="button"
+            onClick={handleReleaseReport}
+            className="flex items-center gap-1.5 px-3 py-1 bg-teal-700 hover:bg-teal-800 active:scale-95 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer"
+            title="Release finalized diagnostic report for collection & printing (RELEASEREPORT)"
+          >
+            <Send className="w-3.5 h-3.5" />
+            <span>Release Report</span>
+          </button>
+
+          {/* WhatsApp Resend Button with Confirmation */}
+          <button
+            type="button"
+            onClick={handleSendWhatsApp}
+            className="flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer"
+            title="Dispatch report directly to patient WhatsApp (SENDWHATSAPP)"
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span>WhatsApp Resend</span>
+          </button>
+
 
           {/* Save All Results Button */}
           <button
@@ -1191,6 +1375,7 @@ export default function ResultsEntry({
           reports={filteredReports}
           resultsState={resultsState}
           patient={patient}
+          masterTests={masterTests}
           savingId={savingId}
           calculatingId={calculatingId}
           deletingId={deletingId}
@@ -1213,6 +1398,7 @@ export default function ResultsEntry({
           reports={filteredReports}
           resultsState={resultsState}
           patient={patient}
+          masterTests={masterTests}
           savingId={savingId}
           calculatingId={calculatingId}
           deletingId={deletingId}
@@ -1423,6 +1609,20 @@ export default function ResultsEntry({
           }}
         />
       )}
+
+      {/* Universal Side-Effect Operations Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmDialog.onConfirm}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        description={confirmDialog.description}
+        confirmText={confirmDialog.confirmText}
+        cancelText={confirmDialog.cancelText}
+        variant={confirmDialog.variant}
+        icon={confirmDialog.icon}
+      />
     </div>
   );
 }

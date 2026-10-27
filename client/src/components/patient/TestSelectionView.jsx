@@ -463,7 +463,7 @@ export default function TestSelectionView({
     totalAmount > 0
       ? (patient?.billPayStatus === 2 || patient?.billPayStatus === '2'
           ? 0
-          : Math.max(0, totalAmount - totalDeposits))
+          : (explicitDue !== null && !isNaN(explicitDue) ? Math.max(0, explicitDue) : Math.max(0, totalAmount - totalDeposits)))
       : 0;
 
   // Filter matched suggestions: shows catalog items immediately on focus, and filters as user types
@@ -635,11 +635,11 @@ export default function TestSelectionView({
 
   return (
     <div className="space-y-4">
-      {/* 1. Top PID Strip */}
+      {/* 1. Top Barcode Strip */}
       <div className="bg-white border border-slate-200/90 shadow-xs px-4 py-3 rounded-2xl flex flex-wrap items-center justify-between text-xs font-semibold gap-3">
         <div className="flex flex-wrap items-center gap-2.5 text-slate-700">
           <span className="font-bold text-blue-700 font-mono bg-blue-50 px-2.5 py-0.5 rounded-lg border border-blue-200">
-            PID: #{pid}
+            Barcode: #{patient?.slNo || patient?.barcode || '-'}
           </span>
           <span className="text-slate-300">|</span>
           <span className="font-bold text-slate-900">

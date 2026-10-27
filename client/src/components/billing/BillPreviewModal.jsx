@@ -140,12 +140,9 @@ export default function BillPreviewModal({
                 <h3 className="text-sm font-bold text-white truncate">
                   Bill Preview
                 </h3>
-                <span className="font-mono text-xs font-bold bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded border border-amber-500/30">
-                  {cleanPid}
-                </span>
                 {patientName && (
-                  <span className="text-xs text-slate-300 font-medium truncate max-w-[200px]">
-                    • {patientName}
+                  <span className="text-xs font-bold bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded border border-amber-500/30 truncate max-w-[220px]">
+                    {patientName}
                   </span>
                 )}
               </div>
@@ -230,9 +227,6 @@ export default function BillPreviewModal({
               <RefreshCw className="w-8 h-8 animate-spin text-amber-500 mb-3" />
               <span className="text-sm font-semibold text-slate-800">
                 Fetching authentic bill preview from AWS server...
-              </span>
-              <span className="text-xs text-slate-500 mt-1 font-mono">
-                Patient ID: {cleanPid}
               </span>
             </div>
           )}

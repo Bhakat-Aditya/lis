@@ -675,3 +675,63 @@ export const streamInvoicePdf = async (req, res, next) => {
   }
 };
 
+/**
+ * Fetch billing list from upstream GETBILLLIST API
+ * Supports fromDate & toDate query parameters
+ */
+export const getBillList = async (req, res, next) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const fromDate = req.query.fromDate || today;
+    const toDate = req.query.toDate || today;
+
+    try {
+      const upstreamData = await upstreamService.get(
+        'GETBILLLIST',
+        { fromDate, toDate },
+        req.user?.upstreamSid
+      );
+
+      const payload = upstreamData?.payLoadJSON;
+      let bills = [];
+      if (Array.isArray(payload)) {
+        bills = payload;
+      } else if (Array.isArray(payload?.bills)) {
+        bills = payload.bills;
+      } else if (Array.isArray(payload?.billList)) {
+        bills = payload.billList;
+      } else if (Array.isArray(payload?.bill)) {
+        bills = payload.bill;
+      } else if (Array.isArray(payload?.data)) {
+        bills = payload.data;
+      } else if (Array.isArray(upstreamData?.bills)) {
+        bills = upstreamData.bills;
+      }
+
+      if (bills.length > 0 || upstreamData?.STATUS === 'SUCCESS') {
+        return res.json({
+          STATUS: 'SUCCESS',
+          StatusCode: '0000',
+          fromDate,
+          toDate,
+          bills,
+        });
+      }
+    } catch (upstreamErr) {
+      console.warn('[GetBillList] Upstream GETBILLLIST call failed or not yet deployed:', upstreamErr.message);
+    }
+
+    // Graceful fallback if upstream API is empty, in deployment, or 1001
+    return res.json({
+      STATUS: 'SUCCESS',
+      StatusCode: '0000',
+      fromDate,
+      toDate,
+      bills: [],
+      fallback: true,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+

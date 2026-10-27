@@ -44,7 +44,7 @@ export default function Navbar({ onSearch }) {
             <input
               id="global-search-input"
               type="text"
-              placeholder="Search patients (PID, Name, Mobile)..."
+              placeholder="Search patients (Barcode, Name, Mobile)..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-9 pr-7 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white text-slate-700 placeholder:text-slate-400 font-medium transition-all"

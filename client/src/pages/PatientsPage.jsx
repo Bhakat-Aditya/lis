@@ -146,13 +146,15 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
 
   const urlSearch = searchParams.get('search') || '';
   const todayStr = getLocalDateString();
-  const yesterdayStr = getYesterdayDateString();
+  const yesterdayStr = shiftDateDays(todayStr, -1);
+  const past7DaysStr = shiftDateDays(todayStr, -7);
 
-  // Mode: 'recent' (default: loads all recent active records), 'today', 'yesterday', 'custom'
-  const [dateMode, setDateMode] = useState('recent');
+  // Task - 9: Default fetching is TODAY, with presets: Yesterday, Last 7 Days, and Custom (From-To)
+  const [dateMode, setDateMode] = useState('today');
+  const [fromDate, setFromDate] = useState(todayStr);
+  const [toDate, setToDate] = useState(todayStr);
   const [previewBillPatient, setPreviewBillPatient] = useState(null);
   const [editingPatient, setEditingPatient] = useState(null);
-  const [selectedDate, setSelectedDate] = useState(todayStr);
   const [latestFoundDate, setLatestFoundDate] = useState(null);
   const [searchTerm, setSearchTerm] = useState(urlSearch);
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('ALL');
@@ -174,9 +176,6 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
     if (urlSearch !== searchTerm) {
       setSearchTerm(urlSearch);
     }
-    if (urlSearch && dateMode !== 'recent') {
-      setDateMode('recent');
-    }
   }, [urlSearch]);
 
   const fetchPatients = async () => {
@@ -188,13 +187,10 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
 
     setLoading(true);
     try {
-      const params = {};
-      if (dateMode === 'recent') {
-        params.allDates = 'true';
-      } else {
-        params.fromDate = selectedDate;
-        params.toDate = selectedDate;
-      }
+      const params = {
+        fromDate,
+        toDate,
+      };
       if (searchTerm) {
         params.search = searchTerm.trim();
       }
@@ -238,16 +234,15 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
   const handleDateModeChange = (mode) => {
     setDateMode(mode);
     if (mode === 'today') {
-      setSelectedDate(todayStr);
+      setFromDate(todayStr);
+      setToDate(todayStr);
     } else if (mode === 'yesterday') {
-      setSelectedDate(yesterdayStr);
+      setFromDate(yesterdayStr);
+      setToDate(yesterdayStr);
+    } else if (mode === 'last7days') {
+      setFromDate(past7DaysStr);
+      setToDate(todayStr);
     }
-  };
-
-  const handleShiftDay = (delta) => {
-    const newDate = shiftDateDays(selectedDate, delta);
-    setSelectedDate(newDate);
-    setDateMode('custom');
   };
 
   const fetchRowDetails = async (pid, force = false) => {
@@ -296,7 +291,7 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
 
   useEffect(() => {
     fetchPatients();
-  }, [selectedDate, dateMode, refreshTrigger]);
+  }, [fromDate, toDate, dateMode, refreshTrigger]);
 
   const handleToggleRow = (pid, e) => {
     e?.stopPropagation();
@@ -401,7 +396,7 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
           <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 cursor-pointer" onClick={handleSearchSubmit} />
           <input
             type="text"
-            placeholder="Search PID, Name, Doctor, Mobile..."
+            placeholder="Search by Barcode, Patient Name, Doctor, Mobile..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-8 pr-7 py-1.5 bg-slate-50 border border-slate-300 rounded-md text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-indigo-600 transition-all"
@@ -418,27 +413,16 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
           )}
         </form>
 
-        {/* Date Filter Bar: Presets & Shift Controls */}
+        {/* Date Filter Bar: Today (default), Yesterday, Last 7 Days, and From Date to To Date */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Quick Filter Segmented Control */}
-          <div className="flex items-center bg-slate-100 p-0.5 rounded-md border border-slate-200 text-xs font-semibold">
-            <button
-              type="button"
-              onClick={() => handleDateModeChange('recent')}
-              className={`px-3 py-1 rounded-lg text-xs transition-all cursor-pointer ${
-                dateMode === 'recent'
-                  ? 'bg-blue-600 text-white font-bold shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 font-medium'
-              }`}
-            >
-              All Recent
-            </button>
+          <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs font-semibold">
             <button
               type="button"
               onClick={() => handleDateModeChange('today')}
-              className={`px-3 py-1 rounded-lg text-xs transition-all cursor-pointer ${
+              className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
                 dateMode === 'today'
-                  ? 'bg-emerald-600 text-white font-bold shadow-xs'
+                  ? 'bg-blue-600 text-white font-bold shadow-xs'
                   : 'text-slate-600 hover:text-slate-900 font-medium'
               }`}
             >
@@ -447,54 +431,56 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
             <button
               type="button"
               onClick={() => handleDateModeChange('yesterday')}
-              className={`px-3 py-1 rounded-lg text-xs transition-all cursor-pointer ${
+              className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
                 dateMode === 'yesterday'
-                  ? 'bg-indigo-600 text-white font-bold shadow-xs'
+                  ? 'bg-blue-600 text-white font-bold shadow-xs'
                   : 'text-slate-600 hover:text-slate-900 font-medium'
               }`}
             >
               Yesterday
             </button>
+            <button
+              type="button"
+              onClick={() => handleDateModeChange('last7days')}
+              className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
+                dateMode === 'last7days'
+                  ? 'bg-blue-600 text-white font-bold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 font-medium'
+              }`}
+            >
+              Last 7 Days
+            </button>
           </div>
 
-          {/* Date Picker with Prev / Next day arrows */}
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => handleShiftDay(-1)}
-              className="p-1.5 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg text-slate-600 transition-colors cursor-pointer"
-              title="Previous Day"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-            </button>
-
-            <div className="relative">
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => {
-                  setSelectedDate(e.target.value);
-                  setDateMode('custom');
-                }}
-                className="pl-2.5 pr-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-600 cursor-pointer shadow-2xs"
-              />
-            </div>
-
-            <button
-              type="button"
-              onClick={() => handleShiftDay(1)}
-              className="p-1.5 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg text-slate-600 transition-colors cursor-pointer"
-              title="Next Day"
-            >
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
+          {/* Custom Date Pickers (From Date to To Date) */}
+          <div className="flex items-center gap-1.5 text-slate-600 text-xs bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
+            <Calendar className="w-3.5 h-3.5 text-slate-400" />
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(e) => {
+                setFromDate(e.target.value);
+                setDateMode('custom');
+              }}
+              className="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-xs text-slate-800 font-medium cursor-pointer"
+            />
+            <span className="text-slate-400">to</span>
+            <input
+              type="date"
+              value={toDate}
+              onChange={(e) => {
+                setToDate(e.target.value);
+                setDateMode('custom');
+              }}
+              className="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-xs text-slate-800 font-medium cursor-pointer"
+            />
           </div>
 
           {/* Search / Refresh Button (Vibrant Blue) */}
           <button
             onClick={fetchPatients}
             disabled={loading}
-            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-xs disabled:opacity-50"
+            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-xs disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span>Apply</span>
@@ -557,7 +543,7 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
             <thead>
               <tr className="bg-slate-100/90 text-slate-700 text-[11px] font-bold border-b border-slate-200">
                 <th className="py-2.5 px-3 w-12 text-center text-slate-500">SN</th>
-                <th className="py-2.5 px-3 w-16 text-slate-500">ID</th>
+                <th className="py-2.5 px-3 min-w-[120px] text-slate-500">Barcode / SL No</th>
                 <th className="py-2.5 px-3 min-w-[160px]">Patient Name</th>
                 <th className="py-2.5 px-3 min-w-[75px] text-center text-slate-500">Gender</th>
                 <th className="py-2.5 px-3 min-w-[180px]">Doctor</th>
@@ -590,7 +576,8 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                   const rawGender = String(p.gender || '').trim();
                   const isMale = rawGender.toLowerCase().startsWith('m');
                   const isFemale = rawGender.toLowerCase().startsWith('f');
-                  const displayGender = isMale ? 'Male' : isFemale ? 'Female' : (rawGender || 'Male');
+                  const isTrans = rawGender.toLowerCase().startsWith('t') || rawGender.toLowerCase().startsWith('o');
+                  const displayGender = isMale ? 'Male' : isFemale ? 'Female' : isTrans ? 'Transgender' : 'Male';
                   const billTotal = Number(p.totalBill || 0);
                   const billPaid = Number(p.paidBill || 0);
                   const billBalance = Number(p.balance ?? Math.max(0, billTotal - billPaid));
@@ -617,13 +604,15 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                           {snNumber}
                         </td>
 
-                        {/* ID */}
+                        {/* Barcode / SL No (NO PATIENT ID) */}
                         <td
                           onDoubleClick={(e) => handleOpenPatient(p, e)}
-                          className="py-2.5 px-3 font-semibold text-slate-800 text-xs hover:text-blue-600 transition-colors"
+                          className="py-2.5 px-3 font-mono font-bold text-blue-700 text-xs hover:text-blue-900 transition-colors whitespace-nowrap"
                           title="Double-click to open patient profile"
                         >
-                          {pid}
+                          <span className="bg-blue-50 border border-blue-200/70 px-2 py-0.5 rounded text-[11px]">
+                            {p.slNo || p.barcode || '-'}
+                          </span>
                         </td>
 
                         {/* Patient Name */}
@@ -644,7 +633,7 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                                 ? 'bg-blue-50 text-blue-700 border border-blue-200/60'
                                 : isFemale
                                 ? 'bg-rose-50 text-rose-700 border border-rose-200/60'
-                                : 'bg-slate-100 text-slate-700'
+                                : 'bg-purple-50 text-purple-700 border border-purple-200/60'
                             }`}
                           >
                             {displayGender}
@@ -808,7 +797,7 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                                   <div>
                                     <span className="text-slate-400">Age/Gender:</span>{' '}
                                     <strong className="text-slate-800">
-                                      {p.age || '3'}{!String(p.age || '').toLowerCase().includes('year') && !String(p.age || '').toLowerCase().includes('day') ? ` ${p.age_unit || 'Days'}` : ''} / {p.gender || 'Male'}
+                                      {p.age || '3'}{!String(p.age || '').toLowerCase().includes('year') && !String(p.age || '').toLowerCase().includes('day') ? ` ${p.age_unit || 'Days'}` : ''} / {displayGender}
                                     </strong>
                                   </div>
                                   <div>
@@ -1025,9 +1014,13 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                                   ? Number(effectivePatient.paidBill)
                                   : (effectivePatient.billPayStatus === PAYMENT_STATUS_CODE_PAID ? effectiveTotal : billPaid);
 
+                                const syncedBal = effectivePatient.balance !== undefined && effectivePatient.balance !== null
+                                  ? Number(effectivePatient.balance)
+                                  : (effectivePatient.dueAmount !== undefined ? Number(effectivePatient.dueAmount) : null);
+
                                 const effectiveBalance = effectivePatient.billPayStatus === PAYMENT_STATUS_CODE_PAID
                                   ? 0
-                                  : Math.max(0, effectiveTotal - effectivePaid);
+                                  : (syncedBal !== null && !isNaN(syncedBal) ? Math.max(0, syncedBal) : Math.max(0, effectiveTotal - effectivePaid));
 
                                 const effectiveIsPaid = effectivePatient.billPayStatus === PAYMENT_STATUS_CODE_PAID || (effectiveTotal > 0 && effectiveBalance <= 0 && effectivePaid >= effectiveTotal);
                                 const effectiveIsBilled = effectiveTotal > 0;
@@ -1159,26 +1152,34 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                     <p className="font-semibold text-sm text-slate-700 mb-1">
                       {searchTerm
                         ? `No patient records found matching "${searchTerm}"`
-                        : `No diagnostic records found on ${formatDisplayDate(selectedDate)}`}
+                        : `No diagnostic records found on ${fromDate === toDate ? formatDisplayDate(fromDate) : `${formatDisplayDate(fromDate)} - ${formatDisplayDate(toDate)}`}`}
                     </p>
                     <p className="text-xs text-slate-400 mb-3">
                       {searchTerm
-                        ? 'Check your spelling or switch to "All Recent" to search across all diagnostic records.'
-                        : 'Switch to "All Recent" or jump to the latest date to view active patient records.'}
+                        ? 'Check your spelling or switch date filters to search across diagnostic records.'
+                        : 'Switch to "Last 7 Days" or jump to the latest date to view active patient records.'}
                     </p>
                     <div className="flex flex-wrap items-center justify-center gap-2">
                       <button
                         type="button"
-                        onClick={() => handleDateModeChange('recent')}
+                        onClick={() => handleDateModeChange('today')}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-bold transition-colors cursor-pointer shadow-xs"
+                      >
+                        Today's Worklist
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDateModeChange('last7days')}
                         className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-xs font-bold transition-colors cursor-pointer shadow-xs"
                       >
-                        Show All Recent Worklist
+                        Last 7 Days Worklist
                       </button>
-                      {latestFoundDate && latestFoundDate !== selectedDate && (
+                      {latestFoundDate && latestFoundDate !== fromDate && (
                         <button
                           type="button"
                           onClick={() => {
-                            setSelectedDate(latestFoundDate);
+                            setFromDate(latestFoundDate);
+                            setToDate(latestFoundDate);
                             setDateMode('custom');
                           }}
                           className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-xs font-semibold transition-colors cursor-pointer border border-slate-300"

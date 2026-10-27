@@ -13,9 +13,18 @@ import {
 } from 'lucide-react';
 import api from '../../services/api';
 import Modal from '../common/Modal.jsx';
+import ConfirmationModal from '../common/ConfirmationModal.jsx';
 import ReferenceRangeGauge from '../common/ReferenceRangeGauge.jsx';
 import ClinicalGuideModal from '../common/ClinicalGuideModal.jsx';
 import { formatDisplayDate } from '../../utils/dateUtils.js';
+
+const formatGender = (raw) => {
+  const s = String(raw || '').trim().toLowerCase();
+  if (s.startsWith('m')) return 'Male';
+  if (s.startsWith('f')) return 'Female';
+  if (s.startsWith('t') || s.startsWith('o')) return 'Transgender';
+  return raw || '-';
+};
 
 export default function DoctorApprovalModal({
   isOpen,
@@ -26,6 +35,7 @@ export default function DoctorApprovalModal({
 }) {
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
+  const [showReleaseConfirm, setShowReleaseConfirm] = useState(false);
   const [activeAction, setActiveAction] = useState(null);
   const [error, setError] = useState('');
   const [guideModalOpen, setGuideModalOpen] = useState(false);
@@ -110,8 +120,8 @@ export default function DoctorApprovalModal({
           <div className="bg-slate-50/90 border border-slate-200/90 rounded-xl p-2.5 sm:px-3 flex flex-wrap items-center justify-between gap-2.5">
             {/* Left: Patient Info */}
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 font-mono font-bold flex items-center justify-center text-xs shrink-0">
-                #{patient.patientId || patient.slNo}
+              <div className="px-2 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 font-mono font-bold flex items-center justify-center text-xs shrink-0 whitespace-nowrap">
+                {patient.slNo || patient.barcode || '-'}
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2 truncate">
@@ -119,7 +129,7 @@ export default function DoctorApprovalModal({
                     {patient.name}
                   </span>
                   <span className="text-[11px] font-semibold text-slate-500 shrink-0">
-                    {patient.gender || '-'} • {patient.age || '-'} Y
+                    {formatGender(patient.gender)} • {patient.age || '-'} Y
                   </span>
                   <span className="text-[10px] font-extrabold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.2 rounded shrink-0">
                     {patient.status || 'SAVED'}
@@ -334,9 +344,9 @@ export default function DoctorApprovalModal({
 
               <button
                 type="button"
-                onClick={() => handleAction('release')}
+                onClick={() => setShowReleaseConfirm(true)}
                 disabled={loading}
-                className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-lg font-bold text-xs shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                className="flex items-center gap-1 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white rounded-lg font-bold text-xs shadow-xs transition-all cursor-pointer disabled:opacity-50"
                 title="Release report for final printing and WhatsApp dispatch"
               >
                 {activeAction === 'release' ? (
@@ -350,6 +360,22 @@ export default function DoctorApprovalModal({
           </div>
         </div>
       </Modal>
+
+      {/* Confirmation Modal before Release */}
+      <ConfirmationModal
+        isOpen={showReleaseConfirm}
+        onClose={() => setShowReleaseConfirm(false)}
+        onConfirm={async () => {
+          setShowReleaseConfirm(false);
+          await handleAction('release');
+        }}
+        title="Release Diagnostic Report"
+        message={`Are you sure you want to release the diagnostic report for ${patient.name} (Barcode: ${patient.slNo || '-'})?`}
+        description="Releasing marks the report as final and allows direct delivery to the patient and official printing (RELEASEREPORT)."
+        confirmText="Release Report"
+        variant="teal"
+        icon={Send}
+      />
 
       <ClinicalGuideModal
         isOpen={guideModalOpen}

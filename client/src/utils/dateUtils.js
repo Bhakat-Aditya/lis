@@ -10,12 +10,38 @@ export const parseLISDate = (dateVal) => {
   if (dateVal instanceof Date) return isNaN(dateVal.getTime()) ? null : dateVal;
 
   const str = String(dateVal).trim();
+  if (!str) return null;
 
-  // Try standard parse (handles 'Mon Oct 19 00:00:00 UTC 2026', '2026-10-19', ISO strings)
+  const monthMap = {
+    jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+    jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11
+  };
+
+  // 1. Handle Java Date.toString() e.g. "Mon Oct 26 00:00:00 UTC 2026"
+  const javaDateMatch = str.match(/^[A-Za-z]{3}\s+([A-Za-z]{3})\s+(\d{1,2})\s+(\d{2}):(\d{2}):(\d{2})\s+(?:[A-Za-z0-9_+-]+)\s+(\d{4})/);
+  if (javaDateMatch) {
+    const [, monthStr, dayStr, hours, mins, secs, yearStr] = javaDateMatch;
+    const mIdx = monthMap[monthStr.toLowerCase()];
+    if (mIdx !== undefined) {
+      return new Date(Number(yearStr), mIdx, Number(dayStr), Number(hours), Number(mins), Number(secs));
+    }
+  }
+
+  // 2. Handle "Oct 26, 2026, 12:00:00 AM" or "Oct 26, 2026"
+  const monthDayYearMatch = str.match(/^([A-Za-z]{3})\s+(\d{1,2}),?\s+(\d{4})/);
+  if (monthDayYearMatch) {
+    const [, monthStr, dayStr, yearStr] = monthDayYearMatch;
+    const mIdx = monthMap[monthStr.toLowerCase()];
+    if (mIdx !== undefined) {
+      return new Date(Number(yearStr), mIdx, Number(dayStr));
+    }
+  }
+
+  // 3. Try standard parse (handles ISO strings, standard formats)
   const parsed = new Date(str);
   if (!isNaN(parsed.getTime())) return parsed;
 
-  // Handle DD/MM/YYYY or DD-MM-YYYY formats e.g. '18/10/2026 06:36 PM'
+  // 4. Handle DD/MM/YYYY or DD-MM-YYYY formats e.g. '18/10/2026 06:36 PM'
   const dmyMatch = str.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:\s+(.*))?$/);
   if (dmyMatch) {
     const [, day, month, year, timePart] = dmyMatch;
@@ -31,6 +57,39 @@ export const parseLISDate = (dateVal) => {
  * Format date to YYYY-MM-DD in LOCAL timezone (avoids UTC offset shifts)
  */
 export const getLocalDateString = (date = new Date()) => {
+  if (typeof date === 'string') {
+    const s = date.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+    const monthMap = {
+      jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+      jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12'
+    };
+
+    // Handle Java Date.toString() e.g. "Mon Oct 26 00:00:00 UTC 2026"
+    const javaDateMatch = s.match(/^[A-Za-z]{3}\s+([A-Za-z]{3})\s+(\d{1,2})\s+\d{2}:\d{2}:\d{2}\s+(?:[A-Za-z0-9_+-]+)\s+(\d{4})/);
+    if (javaDateMatch) {
+      const [, monthStr, dayStr, yearStr] = javaDateMatch;
+      const mm = monthMap[monthStr.toLowerCase()];
+      if (mm) return `${yearStr}-${mm}-${dayStr.padStart(2, '0')}`;
+    }
+
+    // Handle "Oct 26, 2026, 12:00:00 AM" or "Oct 26, 2026"
+    const monthDayYearMatch = s.match(/^([A-Za-z]{3})\s+(\d{1,2}),?\s+(\d{4})/);
+    if (monthDayYearMatch) {
+      const [, monthStr, dayStr, yearStr] = monthDayYearMatch;
+      const mm = monthMap[monthStr.toLowerCase()];
+      if (mm) return `${yearStr}-${mm}-${dayStr.padStart(2, '0')}`;
+    }
+
+    // Handle DD/MM/YYYY or DD-MM-YYYY
+    const dmyMatch = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+    if (dmyMatch) {
+      const [, day, month, year] = dmyMatch;
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+  }
+
   const d = date instanceof Date ? date : parseLISDate(date) || new Date();
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');

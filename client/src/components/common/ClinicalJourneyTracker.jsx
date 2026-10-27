@@ -30,7 +30,7 @@ export default function ClinicalJourneyTracker({ status = 'REGISTERED', reports 
     {
       id: 0,
       title: 'Registration',
-      desc: 'Demographics & PID generated',
+      desc: 'Demographics & Barcode generated',
       icon: UserCheck,
       color: 'indigo',
     },

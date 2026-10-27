@@ -3,9 +3,17 @@ import Modal from '../common/Modal.jsx';
 import { QrCode, Printer } from 'lucide-react';
 import { formatDisplayDate } from '../../utils/dateUtils.js';
 
+const formatGender = (raw) => {
+  const s = String(raw || '').trim().toLowerCase();
+  if (s.startsWith('m')) return 'Male';
+  if (s.startsWith('f')) return 'Female';
+  if (s.startsWith('t') || s.startsWith('o')) return 'Transgender';
+  return raw || 'Male';
+};
+
 export default function BarcodeModal({ isOpen, onClose, patient }) {
   if (!patient) return null;
-  const pid = patient.patientId || patient.slNo || '37653';
+  const barcodeValue = patient.slNo || patient.barcode || '-';
 
   const handlePrint = () => {
     window.print();
@@ -23,7 +31,7 @@ export default function BarcodeModal({ isOpen, onClose, patient }) {
             {patient.title ? `${patient.title} ` : ''}{patient.name}
           </div>
           <div className="text-xs font-semibold text-slate-600">
-            PID: #{pid} • {patient.gender || 'Male'} / {patient.age || '1'} {patient.age_unit || 'Days'}
+            Barcode: #{barcodeValue} • {formatGender(patient.gender)} / {patient.age || '1'} {patient.age_unit || 'Days'}
           </div>
 
           {/* Simulated Barcode Lines */}
@@ -38,7 +46,7 @@ export default function BarcodeModal({ isOpen, onClose, patient }) {
               ))}
             </div>
             <div className="font-mono text-xs font-extrabold tracking-widest text-slate-800 mt-1">
-              *{pid}*
+              *{barcodeValue}*
             </div>
           </div>
 

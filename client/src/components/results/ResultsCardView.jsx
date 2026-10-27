@@ -26,12 +26,15 @@ import {
   getTestPhaseInfo,
   evaluateResultValue,
   getDefaultHealthyValue,
+  getTestOperationPermissions,
 } from '../../utils/labTestUtils.js';
+import { useMaster } from '../../context/context.master.jsx';
 
 export default function ResultsCardView({
   reports = [],
   resultsState = {},
   patient = {},
+  masterTests = null,
   savingId = null,
   calculatingId = null,
   deletingId = null,
@@ -49,6 +52,8 @@ export default function ResultsCardView({
   onDownloadResult,
   onOpenEditReport,
 }) {
+  const { tests: contextMasterTests = [] } = useMaster();
+  const activeMasterTests = masterTests || contextMasterTests || [];
 
   return (
     <div
@@ -56,6 +61,7 @@ export default function ResultsCardView({
       className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5 w-full"
     >
       {reports.map((report, idx) => {
+        const permissions = getTestOperationPermissions(report, activeMasterTests);
         const current = resultsState[report.reportId] || {};
         const enteredVal = current.resultData;
         const evalRes = evaluateResultValue(enteredVal, report.refRange, report.unit);
@@ -172,39 +178,41 @@ export default function ResultsCardView({
                     </button>
                   </div>
 
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const lowVal = report.refRange?.split('-')[0]?.trim();
-                        if (lowVal && !isNaN(Number(lowVal))) {
-                          onInputChange(report.reportId, 'resultData', lowVal);
-                        }
-                      }}
-                      className="w-7 h-7 rounded-lg bg-[#10b981] hover:bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shadow-2xs transition-all active:scale-95 cursor-pointer"
-                      title="Set lower reference limit or downward trend"
-                    >
-                      <span className="w-4 h-4 rounded-full border border-white flex items-center justify-center text-[10px]">
-                        ↓
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const parts = report.refRange?.split('-');
-                        const highVal = parts && parts.length > 1 ? parts[1]?.trim() : '';
-                        if (highVal && !isNaN(Number(highVal))) {
-                          onInputChange(report.reportId, 'resultData', highVal);
-                        }
-                      }}
-                      className="w-7 h-7 rounded-lg bg-[#10b981] hover:bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shadow-2xs transition-all active:scale-95 cursor-pointer"
-                      title="Set upper reference limit or upward trend"
-                    >
-                      <span className="w-4 h-4 rounded-full border border-white flex items-center justify-center text-[10px]">
-                        ↑
-                      </span>
-                    </button>
-                  </div>
+                  {permissions.possibleEntry && (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const lowVal = report.refRange?.split('-')[0]?.trim();
+                          if (lowVal && !isNaN(Number(lowVal))) {
+                            onInputChange(report.reportId, 'resultData', lowVal);
+                          }
+                        }}
+                        className="w-7 h-7 rounded-lg bg-[#10b981] hover:bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shadow-2xs transition-all active:scale-95 cursor-pointer"
+                        title="Set lower reference limit or downward trend"
+                      >
+                        <span className="w-4 h-4 rounded-full border border-white flex items-center justify-center text-[10px]">
+                          ↓
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const parts = report.refRange?.split('-');
+                          const highVal = parts && parts.length > 1 ? parts[1]?.trim() : '';
+                          if (highVal && !isNaN(Number(highVal))) {
+                            onInputChange(report.reportId, 'resultData', highVal);
+                          }
+                        }}
+                        className="w-7 h-7 rounded-lg bg-[#10b981] hover:bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shadow-2xs transition-all active:scale-95 cursor-pointer"
+                        title="Set upper reference limit or upward trend"
+                      >
+                        <span className="w-4 h-4 rounded-full border border-white flex items-center justify-center text-[10px]">
+                          ↑
+                        </span>
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Analyzer Multi-Run Versions (resultData1 through resultData5) */}
@@ -254,32 +262,44 @@ export default function ResultsCardView({
                 ) : null}
 
                 {/* Inline Manual Input with Auto Default */}
-                <div className="relative mt-2">
-                  <input
-                    type="text"
-                    value={current.resultData || ''}
-                    onChange={(e) => onInputChange(report.reportId, 'resultData', e.target.value)}
-                    placeholder={getDefaultHealthyValue(report.refRange, report.testName) || 'Enter reading'}
-                    className={`w-full pl-2.5 pr-18 py-1 rounded-xl text-xs font-mono font-bold transition-all border outline-none ${inputHighlightClass}`}
-                  />
-                  <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                    {current.resultData === '' && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const defVal = getDefaultHealthyValue(report.refRange, report.testName);
-                          if (defVal) onInputChange(report.reportId, 'resultData', defVal);
-                        }}
-                        className="text-[9px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-200 transition-colors cursor-pointer"
-                      >
-                        Auto
-                      </button>
-                    )}
-                    <span className="text-[10px] font-mono font-semibold text-slate-500">
-                      {report.unit || ''}
+                {permissions.possibleEntry ? (
+                  <div className="relative mt-2">
+                    <input
+                      type="text"
+                      value={current.resultData || ''}
+                      onChange={(e) => onInputChange(report.reportId, 'resultData', e.target.value)}
+                      placeholder={getDefaultHealthyValue(report.refRange, report.testName) || 'Enter reading'}
+                      className={`w-full pl-2.5 pr-18 py-1 rounded-xl text-xs font-mono font-bold transition-all border outline-none ${inputHighlightClass}`}
+                    />
+                    <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                      {current.resultData === '' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const defVal = getDefaultHealthyValue(report.refRange, report.testName);
+                            if (defVal) onInputChange(report.reportId, 'resultData', defVal);
+                          }}
+                          className="text-[9px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-200 transition-colors cursor-pointer"
+                        >
+                          Auto
+                        </button>
+                      )}
+                      <span className="text-[10px] font-mono font-semibold text-slate-500">
+                        {report.unit || ''}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    className="w-full px-2.5 py-1.5 rounded-xl text-xs font-mono font-bold bg-slate-100 text-slate-600 border border-slate-200 flex items-center justify-between mt-2 select-none"
+                    title="Result entry option is disabled for this test parameter"
+                  >
+                    <span className="truncate">{current.resultData || '—'} {report.unit || ''}</span>
+                    <span className="text-[9px] font-extrabold text-slate-400 uppercase bg-slate-200/80 px-1.5 py-0.5 rounded">
+                      Entry Disabled
                     </span>
                   </div>
-                </div>
+                )}
               </div>
 
               {/* Bottom Section: Edit Report Button & Action Footer */}
@@ -338,49 +358,56 @@ export default function ResultsCardView({
                       </button>
                     ) : (
                       <>
-                        <button
-                          type="button"
-                          onClick={() => onCalculate(report.reportId)}
-                          disabled={calculatingId === report.reportId || isSaving}
-                          title="Calculate formula"
-                          className="p-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 hover:text-indigo-600 rounded-md transition-colors cursor-pointer disabled:opacity-50"
-                        >
-                          {calculatingId === report.reportId ? (
-                            <Loader2 className="w-3 h-3 animate-spin text-indigo-600" />
-                          ) : (
-                            <Calculator className="w-3 h-3" />
-                          )}
-                        </button>
+                        {/* Calculate Formula - Only show if possibleCalculate is true */}
+                        {permissions.possibleCalculate && (
+                          <button
+                            type="button"
+                            onClick={() => onCalculate(report.reportId)}
+                            disabled={calculatingId === report.reportId || isSaving}
+                            title="Calculate formula"
+                            className="p-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 hover:text-indigo-600 rounded-md transition-colors cursor-pointer disabled:opacity-50"
+                          >
+                            {calculatingId === report.reportId ? (
+                              <Loader2 className="w-3 h-3 animate-spin text-indigo-600" />
+                            ) : (
+                              <Calculator className="w-3 h-3" />
+                            )}
+                          </button>
+                        )}
 
-                        {/* Upload Order to Analyzer (UPLOADORDER) */}
-                        <button
-                          type="button"
-                          onClick={() => onUploadOrder && onUploadOrder(report)}
-                          disabled={uploadingId === report.reportId || isSaving || isDeleting}
-                          title="Upload Order to Analyzer Equipment (UPLOADORDER)"
-                          className="p-1 bg-white hover:bg-sky-50 border border-slate-200 hover:border-sky-300 text-sky-600 rounded-md transition-colors cursor-pointer disabled:opacity-50"
-                        >
-                          {uploadingId === report.reportId ? (
-                            <Loader2 className="w-3 h-3 animate-spin text-sky-600" />
-                          ) : (
-                            <Upload className="w-3 h-3" />
-                          )}
-                        </button>
+                        {/* Upload Order to Analyzer (UPLOADORDER) - Only show if possibleUpload is true */}
+                        {permissions.possibleUpload && (
+                          <button
+                            type="button"
+                            onClick={() => onUploadOrder && onUploadOrder(report)}
+                            disabled={uploadingId === report.reportId || isSaving || isDeleting}
+                            title="Upload Order to Analyzer Equipment (UPLOADORDER)"
+                            className="p-1 bg-white hover:bg-sky-50 border border-slate-200 hover:border-sky-300 text-sky-600 rounded-md transition-colors cursor-pointer disabled:opacity-50"
+                          >
+                            {uploadingId === report.reportId ? (
+                              <Loader2 className="w-3 h-3 animate-spin text-sky-600" />
+                            ) : (
+                              <Upload className="w-3 h-3" />
+                            )}
+                          </button>
+                        )}
 
-                        {/* Download Result from Analyzer (DOWNLOADRESULT) */}
-                        <button
-                          type="button"
-                          onClick={() => onDownloadResult && onDownloadResult(report)}
-                          disabled={downloadingId === report.reportId || isSaving || isDeleting}
-                          title="Download Result from Analyzer Equipment (DOWNLOADRESULT)"
-                          className="p-1 bg-white hover:bg-violet-50 border border-slate-200 hover:border-violet-300 text-violet-600 rounded-md transition-colors cursor-pointer disabled:opacity-50"
-                        >
-                          {downloadingId === report.reportId ? (
-                            <Loader2 className="w-3 h-3 animate-spin text-violet-600" />
-                          ) : (
-                            <Download className="w-3 h-3" />
-                          )}
-                        </button>
+                        {/* Download Result from Analyzer (DOWNLOADRESULT) - Only show if possibleDownload is true */}
+                        {permissions.possibleDownload && (
+                          <button
+                            type="button"
+                            onClick={() => onDownloadResult && onDownloadResult(report)}
+                            disabled={downloadingId === report.reportId || isSaving || isDeleting}
+                            title="Download Result from Analyzer Equipment (DOWNLOADRESULT)"
+                            className="p-1 bg-white hover:bg-violet-50 border border-slate-200 hover:border-violet-300 text-violet-600 rounded-md transition-colors cursor-pointer disabled:opacity-50"
+                          >
+                            {downloadingId === report.reportId ? (
+                              <Loader2 className="w-3 h-3 animate-spin text-violet-600" />
+                            ) : (
+                              <Download className="w-3 h-3" />
+                            )}
+                          </button>
+                        )}
 
                         <button
                           type="button"
@@ -392,19 +419,22 @@ export default function ResultsCardView({
                           {isDeleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
                         </button>
 
-                        <button
-                          type="button"
-                          onClick={() => onSaveSingle(report)}
-                          disabled={isSaving}
-                          title="Save result"
-                          className={`p-1 px-1.5 font-bold text-xs rounded-md shadow-2xs transition-all cursor-pointer ${
-                            hasUnsavedVal
-                              ? 'bg-emerald-600 hover:bg-emerald-700 text-white active:scale-95'
-                              : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                          } disabled:opacity-50`}
-                        >
-                          {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-                        </button>
+                        {/* Save Result - Only show if possibleEntry is true */}
+                        {permissions.possibleEntry && (
+                          <button
+                            type="button"
+                            onClick={() => onSaveSingle(report)}
+                            disabled={isSaving}
+                            title="Save result"
+                            className={`p-1 px-1.5 font-bold text-xs rounded-md shadow-2xs transition-all cursor-pointer ${
+                              hasUnsavedVal
+                                ? 'bg-emerald-600 hover:bg-emerald-700 text-white active:scale-95'
+                                : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                            } disabled:opacity-50`}
+                          >
+                            {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                          </button>
+                        )}
                       </>
                     )}
                   </div>

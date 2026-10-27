@@ -110,7 +110,7 @@ export default function AddTestsModal({ isOpen, onClose, patient, reports = [], 
   });
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={`Add Tests - ${patient.name} (${patient.patientId})`} maxWidth="max-w-3xl">
+    <Modal isOpen={isOpen} onClose={onClose} title={`Add Tests - ${patient.name}${patient.slNo || patient.barcode ? ` (${patient.slNo || patient.barcode})` : ''}`} maxWidth="max-w-3xl">
       <div className="space-y-4 text-xs">
         {error && (
           <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg">

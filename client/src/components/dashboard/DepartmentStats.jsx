@@ -110,7 +110,7 @@ export default function DepartmentStats({ totalPatients = 0 }) {
             <div className="space-y-2 text-xs mt-3">
               <div className="p-2.5 rounded-xl bg-white/90 border border-rose-200 text-slate-800 space-y-0.5">
                 <div className="flex items-center justify-between font-bold text-slate-900">
-                  <span>PID #1042 - Blood Sugar (F)</span>
+                  <span>Barcode #1042 - Blood Sugar (F)</span>
                   <span className="text-rose-600 font-extrabold">412 mg/dL</span>
                 </div>
                 <div className="text-[11px] text-slate-500">
@@ -120,7 +120,7 @@ export default function DepartmentStats({ totalPatients = 0 }) {
 
               <div className="p-2.5 rounded-xl bg-white/90 border border-amber-200 text-slate-800 space-y-0.5">
                 <div className="flex items-center justify-between font-bold text-slate-900">
-                  <span>PID #1039 - Platelet Count</span>
+                  <span>Barcode #1039 - Platelet Count</span>
                   <span className="text-amber-700 font-extrabold">28,000 /uL</span>
                 </div>
                 <div className="text-[11px] text-slate-500">

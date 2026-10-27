@@ -2,12 +2,28 @@ import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import api from '../services/api';
 import ResultsEntry from '../components/results/ResultsEntry.jsx';
-import { FlaskConical, Search, RefreshCw, UserCheck, CheckCircle, BookOpen, Clock } from 'lucide-react';
+import { FlaskConical, Search, RefreshCw, UserCheck, CheckCircle, BookOpen, Clock, Calendar } from 'lucide-react';
 import { StatusBadge } from '../components/common/Badge.jsx';
 import ClinicalGuideModal from '../components/common/ClinicalGuideModal.jsx';
-import { formatDisplayDate, sortPatientsByRecent } from '../utils/dateUtils.js';
+import { formatDisplayDate, sortPatientsByRecent, getLocalDateString, shiftDateDays } from '../utils/dateUtils.js';
+
+const formatGender = (raw) => {
+  const s = String(raw || '').trim().toLowerCase();
+  if (s.startsWith('m')) return 'Male';
+  if (s.startsWith('f')) return 'Female';
+  if (s.startsWith('t') || s.startsWith('o')) return 'Transgender';
+  return raw || '-';
+};
 
 export default function ResultsPage() {
+  const todayStr = getLocalDateString();
+  const yesterdayStr = shiftDateDays(todayStr, -1);
+  const past7DaysStr = shiftDateDays(todayStr, -7);
+
+  const [dateFilterPreset, setDateFilterPreset] = useState('today');
+  const [fromDate, setFromDate] = useState(todayStr);
+  const [toDate, setToDate] = useState(todayStr);
+
   const [patients, setPatients] = useState([]);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [reports, setReports] = useState([]);
@@ -17,14 +33,37 @@ export default function ResultsPage() {
   const [queuePhaseFilter, setQueuePhaseFilter] = useState('ALL');
   const [isGuideOpen, setIsGuideOpen] = useState(false);
 
+  const handleDatePreset = (preset) => {
+    setDateFilterPreset(preset);
+    if (preset === 'today') {
+      setFromDate(todayStr);
+      setToDate(todayStr);
+    } else if (preset === 'yesterday') {
+      setFromDate(yesterdayStr);
+      setToDate(yesterdayStr);
+    } else if (preset === 'last7days') {
+      setFromDate(past7DaysStr);
+      setToDate(todayStr);
+    }
+  };
+
   const fetchLabWorklist = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/patients/list', { params: { allDates: 'true' } });
+      const res = await api.get('/patients/list', { params: { fromDate, toDate } });
       const allPatients = sortPatientsByRecent(res.data?.patients || []);
       setPatients(allPatients);
-      if (allPatients.length > 0 && !selectedPatient) {
-        loadPatientReport(allPatients[0]);
+      if (allPatients.length > 0) {
+        // If current selection is still in list keep it, otherwise select first
+        const found = selectedPatient ? allPatients.find(p => (p.patientId || p.slNo) === (selectedPatient.patientId || selectedPatient.slNo)) : null;
+        if (found) {
+          loadPatientReport(found);
+        } else {
+          loadPatientReport(allPatients[0]);
+        }
+      } else {
+        setSelectedPatient(null);
+        setReports([]);
       }
     } catch (err) {
       console.warn('Error loading lab worklist:', err.message);
@@ -36,8 +75,9 @@ export default function ResultsPage() {
   const loadPatientReport = async (patient) => {
     setSelectedPatient(patient);
     try {
+      const pid = patient.patientId || patient.slNo;
       const res = await api.get('/reports/patient-report', {
-        params: { patientId: patient.patientId },
+        params: { patientId: pid },
       });
       const repList = res.data?.reports || [];
       const isRateLimited =
@@ -60,7 +100,7 @@ export default function ResultsPage() {
 
   useEffect(() => {
     fetchLabWorklist();
-  }, []);
+  }, [fromDate, toDate]);
 
   const filteredPatients = sortPatientsByRecent(
     patients.filter((p) => {
@@ -122,10 +162,70 @@ export default function ResultsPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Date Filter Presets & Controls */}
+        <div className="flex flex-wrap items-center gap-2 bg-slate-50 p-1 rounded-xl border border-slate-200 text-xs">
+          <div className="flex items-center bg-white p-0.5 rounded-lg border border-slate-200 shadow-2xs font-semibold">
+            <button
+              type="button"
+              onClick={() => handleDatePreset('today')}
+              className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                dateFilterPreset === 'today'
+                  ? 'bg-blue-600 text-white shadow-xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDatePreset('yesterday')}
+              className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                dateFilterPreset === 'yesterday'
+                  ? 'bg-blue-600 text-white shadow-xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Yesterday
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDatePreset('last7days')}
+              className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                dateFilterPreset === 'last7days'
+                  ? 'bg-blue-600 text-white shadow-xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Last 7 Days
+            </button>
+          </div>
+
+          <div className="flex items-center gap-1 text-slate-600 text-[11px]">
+            <Calendar className="w-3 h-3 text-slate-400" />
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(e) => {
+                setFromDate(e.target.value);
+                setDateFilterPreset('custom');
+              }}
+              className="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-xs text-slate-800 font-medium"
+            />
+            <span className="text-slate-400">to</span>
+            <input
+              type="date"
+              value={toDate}
+              onChange={(e) => {
+                setToDate(e.target.value);
+                setDateFilterPreset('custom');
+              }}
+              className="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-xs text-slate-800 font-medium"
+            />
+          </div>
+
           <button
             onClick={() => setIsGuideOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs"
+            className="flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 active:scale-95 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs"
           >
             <BookOpen className="w-3.5 h-3.5" />
             <span>Guide</span>
@@ -134,7 +234,8 @@ export default function ResultsPage() {
           <button
             onClick={fetchLabWorklist}
             disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs disabled:opacity-50"
+            className="flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs disabled:opacity-50"
+            title="Refresh worklist"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
@@ -150,7 +251,7 @@ export default function ResultsPage() {
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Search patient, ID, doctor..."
+                placeholder="Search by Barcode, Patient Name, Doctor..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-8 pr-7 py-1.5 text-xs bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-medium"
@@ -217,13 +318,13 @@ export default function ResultsPage() {
           </div>
 
           <div className="divide-y divide-slate-100 max-h-[680px] overflow-y-auto">
-            {filteredPatients.map((p) => {
+            {filteredPatients.map((p, idx) => {
               const isSelected = selectedPatient?.patientId === p.patientId;
               const statusStr = String(p.status || '').toUpperCase();
 
               return (
                 <div
-                  key={p.patientId}
+                  key={p.patientId || idx}
                   onClick={() => loadPatientReport(p)}
                   className={`p-3.5 cursor-pointer transition-all ${
                     isSelected
@@ -232,12 +333,19 @@ export default function ResultsPage() {
                   }`}
                 >
                   <div className="flex items-center justify-between text-xs mb-1.5">
-                    <span className="font-bold text-indigo-700 font-mono">#{p.patientId || p.slNo}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-slate-500 font-mono text-[10px]">
+                        #{idx + 1}
+                      </span>
+                      <span className="font-bold text-blue-700 font-mono text-[11px] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200/70">
+                        {p.slNo || p.barcode || '-'}
+                      </span>
+                    </div>
                     <StatusBadge status={p.status || 'SAMPLE'} />
                   </div>
                   <div className="font-bold text-slate-900 text-xs">{p.name}</div>
                   <div className="text-[11px] text-slate-500 flex justify-between mt-1">
-                    <span>{p.gender} • {p.age}</span>
+                    <span>{formatGender(p.gender)} • {p.age || '-'}</span>
                     <span className="font-mono text-slate-500 font-medium text-[10px]">{formatDisplayDate(p.regDate)}</span>
                   </div>
                   {p.referedDr && (

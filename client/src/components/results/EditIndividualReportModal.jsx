@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Modal from '../common/Modal.jsx';
 import api from '../../services/api.js';
 import { useMaster } from '../../context/context.master.jsx';
@@ -8,6 +8,7 @@ import { Save, X, Loader2, FlaskConical, AlertCircle, CheckCircle } from 'lucide
 const DEFAULT_SAMPLE_TYPES = [
   'Serum',
   'EDTA Whole Blood',
+  'Whole Blood EDTA',
   'Plasma',
   'Whole Blood',
   'Urine',
@@ -23,49 +24,6 @@ const DEFAULT_SAMPLE_TYPES = [
   'Other',
 ];
 
-// Standard lab methodology options
-const DEFAULT_METHODS = [
-  'Arsenazo',
-  'ECLIA',
-  'CLIA',
-  'ELISA',
-  'Colorimetric',
-  'Kinetic',
-  'End Point',
-  'Immunoturbidimetry',
-  'Flow Cytometry',
-  'Nephelometry',
-  'HPLC',
-  'Ion Selective Electrode (ISE)',
-  'Calculated',
-  'Microscopy',
-  'Manual',
-];
-
-// Standard clinical units
-const DEFAULT_UNITS = [
-  'mg%',
-  'mg/dL',
-  'g/dL',
-  'µg/dL',
-  'ng/dL',
-  'ng/mL',
-  'pg/mL',
-  'µIU/mL',
-  'mIU/mL',
-  'U/L',
-  'IU/L',
-  'mmol/L',
-  'µmol/L',
-  'mEq/L',
-  '%',
-  'cells/cumm',
-  '/hpf',
-  'sec',
-  'Ratio',
-  'Index',
-];
-
 export default function EditIndividualReportModal({
   isOpen,
   onClose,
@@ -75,14 +33,53 @@ export default function EditIndividualReportModal({
 }) {
   const { methods: masterMethods = [], units: masterUnits = [] } = useMaster();
 
+  // Helper function to resolve master Method ID from ID or Name
+  const resolveMethodId = useCallback(
+    (val) => {
+      if (!val) return '';
+      const clean = String(val).trim();
+      const byId = masterMethods.find(
+        (m) =>
+          String(m['Method Id'] || m.id || '').trim().toLowerCase() === clean.toLowerCase() ||
+          String(m['Method Id'] || m.id || '').replace(/^M/i, '').toLowerCase() === clean.replace(/^M/i, '').toLowerCase()
+      );
+      if (byId) return String(byId['Method Id'] || byId.id || '').trim();
+      const byName = masterMethods.find(
+        (m) => String(m.Name || m.name || '').toLowerCase().trim() === clean.toLowerCase()
+      );
+      if (byName) return String(byName['Method Id'] || byName.id || '').trim();
+      return clean;
+    },
+    [masterMethods]
+  );
+
+  // Helper function to resolve master Unit ID from ID or Name
+  const resolveUnitId = useCallback(
+    (val) => {
+      if (!val) return '';
+      const clean = String(val).trim();
+      const byId = masterUnits.find(
+        (u) =>
+          String(u['Unit Id'] || u.id || '').trim().toLowerCase() === clean.toLowerCase() ||
+          String(u['Unit Id'] || u.id || '').replace(/^U/i, '').toLowerCase() === clean.replace(/^U/i, '').toLowerCase()
+      );
+      if (byId) return String(byId['Unit Id'] || byId.id || '').trim();
+      const byName = masterUnits.find(
+        (u) => String(u.Name || u.name || '').toLowerCase().trim() === clean.toLowerCase()
+      );
+      if (byName) return String(byName['Unit Id'] || byName.id || '').trim();
+      return clean;
+    },
+    [masterUnits]
+  );
+
+  // Form state without price and resultData as requested
   const [formData, setFormData] = useState({
     testName: '',
-    rate: '',
     sampleType: 'Serum',
     method: '',
     refRange: '',
-    resultData: '',
-    unit: 'mg%',
+    unit: '',
     comment: '',
   });
 
@@ -94,76 +91,42 @@ export default function EditIndividualReportModal({
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  // Build combined method list from master data + standard fallbacks
-  const availableMethods = React.useMemo(() => {
-    const set = new Set(DEFAULT_METHODS);
-    (masterMethods || []).forEach((m) => {
-      const name = m.Name || m.name || m['Method Name'] || m['Method Id'];
-      if (name && typeof name === 'string') set.add(name.trim());
-    });
-    if (report?.method && report.method.trim()) {
-      set.add(report.method.trim());
-    }
-    return Array.from(set).filter(Boolean);
-  }, [masterMethods, report]);
-
-  // Build combined units list from master data + standard fallbacks
-  const availableUnits = React.useMemo(() => {
-    const set = new Set(DEFAULT_UNITS);
-    (masterUnits || []).forEach((u) => {
-      const name = u.Name || u.name || u['Unit Name'] || u['Unit Id'];
-      if (name && typeof name === 'string') set.add(name.trim());
-    });
-    if (report?.unit && report.unit.trim()) {
-      set.add(report.unit.trim());
-    }
-    return Array.from(set).filter(Boolean);
-  }, [masterUnits, report]);
-
-  // Extract available analyzer runs (resultData1 through resultData5)
-  const availableRuns = React.useMemo(() => {
-    if (!report) return [];
-    return [
-      { num: 1, val: report.resultData1 },
-      { num: 2, val: report.resultData2 },
-      { num: 3, val: report.resultData3 },
-      { num: 4, val: report.resultData4 },
-      { num: 5, val: report.resultData5 },
-    ].filter((v) => v.val !== undefined && v.val !== null && String(v.val).trim() !== '');
-  }, [report]);
-
   // Initialize form state when report changes or modal opens
   useEffect(() => {
     if (isOpen && report) {
       const initialSampleType = report.sampleType || report.sampletype || 'Serum';
-      const initialMethod = report.method || '';
-      const initialUnit = report.unit || report.unitref || 'mg%';
+      const initialMethodId = resolveMethodId(report.method);
+      const initialUnitId = resolveUnitId(report.unit || report.unitref);
 
       setFormData({
         testName: report.testName || '',
-        rate: report.rate !== undefined && report.rate !== null ? String(report.rate) : '',
         sampleType: initialSampleType,
-        method: initialMethod,
+        method: initialMethodId,
         refRange: report.refRange || '',
-        resultData: report.resultData || '',
-        unit: initialUnit,
+        unit: initialUnitId,
         comment: report.comment || '',
       });
 
       setIsCustomSampleType(
         !DEFAULT_SAMPLE_TYPES.includes(initialSampleType) && Boolean(initialSampleType)
       );
-      setIsCustomMethod(
-        !availableMethods.includes(initialMethod) && Boolean(initialMethod)
+
+      const hasMatchingMethod = masterMethods.some(
+        (m) =>
+          String(m['Method Id'] || m.id || '').trim().toLowerCase() === String(initialMethodId).toLowerCase()
       );
-      setIsCustomUnit(
-        !availableUnits.includes(initialUnit) && Boolean(initialUnit)
+      setIsCustomMethod(Boolean(initialMethodId) && !hasMatchingMethod);
+
+      const hasMatchingUnit = masterUnits.some(
+        (u) =>
+          String(u['Unit Id'] || u.id || '').trim().toLowerCase() === String(initialUnitId).toLowerCase()
       );
+      setIsCustomUnit(Boolean(initialUnitId) && !hasMatchingUnit);
 
       setError('');
       setSuccess('');
     }
-  }, [isOpen, report, availableMethods, availableUnits]);
+  }, [isOpen, report, masterMethods, masterUnits, resolveMethodId, resolveUnitId]);
 
   if (!isOpen || !report) return null;
 
@@ -190,19 +153,43 @@ export default function EditIndividualReportModal({
           : `P${patientId}`
         : '';
 
+      const finalMethodId = resolveMethodId(formData.method);
+      const finalUnitId = resolveUnitId(formData.unit);
+
+      // Build UPDATEREPORT payload: pass Master IDs for method, unit, unitref
+      // Preserve existing report rate & resultData without requiring edit in UI
+      const existingRate =
+        report.rate !== undefined && report.rate !== null && String(report.rate).trim() !== ''
+          ? String(report.rate).trim()
+          : report.Rate !== undefined && report.Rate !== null && String(report.Rate).trim() !== ''
+          ? String(report.Rate).trim()
+          : report.amount !== undefined && report.amount !== null && String(report.amount).trim() !== ''
+          ? String(report.amount).trim()
+          : report.Amount !== undefined && report.Amount !== null && String(report.Amount).trim() !== ''
+          ? String(report.Amount).trim()
+          : '';
+
+      const existingResultData =
+        report.resultData !== undefined && report.resultData !== null
+          ? String(report.resultData)
+          : report.ResultData !== undefined && report.ResultData !== null
+          ? String(report.ResultData)
+          : '';
+
       const payload = {
+        api: 'UPDATEREPORT',
         reportId: report.reportId,
         patientId: cleanPid || patientId,
         sampleId: report.sampleId || patient?.slNo || '',
         testName: formData.testName.trim(),
-        rate: formData.rate.trim(),
+        rate: existingRate,
         sampletype: formData.sampleType.trim() || 'Serum',
         sampleType: formData.sampleType.trim() || 'Serum',
-        method: formData.method.trim(),
+        method: finalMethodId,
         refRange: formData.refRange.trim(),
-        unitref: formData.unit.trim(),
-        resultData: formData.resultData.trim(),
-        unit: formData.unit.trim(),
+        unitref: finalUnitId,
+        resultData: existingResultData,
+        unit: finalUnitId,
         comment: formData.comment.trim(),
         profileName: report.profileName || '',
         deptName: report.deptName || 'D1',
@@ -246,7 +233,7 @@ export default function EditIndividualReportModal({
                 {report.deptName && (
                   <>
                     <span>•</span>
-                    <span className="font-semibold text-indigo-600">{report.deptName}</span>
+                    <span className="font-semibold text-indigo-600">Dept: {report.deptName}</span>
                   </>
                 )}
               </div>
@@ -276,7 +263,7 @@ export default function EditIndividualReportModal({
           </div>
         )}
 
-        {/* Edit Form Matching Screenshot Exactly */}
+        {/* Edit Form without price and resultData */}
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           {/* Row 1: TEST NAME */}
           <div>
@@ -287,273 +274,212 @@ export default function EditIndividualReportModal({
               type="text"
               value={formData.testName}
               onChange={(e) => handleInputChange('testName', e.target.value)}
-              placeholder="e.g. FREE T4"
+              placeholder="e.g. ESR (ERYTHROCYTE SEDIMENTATION RATE)"
               className="w-full px-3 py-2 text-sm font-bold text-slate-800 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
               required
             />
           </div>
 
-          {/* Row 2: TEST RATE / SAMPLE TYPE / METHOD (3 Columns) */}
-          <div>
-            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-              TEST RATE & SPECIMEN
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              {/* Rate input */}
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">
-                  ₹
-                </span>
-                <input
-                  type="number"
-                  step="any"
-                  value={formData.rate}
-                  onChange={(e) => handleInputChange('rate', e.target.value)}
-                  placeholder="Enter rate"
-                  className="w-full pl-7 pr-3 py-2 text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
-                />
-              </div>
-
-              {/* Sample Type dropdown */}
-              <div>
-                {!isCustomSampleType ? (
-                  <select
+          {/* Row 2: SAMPLE TYPE & METHOD (Price removed) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Sample Type dropdown */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                SAMPLE TYPE / SPECIMEN
+              </label>
+              {!isCustomSampleType ? (
+                <select
+                  value={formData.sampleType}
+                  onChange={(e) => {
+                    if (e.target.value === '__CUSTOM__') {
+                      setIsCustomSampleType(true);
+                      setFormData((prev) => ({ ...prev, sampleType: '' }));
+                    } else {
+                      handleInputChange('sampleType', e.target.value);
+                    }
+                  }}
+                  className="w-full px-3 py-2 text-xs font-semibold text-slate-800 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all cursor-pointer"
+                >
+                  {DEFAULT_SAMPLE_TYPES.map((st) => (
+                    <option key={st} value={st}>
+                      {st}
+                    </option>
+                  ))}
+                  <option value="__CUSTOM__">+ Custom Sample Type...</option>
+                </select>
+              ) : (
+                <div className="relative">
+                  <input
+                    type="text"
                     value={formData.sampleType}
-                    onChange={(e) => {
-                      if (e.target.value === '__CUSTOM__') {
-                        setIsCustomSampleType(true);
-                        setFormData((prev) => ({ ...prev, sampleType: '' }));
-                      } else {
-                        handleInputChange('sampleType', e.target.value);
-                      }
+                    onChange={(e) => handleInputChange('sampleType', e.target.value)}
+                    placeholder="Enter sample type"
+                    className="w-full pl-3 pr-6 py-2 text-xs font-semibold text-slate-800 bg-white border border-blue-400 rounded-xl focus:ring-2 focus:ring-blue-500/20 outline-none"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomSampleType(false);
+                      handleInputChange('sampleType', 'Serum');
                     }}
-                    className="w-full px-2.5 py-2 text-xs font-semibold text-slate-800 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all cursor-pointer"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
+                    title="Back to list"
                   >
-                    {DEFAULT_SAMPLE_TYPES.map((st) => (
-                      <option key={st} value={st}>
-                        {st}
-                      </option>
-                    ))}
-                    <option value="__CUSTOM__">+ Custom Sample Type...</option>
-                  </select>
-                ) : (
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={formData.sampleType}
-                      onChange={(e) => handleInputChange('sampleType', e.target.value)}
-                      placeholder="Enter sample type"
-                      className="w-full pl-2.5 pr-6 py-2 text-xs font-semibold text-slate-800 bg-white border border-blue-400 rounded-xl focus:ring-2 focus:ring-blue-500/20 outline-none"
-                      autoFocus
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsCustomSampleType(false);
-                        handleInputChange('sampleType', 'Serum');
-                      }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
-                      title="Back to list"
-                    >
-                      ×
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Method dropdown */}
-              <div>
-                {!isCustomMethod ? (
-                  <select
-                    value={formData.method}
-                    onChange={(e) => {
-                      if (e.target.value === '__CUSTOM__') {
-                        setIsCustomMethod(true);
-                        setFormData((prev) => ({ ...prev, method: '' }));
-                      } else {
-                        handleInputChange('method', e.target.value);
-                      }
-                    }}
-                    className="w-full px-2.5 py-2 text-xs font-semibold text-slate-800 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all cursor-pointer"
-                  >
-                    <option value="">Select Method</option>
-                    {availableMethods.map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                    <option value="__CUSTOM__">+ Custom Method...</option>
-                  </select>
-                ) : (
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={formData.method}
-                      onChange={(e) => handleInputChange('method', e.target.value)}
-                      placeholder="Enter method name"
-                      className="w-full pl-2.5 pr-6 py-2 text-xs font-semibold text-slate-800 bg-white border border-blue-400 rounded-xl focus:ring-2 focus:ring-blue-500/20 outline-none"
-                      autoFocus
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsCustomMethod(false);
-                        handleInputChange('method', '');
-                      }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
-                      title="Back to list"
-                    >
-                      ×
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Row 3: REFERENCE RANGE & UNIT (2 Columns) */}
-          <div>
-            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-              REFERANCE RANGE
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              <div className="sm:col-span-2">
-                <input
-                  type="text"
-                  value={formData.refRange}
-                  onChange={(e) => handleInputChange('refRange', e.target.value)}
-                  placeholder="e.g. 0.8 - 1.8 or Negative"
-                  className="w-full px-3 py-2 text-xs font-mono font-bold text-slate-800 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
-                />
-              </div>
-
-              <div>
-                {!isCustomUnit ? (
-                  <select
-                    value={formData.unit}
-                    onChange={(e) => {
-                      if (e.target.value === '__CUSTOM__') {
-                        setIsCustomUnit(true);
-                        setFormData((prev) => ({ ...prev, unit: '' }));
-                      } else {
-                        handleInputChange('unit', e.target.value);
-                      }
-                    }}
-                    className="w-full px-2.5 py-2 text-xs font-semibold text-slate-800 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all cursor-pointer font-mono"
-                  >
-                    {availableUnits.map((u) => (
-                      <option key={u} value={u}>
-                        {u}
-                      </option>
-                    ))}
-                    <option value="__CUSTOM__">+ Custom Unit...</option>
-                  </select>
-                ) : (
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={formData.unit}
-                      onChange={(e) => handleInputChange('unit', e.target.value)}
-                      placeholder="Unit (e.g. mg%)"
-                      className="w-full pl-2.5 pr-6 py-2 text-xs font-semibold text-slate-800 bg-white border border-blue-400 rounded-xl focus:ring-2 focus:ring-blue-500/20 outline-none font-mono"
-                      autoFocus
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsCustomUnit(false);
-                        handleInputChange('unit', 'mg%');
-                      }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
-                      title="Back to list"
-                    >
-                      ×
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Row 4: TEST RESULT & UNIT (2 Columns) */}
-          <div>
-            <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-              TEST RESULT
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              <div className="sm:col-span-2">
-                <input
-                  type="text"
-                  value={formData.resultData}
-                  onChange={(e) => handleInputChange('resultData', e.target.value)}
-                  placeholder="Enter result"
-                  className="w-full px-3 py-2 text-sm font-bold font-mono text-slate-900 bg-white border-2 border-amber-400/90 rounded-xl focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 outline-none transition-all shadow-xs"
-                />
-              </div>
-
-              <div>
-                <div className="w-full px-2.5 py-2 text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between font-mono">
-                  <span>{formData.unit || '-'}</span>
-                  <span className="text-[10px] text-slate-400 font-sans">Unit</span>
+                    ×
+                  </button>
                 </div>
-              </div>
+              )}
             </div>
 
-            {/* Multiple Analyzer Run Versions (resultData1 - 5) */}
-            {availableRuns.length > 0 && (
-              <div className="mt-2.5 p-2.5 bg-[#fbf6ff] border border-purple-200 rounded-xl">
-                <div className="text-[10px] font-bold text-purple-900 mb-1.5 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <span>🔬</span>
-                    <span>Analyzer Multi-Run Options (resultData 1–5):</span>
-                  </span>
-                  <span className="text-[9px] text-purple-600 font-medium">Click to select reading</span>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {availableRuns.map((r) => {
-                    const isSelected = String(formData.resultData).trim() === String(r.val).trim();
+            {/* Method dropdown (passes Method Id) */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                METHOD (MASTER ID)
+              </label>
+              {!isCustomMethod ? (
+                <select
+                  value={formData.method}
+                  onChange={(e) => {
+                    if (e.target.value === '__CUSTOM__') {
+                      setIsCustomMethod(true);
+                      setFormData((prev) => ({ ...prev, method: '' }));
+                    } else {
+                      handleInputChange('method', e.target.value);
+                    }
+                  }}
+                  className="w-full px-3 py-2 text-xs font-semibold text-slate-800 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all cursor-pointer"
+                >
+                  <option value="">Select Method (None)</option>
+                  {masterMethods.map((m) => {
+                    const mId = String(m['Method Id'] || m.id || '').trim();
+                    const mName = String(m.Name || m.name || '').trim();
+                    if (!mId) return null;
                     return (
-                      <button
-                        key={r.num}
-                        type="button"
-                        onClick={() => handleInputChange('resultData', r.val)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
-                          isSelected
-                            ? 'bg-purple-700 text-white shadow-2xs ring-2 ring-purple-400/50'
-                            : 'bg-white border border-purple-200 text-purple-950 hover:bg-purple-100/70'
-                        }`}
-                      >
-                        <span className="text-purple-300 font-sans text-[10px]">v{r.num}:</span>
-                        <span>{r.val}</span>
-                        {isSelected && <span className="text-[10px] text-emerald-300 ml-1">✓ Chosen</span>}
-                      </button>
+                      <option key={mId} value={mId}>
+                        {mName && mName !== '-' ? `${mName} (ID: ${mId})` : `Method ${mId}`}
+                      </option>
                     );
                   })}
+                  <option value="__CUSTOM__">+ Custom Method ID...</option>
+                </select>
+              ) : (
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={formData.method}
+                    onChange={(e) => handleInputChange('method', e.target.value)}
+                    placeholder="Enter Method ID (e.g. 55)"
+                    className="w-full pl-3 pr-6 py-2 text-xs font-semibold text-slate-800 bg-white border border-blue-400 rounded-xl focus:ring-2 focus:ring-blue-500/20 outline-none font-mono"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomMethod(false);
+                      handleInputChange('method', '');
+                    }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
+                    title="Back to list"
+                  >
+                    ×
+                  </button>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
-          {/* Row 5: COMMENT */}
+          {/* Row 3: REFERENCE RANGE & UNIT (passes Unit Id) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                REFERENCE RANGE
+              </label>
+              <input
+                type="text"
+                value={formData.refRange}
+                onChange={(e) => handleInputChange('refRange', e.target.value)}
+                placeholder="e.g. 0 - 20 or Negative"
+                className="w-full px-3 py-2 text-xs font-mono font-bold text-slate-800 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                UNIT (MASTER ID)
+              </label>
+              {!isCustomUnit ? (
+                <select
+                  value={formData.unit}
+                  onChange={(e) => {
+                    if (e.target.value === '__CUSTOM__') {
+                      setIsCustomUnit(true);
+                      setFormData((prev) => ({ ...prev, unit: '' }));
+                    } else {
+                      handleInputChange('unit', e.target.value);
+                    }
+                  }}
+                  className="w-full px-3 py-2 text-xs font-semibold text-slate-800 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all cursor-pointer font-mono"
+                >
+                  <option value="">Select Unit (None)</option>
+                  {masterUnits.map((u) => {
+                    const uId = String(u['Unit Id'] || u.id || '').trim();
+                    const uName = String(u.Name || u.name || '').trim();
+                    if (!uId) return null;
+                    return (
+                      <option key={uId} value={uId}>
+                        {uName ? `${uName} (ID: ${uId})` : `Unit ${uId}`}
+                      </option>
+                    );
+                  })}
+                  <option value="__CUSTOM__">+ Custom Unit ID...</option>
+                </select>
+              ) : (
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={formData.unit}
+                    onChange={(e) => handleInputChange('unit', e.target.value)}
+                    placeholder="Enter Unit ID (e.g. 41)"
+                    className="w-full pl-3 pr-6 py-2 text-xs font-semibold text-slate-800 bg-white border border-blue-400 rounded-xl focus:ring-2 focus:ring-blue-500/20 outline-none font-mono"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomUnit(false);
+                      handleInputChange('unit', '');
+                    }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
+                    title="Back to list"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Row 4: COMMENT / REMARKS */}
           <div>
             <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-              COMMENT
+              COMMENT / REMARKS
             </label>
             <textarea
               rows={2}
               value={formData.comment}
               onChange={(e) => handleInputChange('comment', e.target.value)}
-              placeholder="Comment"
+              placeholder="Clinical comments or methodology notes"
               className="w-full px-3 py-2 text-xs font-medium text-slate-800 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none resize-none transition-all"
             />
           </div>
 
-          {/* Row 6: SAVE & CANCEL BUTTONS */}
+          {/* Row 5: SAVE & CANCEL BUTTONS */}
           <div className="pt-2 flex items-center justify-start gap-3">
             <button
               type="submit"
               disabled={loading}
-              className="inline-flex items-center justify-center gap-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50 min-w-[100px]"
+              className="inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50 min-w-[100px]"
             >
               {loading ? (
                 <>
@@ -563,7 +489,7 @@ export default function EditIndividualReportModal({
               ) : (
                 <>
                   <Save className="w-4 h-4" />
-                  <span>Save</span>
+                  <span>Save Test Details</span>
                 </>
               )}
             </button>
@@ -572,7 +498,7 @@ export default function EditIndividualReportModal({
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="px-5 py-2 bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
+              className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
             >
               Cancel
             </button>

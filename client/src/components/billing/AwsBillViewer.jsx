@@ -107,9 +107,6 @@ export default function AwsBillViewer({ patientId, onBack, title }) {
             <span className="text-xs font-bold text-white tracking-wide">
               {title || 'AWS Official Bill'}
             </span>
-            <span className="font-mono text-xs font-bold bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded border border-amber-500/30">
-              {cleanPid}
-            </span>
           </div>
         </div>
 
@@ -163,9 +160,6 @@ export default function AwsBillViewer({ patientId, onBack, title }) {
             <RefreshCw className="w-8 h-8 animate-spin text-amber-500 mb-3" />
             <span className="text-sm font-semibold text-slate-800">
               Loading authentic bill directly from AWS server...
-            </span>
-            <span className="text-xs text-slate-500 mt-1 font-mono">
-              Patient ID: {cleanPid}
             </span>
           </div>
         )}

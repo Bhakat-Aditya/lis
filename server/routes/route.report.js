@@ -39,6 +39,6 @@ router.post('/set-default-result', requireRoles([ROLES.SUPER, ROLES.TECHNICIAN, 
 router.post('/download', requireRoles([ROLES.SUPER, ROLES.TECHNICIAN, ROLES.DOCTOR]), downloadResult);
 router.post('/download-result', requireRoles([ROLES.SUPER, ROLES.TECHNICIAN, ROLES.DOCTOR]), downloadResult);
 router.post('/upload-order', requireRoles([ROLES.SUPER, ROLES.TECHNICIAN, ROLES.DOCTOR]), uploadOrder);
-router.post('/send-whatsapp', requireRoles([ROLES.SUPER, ROLES.RECEPTIONIST, ROLES.DOCTOR]), sendWhatsApp);
+router.post('/send-whatsapp', requireRoles([ROLES.SUPER, ROLES.RECEPTIONIST, ROLES.DOCTOR, ROLES.TECHNICIAN]), sendWhatsApp);
 
 export default router;

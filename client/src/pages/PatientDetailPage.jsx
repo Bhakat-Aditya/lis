@@ -15,6 +15,7 @@ import DoctorApprovalModal from '../components/results/DoctorApprovalModal.jsx';
 import PatientEditModal from '../components/patient/PatientEditModal.jsx';
 import EditBillModal from '../components/billing/EditBillModal.jsx';
 import Modal from '../components/common/Modal.jsx';
+import ConfirmationModal from '../components/common/ConfirmationModal.jsx';
 import { useMaster } from '../context/context.master.jsx';
 import { groupInvestigationsIntoLots } from '../utils/labTestUtils.js';
 import {
@@ -33,6 +34,9 @@ import {
   Download,
   ExternalLink,
   ChevronDown,
+  TestTube,
+  Send,
+  MessageSquare,
 } from 'lucide-react';
 import { formatDisplayDate, getLocalDateString } from '../utils/dateUtils.js';
 
@@ -64,8 +68,20 @@ export default function PatientDetailPage() {
   const [depositAmount, setDepositAmount] = useState('');
   const [paymentMode, setPaymentMode] = useState('Cash');
   const [notification, setNotification] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
   const [submittingDeposit, setSubmittingDeposit] = useState(false);
   const [depositError, setDepositError] = useState('');
+  const [confirmDialog, setConfirmDialog] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    description: null,
+    confirmText: 'Confirm',
+    cancelText: 'Cancel',
+    variant: 'warning',
+    icon: null,
+    onConfirm: null,
+  });
 
   const patientLots = useMemo(() => {
     return groupInvestigationsIntoLots(reports, patient, catalogProfiles, catalogPackages, catalogTests);
@@ -84,6 +100,17 @@ export default function PatientDetailPage() {
     if (!pt) return 0;
     if (Number(pt.billPayStatus) === 2) return 0;
 
+    const explicitDue =
+      pt.balance !== undefined && pt.balance !== null && pt.balance !== ''
+        ? Number(pt.balance)
+        : pt.dueAmount !== undefined && pt.dueAmount !== null && pt.dueAmount !== ''
+        ? Number(pt.dueAmount)
+        : null;
+
+    if (explicitDue !== null && !isNaN(explicitDue)) {
+      return Math.max(0, explicitDue);
+    }
+
     const discount = Number(pt.discount || 0);
     const paid = Number(pt.paidBill || 0);
 
@@ -100,17 +127,6 @@ export default function PatientDetailPage() {
 
     if (baseTotal > 0) {
       return Math.max(0, baseTotal - discount - paid);
-    }
-
-    const explicitDue =
-      pt.balance !== undefined && pt.balance !== null && pt.balance !== ''
-        ? Number(pt.balance)
-        : pt.dueAmount !== undefined && pt.dueAmount !== null && pt.dueAmount !== ''
-        ? Number(pt.dueAmount)
-        : null;
-
-    if (explicitDue !== null && !isNaN(explicitDue)) {
-      return Math.max(0, explicitDue);
     }
 
     return 0;
@@ -293,18 +309,110 @@ export default function PatientDetailPage() {
     }
   }, [id]);
 
-  const handleReceiveSample = async () => {
-    try {
-      const rawPid = patient?.patientId || id;
-      const cleanPid = rawPid
-        ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
-        : '';
-      await api.post('/reports/receive-sample', { patientId: cleanPid || rawPid });
-      setNotification('Sample specimen received and verified!');
-      fetchPatientData();
-    } catch (err) {
-      alert('Failed to receive sample');
-    }
+  const handleReceiveSample = () => {
+    const rawPid = patient?.patientId || id;
+    const cleanPid = rawPid
+      ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
+      : '';
+
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Receive Sample Specimen',
+      message: `Confirm sample specimen receipt for ${patient?.name || 'Patient'} (${cleanPid || rawPid})?`,
+      description: 'This will mark all ordered diagnostic specimens as received at the laboratory accession desk and update upstream tracking (RECEIVESAMPLE).',
+      confirmText: 'Receive Sample',
+      cancelText: 'Cancel',
+      variant: 'indigo',
+      icon: TestTube,
+      onConfirm: async () => {
+        setErrorMessage('');
+        setNotification('');
+        try {
+          const res = await api.post('/reports/receive-sample', { patientId: cleanPid || rawPid });
+          if (res.data?.STATUS === 'FAILED' || res.data?.StatusCode === '1211') {
+            throw new Error(res.data?.Message || 'Failed to receive sample (1211)');
+          }
+          setNotification(res.data?.Message || 'Sample specimen received and accessioned!');
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+          await fetchPatientData();
+        } catch (err) {
+          const msg = err.response?.data?.Message || err.message || 'Failed to receive sample';
+          setErrorMessage(msg);
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
+  };
+
+  const handleReleaseReport = () => {
+    const rawPid = patient?.patientId || id;
+    const cleanPid = rawPid
+      ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
+      : '';
+
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Release Diagnostic Report',
+      message: `Are you sure you want to release the diagnostic report for ${patient?.name || 'Patient'} (${cleanPid || rawPid})?`,
+      description: 'Releasing will mark the report as finalized, making it ready for patient delivery, portal access, and official printing (RELEASEREPORT).',
+      confirmText: 'Release Report',
+      cancelText: 'Cancel',
+      variant: 'teal',
+      icon: Send,
+      onConfirm: async () => {
+        setErrorMessage('');
+        setNotification('');
+        try {
+          const res = await api.post('/reports/release', { patientId: cleanPid || rawPid });
+          if (res.data?.STATUS === 'FAILED' || res.data?.StatusCode === '1211') {
+            throw new Error(res.data?.Message || 'Failed to release report (1211)');
+          }
+          setNotification(res.data?.Message || 'Diagnostic report released successfully!');
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+          await fetchPatientData();
+        } catch (err) {
+          const msg = err.response?.data?.Message || err.message || 'Failed to release report';
+          setErrorMessage(msg);
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
+  };
+
+  const handleSendWhatsApp = () => {
+    const rawPid = patient?.patientId || id;
+    const cleanPid = rawPid
+      ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
+      : '';
+    const phone = patient?.mobile || patient?.phone || '';
+
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Send Report via WhatsApp',
+      message: `Send diagnostic report PDF via WhatsApp to ${patient?.name || 'Patient'}${phone ? ` (${phone})` : ''}?`,
+      description: 'An automated WhatsApp notification and PDF download link will be dispatched to the registered mobile number (SENDWHATSAPP).',
+      confirmText: 'Send WhatsApp',
+      cancelText: 'Cancel',
+      variant: 'whatsapp',
+      icon: MessageSquare,
+      onConfirm: async () => {
+        setErrorMessage('');
+        setNotification('');
+        try {
+          const res = await api.post('/reports/send-whatsapp', { patientId: cleanPid || rawPid });
+          if (res.data?.STATUS === 'FAILED' || res.data?.StatusCode === '1211') {
+            throw new Error(res.data?.Message || 'Failed to send report via WhatsApp (1211)');
+          }
+          setNotification(res.data?.Message || 'Report sent to WhatsApp successfully!');
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+          await fetchPatientData();
+        } catch (err) {
+          const msg = err.response?.data?.Message || err.message || 'Failed to send report via WhatsApp';
+          setErrorMessage(msg);
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
   };
 
   const handleConfirmDeposit = async () => {
@@ -365,7 +473,7 @@ export default function PatientDetailPage() {
   return (
     <section className="space-y-4 pb-8">
       <Helmet>
-        <title>{patient ? `${patient.name} (${pid})` : 'Patient Profile'} | Lab Expert</title>
+        <title>{patient ? `${patient.name} (${patient?.slNo || patient?.barcode || 'Patient'})` : 'Patient Profile'} | Lab Expert</title>
         <meta
           name="description"
           content={`Patient record and clinical investigations for ${patient?.name || ''}`}
@@ -387,8 +495,8 @@ export default function PatientDetailPage() {
               <h1 className="text-sm font-bold text-slate-900 leading-tight">
                 {patient?.title ? `${patient.title} ` : ''}{patient?.name || 'Patient'}
               </h1>
-              <span className="font-mono text-xs font-bold bg-indigo-50 text-indigo-700 px-2 py-0.2 rounded border border-indigo-200">
-                PID: {pid}
+              <span className="font-mono text-xs font-bold bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-200">
+                Barcode: {patient?.slNo || patient?.barcode || '-'}
               </span>
             </div>
             <span className="text-[11px] text-slate-500 font-medium">
@@ -477,6 +585,22 @@ export default function PatientDetailPage() {
         </div>
       )}
 
+      {/* Error Notification Banner */}
+      {errorMessage && (
+        <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-xs flex items-center justify-between font-medium">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+          <button
+            onClick={() => setErrorMessage('')}
+            className="font-bold text-rose-700 hover:opacity-75 cursor-pointer text-sm"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {/* Main Tab Content */}
       {activeTab === 'profile' && (
         <PatientProfileView
@@ -487,6 +611,8 @@ export default function PatientDetailPage() {
           onPrintInvoice={() => setShowBillPreviewModal(true)}
           onPrintReport={() => handleOpenReportPdf(true)}
           onReceiveSample={handleReceiveSample}
+          onReleaseReport={handleReleaseReport}
+          onSendWhatsApp={handleSendWhatsApp}
           onAddDeposit={handleOpenDepositModal}
           onAddDiscount={() => setShowDiscountModal(true)}
           onOpenSettings={() => setShowBarcodeModal(true)}
@@ -725,6 +851,20 @@ export default function PatientDetailPage() {
           onOpenPrint={() => setShowBillPreviewModal(true)}
         />
       )}
+
+      {/* Universal Side-Effect Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmDialog.onConfirm}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        description={confirmDialog.description}
+        confirmText={confirmDialog.confirmText}
+        cancelText={confirmDialog.cancelText}
+        variant={confirmDialog.variant}
+        icon={confirmDialog.icon}
+      />
     </section>
   );
 }

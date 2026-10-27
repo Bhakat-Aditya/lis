@@ -14,6 +14,14 @@ import {
 import api from '../../services/api.js';
 import { formatEmrDate } from '../../utils/dateUtils.js';
 
+const formatGender = (raw) => {
+  const s = String(raw || '').trim().toLowerCase();
+  if (s.startsWith('m')) return 'Male';
+  if (s.startsWith('f')) return 'Female';
+  if (s.startsWith('t') || s.startsWith('o')) return 'Transgender';
+  return raw || '—';
+};
+
 export default function PatientEmrHistory({
   patientId,
   currentPatient,
@@ -173,7 +181,7 @@ export default function PatientEmrHistory({
                   (currentSlNo && itemSlNo === currentSlNo);
 
                 const ageText = item.age || '—';
-                const genderText = item.gender || '—';
+                const genderText = formatGender(item.gender);
 
                 return (
                   <tr
@@ -193,8 +201,8 @@ export default function PatientEmrHistory({
                     {/* SL NO. / PATIENT */}
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-mono font-bold text-slate-700">
-                          #{item.slNo || item.patientId}
+                        <span className="font-mono font-bold text-blue-700 bg-blue-50 border border-blue-200/70 px-1.5 py-0.5 rounded text-[11px]">
+                          {item.slNo || item.barcode || '-'}
                         </span>
                         <span className="font-extrabold text-slate-900">
                           {item.name}
@@ -229,7 +237,7 @@ export default function PatientEmrHistory({
                             }
                           }}
                           className="inline-flex items-center gap-1.5 bg-[#00bdbe] hover:bg-cyan-600 active:scale-95 text-white font-bold text-xs px-3.5 py-1.5 rounded-lg shadow-xs transition-all cursor-pointer"
-                          title={`Open case record for ${item.name} (${item.patientId})`}
+                          title={`Open case record for ${item.name}`}
                         >
                           <FileText className="w-3.5 h-3.5" />
                           <span>Open Report</span>

@@ -691,15 +691,26 @@ export function groupInvestigationsIntoLots(
 
   const billTestList = patient?.testList || patient?.billing?.testList;
   if (Array.isArray(billTestList) && billTestList.length > 0) {
-    billTestList.forEach((item, idx) => {
-      const name = item['Bill Particulars'] || item.name || `Item ${idx + 1}`;
-      const amount = Number(item.Amount || item.amount || 0);
+    const validBillList = billTestList.filter(
+      (item) => item && String(item['Bill Particulars'] || item.name || '').trim() !== ''
+    );
+    validBillList.forEach((item, idx) => {
+      const rawName = item['Bill Particulars'] || item.name || `Item ${idx + 1}`;
+      const name = String(rawName).replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim();
+      const rawAmt = item.Amount !== undefined ? item.Amount : item.amount;
+      const hasBillAmount = rawAmt !== undefined && rawAmt !== null && rawAmt !== '' && !isNaN(Number(rawAmt));
+      const billAmount = hasBillAmount ? Number(rawAmt) : null;
       const lower = name.toLowerCase().trim();
+      const rawLower = String(rawName).toLowerCase().trim();
 
       // Check if it's a Package
       const matchedPkg =
         packageMapByName.get(lower) ||
-        (catalogPackages || []).find((k) => lower === String(k.Name || '').toLowerCase().trim());
+        packageMapByName.get(rawLower) ||
+        (catalogPackages || []).find((k) => {
+          const kn = String(k.Name || '').toLowerCase().trim();
+          return kn === lower || kn === rawLower;
+        });
 
       if (matchedPkg) {
         const pkgId = String(matchedPkg['Package Id'] || matchedPkg.id || '').trim();
@@ -716,7 +727,10 @@ export function groupInvestigationsIntoLots(
         processedLotNames.add(String(matchedPkg.Name || name).toLowerCase().trim());
 
         const repWithRate = pkgReports.find((r) => r.rate !== undefined && r.rate !== '' && !isNaN(Number(r.rate)) && Number(r.rate) > 0);
-        const effectivePkgAmount = repWithRate ? Number(repWithRate.rate) : (amount || Number(matchedPkg.Rate) || 0);
+        // Prioritize official invoice amount from billing list (including explicit 0 rate)
+        const effectivePkgAmount = hasBillAmount
+          ? billAmount
+          : (Number(matchedPkg.Rate) || (repWithRate ? Number(repWithRate.rate) : 0));
 
         lots.push({
           id: `EXISTING_PKG_${pkgId || idx + 1}`,
@@ -735,7 +749,11 @@ export function groupInvestigationsIntoLots(
       // Check if it's a Profile
       const matchedProf =
         profileMapByName.get(lower) ||
-        (catalogProfiles || []).find((p) => lower === String(p.Name || '').toLowerCase().trim());
+        profileMapByName.get(rawLower) ||
+        (catalogProfiles || []).find((p) => {
+          const pn = String(p.Name || '').toLowerCase().trim();
+          return pn === lower || pn === rawLower;
+        });
 
       if (matchedProf) {
         const profId = String(matchedProf['Profile Id'] || matchedProf.id || '').trim();
@@ -751,7 +769,10 @@ export function groupInvestigationsIntoLots(
         processedLotNames.add(String(matchedProf.Name || name).toLowerCase().trim());
 
         const profRepWithRate = profReports.find((r) => r.rate !== undefined && r.rate !== '' && !isNaN(Number(r.rate)) && Number(r.rate) > 0);
-        const effectiveProfAmount = profRepWithRate ? Number(profRepWithRate.rate) : (amount || Number(matchedProf.Rate) || 0);
+        // Prioritize official invoice amount from billing list (including explicit 0 rate)
+        const effectiveProfAmount = hasBillAmount
+          ? billAmount
+          : (Number(matchedProf.Rate) || (profRepWithRate ? Number(profRepWithRate.rate) : 0));
 
         lots.push({
           id: `EXISTING_PROF_${profId || idx + 1}`,
@@ -770,12 +791,13 @@ export function groupInvestigationsIntoLots(
       // Standalone Individual Test: resolve actual testId from catalog or reports
       const matchedReport = (reports || []).find((r) => {
         const rName = String(r.testName || '').toLowerCase().trim();
-        return rName === lower || (rName && (lower.includes(rName) || rName.includes(lower)));
+        return rName === lower || rName === rawLower || (rName && (lower.includes(rName) || rName.includes(lower)));
       });
       if (matchedReport) processedReports.add(matchedReport.reportId);
 
       const matchedTestId =
         testMapByName.get(lower) ||
+        testMapByName.get(rawLower) ||
         matchedReport?.testId ||
         `T_${idx + 1}`;
 
@@ -789,7 +811,10 @@ export function groupInvestigationsIntoLots(
         !isNaN(Number(matchedReport.rate))
           ? Number(matchedReport.rate)
           : null;
-      const finalTestAmount = matchedReportRate !== null ? matchedReportRate : amount;
+      // Prioritize official invoice amount from billing list (including explicit 0 rate)
+      const finalTestAmount = hasBillAmount
+        ? billAmount
+        : (matchedReportRate !== null ? matchedReportRate : (Number(matchedReport?.rate) || 0));
 
       lots.push({
         id: `EXISTING_TEST_${matchedTestId || idx + 1}`,
@@ -809,7 +834,7 @@ export function groupInvestigationsIntoLots(
   // Step A: Group by Package
   const packageGroups = new Map();
   (reports || []).forEach((r) => {
-    if (!processedReports.has(r.reportId) && r.packageName) {
+    if (r && r.status !== 'DELETED' && !r.isDeleted && !processedReports.has(r.reportId) && r.packageName) {
       const kId = String(r.packageName).trim();
       if (!packageGroups.has(kId)) packageGroups.set(kId, []);
       packageGroups.get(kId).push(r);
@@ -840,7 +865,7 @@ export function groupInvestigationsIntoLots(
   // Step B: Group by Profile (for reports not already in a package)
   const profileGroups = new Map();
   (reports || []).forEach((r) => {
-    if (!processedReports.has(r.reportId) && r.profileName) {
+    if (r && r.status !== 'DELETED' && !r.isDeleted && !processedReports.has(r.reportId) && r.profileName) {
       const pId = String(r.profileName).trim();
       if (!profileGroups.has(pId)) profileGroups.set(pId, []);
       profileGroups.get(pId).push(r);
@@ -870,7 +895,7 @@ export function groupInvestigationsIntoLots(
 
   // Step C: Standalone Individual Tests
   (reports || []).forEach((r, idx) => {
-    if (!processedReports.has(r.reportId)) {
+    if (r && r.status !== 'DELETED' && !r.isDeleted && !processedReports.has(r.reportId)) {
       const tName = r.testName || `Test ${r.testId || idx + 1}`;
       const tid = r.testId || `T_${idx + 1}`;
       const lowerName = tName.toLowerCase().trim();
@@ -895,3 +920,90 @@ export function groupInvestigationsIntoLots(
   return lots;
 }
 
+/**
+ * Normalizes boolean values from strings, numbers, or booleans.
+ */
+function toBooleanFlag(val, defaultVal = false) {
+  if (val === undefined || val === null || val === '') return defaultVal;
+  if (typeof val === 'boolean') return val;
+  if (typeof val === 'number') return val !== 0;
+  const str = String(val).toLowerCase().trim();
+  if (str === 'true' || str === '1' || str === 'yes') return true;
+  if (str === 'false' || str === '0' || str === 'no') return false;
+  return defaultVal;
+}
+
+/**
+ * Maps a patient test report to its master test in TEST_LIST
+ * and evaluates whether calculate, download, result entry, and upload
+ * operations are enabled or disabled.
+ *
+ * Parameters checked:
+ * - possibleCalculate: boolean
+ * - possibleDownload: boolean
+ * - possibleEntry: boolean
+ * - possibleUpload: boolean
+ *
+ * @param {Object} report - Patient test report object (with testId, testName, etc.)
+ * @param {Array} masterTests - Array of tests from master data (TEST_LIST)
+ * @returns {Object} { possibleCalculate, possibleDownload, possibleEntry, possibleUpload, matchedTest }
+ */
+export function getTestOperationPermissions(report = {}, masterTests = []) {
+  if (!report) {
+    return {
+      possibleCalculate: false,
+      possibleDownload: true,
+      possibleEntry: true,
+      possibleUpload: false,
+      matchedTest: null,
+    };
+  }
+
+  let matchedTest = null;
+
+  if (Array.isArray(masterTests) && masterTests.length > 0) {
+    const rawTestId = String(report.testId || report['Test Id'] || report.id || '').trim();
+    const normalizedTestId = rawTestId.replace(/^t/i, '').trim();
+    const rawTestName = String(report.testName || report.name || report['Bill Particulars'] || '').toLowerCase().trim();
+
+    // 1. Match by Test ID (exact match, or stripped 'T' prefix match)
+    if (rawTestId) {
+      matchedTest = masterTests.find((t) => {
+        const mId = String(t['Test Id'] || t.testId || t.id || '').trim();
+        if (mId.toLowerCase() === rawTestId.toLowerCase()) return true;
+        const mNorm = mId.replace(/^t/i, '').trim();
+        return mNorm && normalizedTestId && mNorm.toLowerCase() === normalizedTestId.toLowerCase();
+      });
+    }
+
+    // 2. Fallback: Match by Test Name or Short Name
+    if (!matchedTest && rawTestName) {
+      matchedTest = masterTests.find((t) => {
+        const mName = String(t.Name || t.name || '').toLowerCase().trim();
+        const mShort = String(t['Short Name'] || t.shortName || '').toLowerCase().trim();
+        return (mName && mName === rawTestName) || (mShort && mShort === rawTestName);
+      });
+    }
+  }
+
+  const resolveFlag = (key, defaultVal) => {
+    // 1. Priority to direct flag on report object if present
+    if (report[key] !== undefined && report[key] !== null && report[key] !== '') {
+      return toBooleanFlag(report[key], defaultVal);
+    }
+    // 2. From matched master test
+    if (matchedTest && matchedTest[key] !== undefined && matchedTest[key] !== null && matchedTest[key] !== '') {
+      return toBooleanFlag(matchedTest[key], defaultVal);
+    }
+    // 3. Fallback default
+    return defaultVal;
+  };
+
+  return {
+    possibleCalculate: resolveFlag('possibleCalculate', false),
+    possibleDownload: resolveFlag('possibleDownload', true),
+    possibleEntry: resolveFlag('possibleEntry', true),
+    possibleUpload: resolveFlag('possibleUpload', false),
+    matchedTest,
+  };
+}

@@ -212,9 +212,20 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
     setError('');
 
     try {
+      const rawDate = formData.regDate;
+      const cleanRegDate = getLocalDateString(rawDate || new Date());
+      const rawGender = String(formData.gender || '').trim().toLowerCase();
+      const cleanGender = rawGender.startsWith('m')
+        ? 'Male'
+        : rawGender.startsWith('f')
+        ? 'Female'
+        : 'Transgender';
+
       // Auto-assign slNo if left blank
       const payload = {
         ...formData,
+        gender: cleanGender,
+        regDate: cleanRegDate,
         slNo: formData.slNo.trim() || `${Date.now()}`.slice(-9),
         referedDr: formData.referedDr.trim() || 'Self',
       };

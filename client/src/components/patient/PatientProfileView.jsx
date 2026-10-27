@@ -25,6 +25,8 @@ import {
   ChevronUp,
   ListTree,
   Edit,
+  Send,
+  MessageSquare,
 } from 'lucide-react';
 import { formatDisplayDate } from '../../utils/dateUtils.js';
 import { useMaster } from '../../context/context.master.jsx';
@@ -32,6 +34,13 @@ import { groupInvestigationsIntoLots } from '../../utils/labTestUtils.js';
 import PatientEmrHistory from './PatientEmrHistory.jsx';
 import ReportActivityLog from './ReportActivityLog.jsx';
 
+const formatGender = (raw) => {
+  const s = String(raw || '').trim().toLowerCase();
+  if (s.startsWith('m')) return 'Male';
+  if (s.startsWith('f')) return 'Female';
+  if (s.startsWith('t') || s.startsWith('o')) return 'Transgender';
+  return raw || 'Male';
+};
 
 export default function PatientProfileView({
   patient,
@@ -41,6 +50,8 @@ export default function PatientProfileView({
   onPrintInvoice,
   onPrintReport,
   onReceiveSample,
+  onReleaseReport,
+  onSendWhatsApp,
   onAddDeposit,
   onAddDiscount,
   onOpenSettings,
@@ -72,19 +83,34 @@ export default function PatientProfileView({
   const reportsTotal = hasReports
     ? reports.reduce((acc, r) => acc + (Number(r.rate) || 0), 0)
     : 0;
+
+  // Synced billing from patient / upstream GETBILLJSON
+  const syncedGross = Number(patient.grossTotal || 0);
+  const syncedTotal = Number(patient.totalBill || 0);
   const testsTotal = lotsTotal > 0
     ? lotsTotal
-    : (Number(patient.totalBill) > 0 ? Number(patient.totalBill) : (hasReports ? reportsTotal : 0));
-  const isBilled = testsTotal > 0;
+    : (syncedGross > 0
+        ? syncedGross
+        : (syncedTotal > 0 ? syncedTotal : (hasReports ? reportsTotal : 0)));
+
+  const isBilled = testsTotal > 0 || syncedTotal > 0;
   const discountAmount = Number(patient.discount || 0);
-  const netDue = Math.max(0, testsTotal - discountAmount);
+  const netDue = Math.max(0, (syncedTotal > 0 ? syncedTotal : testsTotal - discountAmount));
   const isStatusPaid = patient.billPayStatus === 2 || patient.billPayStatus === '2';
   const depositsAmount = Number(patient.paidBill || 0) > 0
     ? Number(patient.paidBill)
     : (isStatusPaid && testsTotal > 0 ? testsTotal : Number(patient.paidBill || 0));
+
+  const syncedBalance = (patient.balance !== undefined && patient.balance !== null && !isNaN(Number(patient.balance)))
+    ? Number(patient.balance)
+    : (patient.dueAmount !== undefined && patient.dueAmount !== null && !isNaN(Number(patient.dueAmount)) ? Number(patient.dueAmount) : null);
+
   const balanceDue = isBilled
-    ? (isStatusPaid ? 0 : Math.max(0, netDue - depositsAmount))
+    ? (isStatusPaid
+        ? 0
+        : (syncedBalance !== null ? Math.max(0, syncedBalance) : Math.max(0, netDue - depositsAmount)))
     : 0;
+
   const isPaid = isBilled && (isStatusPaid || (balanceDue <= 0 && depositsAmount >= netDue));
   const advanceAmount = Number(patient.advance || 0);
   const paymentLines = patient.paymentLines || patient.payments || [];
@@ -108,7 +134,7 @@ export default function PatientProfileView({
               </div>
               <div>
                 <h2 className="text-sm font-bold text-slate-900 leading-tight">Patient Profile</h2>
-                <div className="text-[11px] text-blue-700 font-mono font-bold">PID: #{pid}</div>
+                <div className="text-[11px] text-blue-700 font-mono font-bold">Barcode: {patient.slNo || patient.barcode || '-'}</div>
               </div>
             </div>
             <div className="flex items-center gap-1.5">
@@ -146,13 +172,24 @@ export default function PatientProfileView({
               <Phone className="w-4 h-4 text-sky-600 shrink-0" />
               <span className="font-semibold text-slate-500 w-28 shrink-0">Mobile:</span>
               <span className="font-semibold text-slate-800">{patient.mobile || '-'}</span>
+              {patient.mobile && onSendWhatsApp && (
+                <button
+                  type="button"
+                  onClick={onSendWhatsApp}
+                  className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-md transition-colors cursor-pointer shadow-2xs"
+                  title="Resend diagnostic report via WhatsApp"
+                >
+                  <MessageSquare className="w-3 h-3 text-emerald-600" />
+                  <span>WhatsApp</span>
+                </button>
+              )}
             </div>
 
             <div className="flex items-center gap-2">
               <span className="w-4 h-4 text-sky-600 font-bold text-center shrink-0">⚥</span>
               <span className="font-semibold text-slate-500 w-28 shrink-0">Gender/Age:</span>
               <span className="font-semibold text-slate-800">
-                {patient.gender || 'Male'} / {patient.age || '1'}{!String(patient.age || '').toLowerCase().includes('year') && !String(patient.age || '').toLowerCase().includes('day') ? ` ${patient.age_unit || 'Days'}` : ''}
+                {formatGender(patient.gender)} / {patient.age || '1'}{!String(patient.age || '').toLowerCase().includes('year') && !String(patient.age || '').toLowerCase().includes('day') ? ` ${patient.age_unit || 'Days'}` : ''}
               </span>
             </div>
 
@@ -260,59 +297,79 @@ export default function PatientProfileView({
             <span>🚀</span> Quick Actions
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
             {/* 0. Order Tests (Vibrant Violet) */}
             <button
               onClick={onAddTests}
-              className="flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 active:scale-95 text-white font-bold text-xs py-2.5 px-3 rounded-xl shadow-xs transition-all cursor-pointer"
+              className="flex items-center justify-center gap-1.5 bg-violet-600 hover:bg-violet-700 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer"
             >
-              <Plus className="w-4 h-4" />
-              <span>Order Tests</span>
+              <Plus className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Order Tests</span>
             </button>
 
             {/* 1. Add Deposit / Record Payment (Vibrant Emerald) */}
             <button
               onClick={onAddDeposit}
-              className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs py-2.5 px-3 rounded-xl shadow-xs transition-all cursor-pointer"
+              className="flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer"
             >
-              <PlusCircle className="w-4 h-4" />
-              <span>Add Deposit</span>
+              <PlusCircle className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Add Deposit</span>
             </button>
 
             {/* 2. Print Invoice (Vibrant Amber) */}
             <button
               onClick={onPrintInvoice}
-              className="flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold text-xs py-2.5 px-3 rounded-xl shadow-xs transition-all cursor-pointer"
+              className="flex items-center justify-center gap-1.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer"
             >
-              <Printer className="w-4 h-4" />
-              <span>Print Invoice</span>
+              <Printer className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Print Invoice</span>
             </button>
 
-            {/* 3. Add Discount (Soft Rose) */}
+            {/* 3. Add Discount (Vibrant Rose) */}
             <button
               onClick={onAddDiscount}
-              className="flex items-center justify-center gap-2 bg-rose-50 hover:bg-rose-100 border border-rose-300 active:scale-95 text-rose-700 font-bold text-xs py-2.5 px-3 rounded-xl shadow-2xs transition-all cursor-pointer"
+              className="flex items-center justify-center gap-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer"
             >
-              <MinusCircle className="w-4 h-4 text-rose-500" />
-              <span>Add Discount</span>
+              <MinusCircle className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Add Discount</span>
             </button>
 
             {/* 4. Fill Results (Vibrant Blue) */}
             <button
               onClick={onFillResults}
-              className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs py-2.5 px-3 rounded-xl shadow-xs transition-all cursor-pointer"
+              className="flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer"
             >
-              <FileEdit className="w-4 h-4" />
-              <span>Fill Results</span>
+              <FileEdit className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Fill Results</span>
             </button>
 
             {/* 5. Receive Sample (Vibrant Indigo) */}
             <button
               onClick={onReceiveSample}
-              className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs py-2.5 px-3 rounded-xl shadow-xs transition-all cursor-pointer"
+              className="flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer"
             >
-              <TestTube className="w-4 h-4" />
-              <span>Receive Sample</span>
+              <TestTube className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Receive Sample</span>
+            </button>
+
+            {/* 6. Release Report (Vibrant Teal) */}
+            <button
+              onClick={onReleaseReport}
+              className="flex items-center justify-center gap-1.5 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer"
+              title="Release finalized diagnostic report (RELEASEREPORT)"
+            >
+              <Send className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Release Report</span>
+            </button>
+
+            {/* 7. WhatsApp Resend (WhatsApp Emerald) */}
+            <button
+              onClick={onSendWhatsApp}
+              className="flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer"
+              title="Send report directly to patient via WhatsApp (SENDWHATSAPP)"
+            >
+              <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">WhatsApp Resend</span>
             </button>
           </div>
         </div>

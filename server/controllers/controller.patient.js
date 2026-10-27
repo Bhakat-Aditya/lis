@@ -13,6 +13,77 @@ const formatDate = (date = new Date()) => {
   return [year, month, day].join('-');
 };
 
+/**
+ * Universal Gender normalizer:
+ * Maps Male, Female, and converts Others/Other to 'Transgender'
+ */
+export const normalizeGender = (g) => {
+  const s = String(g || '').trim().toLowerCase();
+  if (s.startsWith('m')) return 'Male';
+  if (s.startsWith('f')) return 'Female';
+  if (s.startsWith('t') || s.startsWith('o')) return 'Transgender';
+  return 'Male';
+};
+
+/**
+ * Normalize any incoming date value (Java UTC string, ISO string, DD/MM/YYYY, Date object)
+ * strictly to valid YYYY-MM-DD required by upstream LIS to avoid 1211 date format error
+ */
+export const normalizeDateToYYYYMMDD = (dateVal) => {
+  if (!dateVal) return formatDate();
+  if (dateVal instanceof Date && !isNaN(dateVal.getTime())) {
+    return formatDate(dateVal);
+  }
+
+  const str = String(dateVal).trim();
+  if (!str) return formatDate();
+
+  // 1. If already YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return str;
+  }
+
+  const monthMap = {
+    jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+    jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12'
+  };
+
+  // 2. Handle Java Date.toString() e.g. "Mon Oct 26 00:00:00 UTC 2026" or "Mon Oct 26 00:00:00 IST 2026"
+  const javaDateMatch = str.match(/^[A-Za-z]{3}\s+([A-Za-z]{3})\s+(\d{1,2})\s+\d{2}:\d{2}:\d{2}\s+(?:[A-Za-z0-9_+-]+)\s+(\d{4})/);
+  if (javaDateMatch) {
+    const [, monthStr, dayStr, yearStr] = javaDateMatch;
+    const mm = monthMap[monthStr.toLowerCase()];
+    if (mm) {
+      return `${yearStr}-${mm}-${dayStr.padStart(2, '0')}`;
+    }
+  }
+
+  // 3. Handle Java format "Oct 26, 2026, 12:00:00 AM" or "Oct 26, 2026"
+  const monthDayYearMatch = str.match(/^([A-Za-z]{3})\s+(\d{1,2}),?\s+(\d{4})/);
+  if (monthDayYearMatch) {
+    const [, monthStr, dayStr, yearStr] = monthDayYearMatch;
+    const mm = monthMap[monthStr.toLowerCase()];
+    if (mm) {
+      return `${yearStr}-${mm}-${dayStr.padStart(2, '0')}`;
+    }
+  }
+
+  // 4. Handle DD/MM/YYYY or DD-MM-YYYY
+  const dmyMatch = str.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+  if (dmyMatch) {
+    const [, day, month, year] = dmyMatch;
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+
+  // 5. Fallback date parse
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    return formatDate(parsed);
+  }
+
+  return formatDate();
+};
+
 // In-flight deduplication and short-lived cache (5s) for GETPATIENTLIST
 const patientListCache = new Map();
 const inFlightPatientList = new Map();
@@ -165,6 +236,7 @@ export const getPatients = async (req, res, next) => {
 
       return {
         ...p,
+        gender: normalizeGender(p.gender),
         status: normalizedStatus,
         totalBill: total,
         paidBill: paid,
@@ -238,20 +310,26 @@ export const addPatient = async (req, res, next) => {
       });
     }
 
+    const cleanRegDate = normalizeDateToYYYYMMDD(regDate);
+    const cleanAge = String(age || '30').replace(/\D/g, '') || '30';
+    const cleanMobile = String(mobile || '').replace(/\D/g, '').slice(-10);
+
     const params = {
-      slNo,
-      mobile,
-      regDate,
-      title,
-      name,
-      sampleType,
-      age,
-      age_unit,
-      gender,
-      referedDr,
-      referDr,
-      refagent,
-      branch,
+      slNo: String(slNo || '').trim(),
+      mobile: cleanMobile,
+      regDate: cleanRegDate,
+      title: title || 'Mr',
+      name: name.trim(),
+      sampleType: sampleType || 'Inside',
+      sampleCollectionType: sampleType || 'Inside',
+      age: cleanAge,
+      age_unit: age_unit || 'Years',
+      gender: normalizeGender(gender),
+      referedDr: (referedDr || 'Self').trim(),
+      referDr: referDr || 'D1',
+      refagent: refagent || '1',
+      referAgent: refagent || '1',
+      branch: branch || '1',
     };
 
     const upstreamData = await upstreamService.post('ADDPATIENT', params, null, req.user?.upstreamSid);
@@ -288,7 +366,7 @@ export const updatePatient = async (req, res, next) => {
       patientId,
       slNo = '',
       mobile = '',
-      regDate = formatDate(),
+      regDate,
       title = 'Mr',
       name,
       sampleType = 'Inside',
@@ -309,26 +387,53 @@ export const updatePatient = async (req, res, next) => {
       });
     }
 
+    const rawPid = String(patientId).trim();
+    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+      ? `P${rawPid.replace(/^P+/i, '')}`
+      : `P${rawPid}`;
+
+    const cleanRegDate = normalizeDateToYYYYMMDD(regDate);
+    const cleanAge = String(age || '30').replace(/\D/g, '') || '30';
+    const cleanMobile = String(mobile || '').replace(/\D/g, '').slice(-10);
+    const cleanSlNo = String(slNo || cleanPatientId || '').trim();
+
     const params = {
-      patientId,
-      slNo,
-      mobile,
-      regDate,
-      title,
-      name,
-      sampleType,
-      age,
-      age_unit,
-      gender,
-      referedDr,
-      referDr,
-      refagent,
-      branch,
+      patientId: cleanPatientId,
+      slNo: cleanSlNo,
+      mobile: cleanMobile,
+      regDate: cleanRegDate,
+      title: title || 'Mr',
+      name: name.trim(),
+      sampleType: sampleType || 'Inside',
+      sampleCollectionType: sampleType || 'Inside',
+      age: cleanAge,
+      age_unit: age_unit || 'Years',
+      gender: normalizeGender(gender),
+      referedDr: (referedDr || 'Self').trim(),
+      referDr: referDr || 'D1',
+      refagent: refagent || '1',
+      referAgent: refagent || '1',
+      branch: branch || '1',
     };
 
     const upstreamData = await upstreamService.post('UPDATEPATIENT', params, null, req.user?.upstreamSid);
 
+    if (upstreamData?.StatusCode === '1211' || upstreamData?.STATUS === 'FAILED') {
+      console.error('[UpdatePatient] Upstream returned error (1211):', {
+        patientId: cleanPatientId,
+        params,
+        upstreamData,
+      });
+      return res.status(400).json({
+        STATUS: 'FAILED',
+        StatusCode: upstreamData?.StatusCode || '1211',
+        Message: upstreamData?.Message || upstreamData?.Msg || 'Error In Processing - 1211',
+        raw: upstreamData,
+      });
+    }
+
     invalidatePatientListCache();
+    invalidateReportCache(cleanPatientId);
     invalidateReportCache(patientId);
 
     return res.json({

@@ -15,6 +15,14 @@ import { StatusBadge, PaymentBadge } from '../common/Badge.jsx';
 import ClinicalGuideModal from '../common/ClinicalGuideModal.jsx';
 import BillPreviewModal from '../billing/BillPreviewModal.jsx';
 
+const formatGender = (raw) => {
+  const s = String(raw || '').trim().toLowerCase();
+  if (s.startsWith('m')) return 'Male';
+  if (s.startsWith('f')) return 'Female';
+  if (s.startsWith('t') || s.startsWith('o')) return 'Transgender';
+  return raw || '-';
+};
+
 export default function RecentWorklistTable({
   patients = [],
   loading = false,
@@ -112,7 +120,7 @@ export default function RecentWorklistTable({
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Search PID, Name, Doctor, Mobile..."
+                placeholder="Search by Barcode, Patient Name, Doctor, Mobile..."
                 value={tableSearch}
                 onChange={(e) => setTableSearch(e.target.value)}
                 className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-medium"
@@ -180,7 +188,7 @@ export default function RecentWorklistTable({
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="bg-slate-100/90 text-slate-600 font-bold border-b border-slate-200 text-[11px]">
-                <th className="py-3 px-4 w-24">PID</th>
+                <th className="py-3 px-4 min-w-[120px]">Barcode / SL No</th>
                 <th className="py-3 px-4">Patient Information</th>
                 <th className="py-3 px-4">Age / Sex</th>
                 <th className="py-3 px-4">Consultant / Referral</th>
@@ -210,26 +218,28 @@ export default function RecentWorklistTable({
                       key={pid}
                       className="hover:bg-indigo-50/40 transition-colors group"
                     >
-                      {/* PID with copy */}
-                      <td className="py-3 px-4 font-mono font-bold text-indigo-700">
+                      {/* Barcode / SL No with copy */}
+                      <td className="py-3 px-4 font-mono font-bold text-blue-700">
                         <div className="flex items-center gap-1">
                           <button
                             onClick={() => navigate(`/patients/${pid}`)}
-                            className="hover:underline cursor-pointer"
+                            className="bg-blue-50 border border-blue-200/70 px-2 py-0.5 rounded text-[11px] hover:underline cursor-pointer"
                           >
-                            #{pid}
+                            {p.slNo || p.barcode || '-'}
                           </button>
-                          <button
-                            onClick={(e) => handleCopyPid(pid, e)}
-                            title="Copy Patient ID"
-                            className="text-slate-400 hover:text-slate-700 transition-colors p-0.5 rounded cursor-pointer"
-                          >
-                            {copiedPid === pid ? (
-                              <Check className="w-3 h-3 text-emerald-600" />
-                            ) : (
-                              <Copy className="w-3 h-3" />
-                            )}
-                          </button>
+                          {(p.slNo || p.barcode) && (
+                            <button
+                              onClick={(e) => handleCopyPid(p.slNo || p.barcode, e)}
+                              title="Copy Barcode"
+                              className="text-slate-400 hover:text-slate-700 transition-colors p-0.5 rounded cursor-pointer"
+                            >
+                              {copiedPid === (p.slNo || p.barcode) ? (
+                                <Check className="w-3 h-3 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          )}
                         </div>
                       </td>
 
@@ -257,7 +267,7 @@ export default function RecentWorklistTable({
                       {/* Age / Gender */}
                       <td className="py-3 px-4">
                         <span className="inline-flex items-center text-[11px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">
-                          {p.age || '-'} Y / {p.gender || '-'}
+                          {p.age || '-'} Y / {formatGender(p.gender)}
                         </span>
                       </td>
 

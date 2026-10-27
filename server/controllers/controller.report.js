@@ -2,6 +2,7 @@ import axios from 'axios';
 import { upstreamService } from '../services/service.upstream.js';
 import { reportOverrideService } from '../services/service.reportOverride.js';
 import { invalidatePatientListCache } from './controller.patient.js';
+import { cacheService, CACHE_KEYS } from '../services/service.cache.js';
 
 // Deduplication and short-lived cache (5s) to eliminate duplicate calls
 const reportCache = new Map();
@@ -114,16 +115,63 @@ export const getPatientReport = async (req, res, next) => {
       console.warn(`[Report] Error fetching overrides for ${cleanPatientId}:`, e.message);
     }
 
+    // Retrieve master tests to enrich report items with operation permissions
+    let masterTests = [];
+    try {
+      const cachedTests = await cacheService.getList(CACHE_KEYS.TEST_LIST, false, req.user?.upstreamSid);
+      masterTests = cachedTests?.data || [];
+    } catch (e) {
+      // Ignore cache lookup failure
+    }
+
+    const toBoolFlag = (val, def) => {
+      if (val === undefined || val === null || val === '') return def;
+      if (typeof val === 'boolean') return val;
+      if (typeof val === 'number') return val !== 0;
+      const s = String(val).toLowerCase().trim();
+      if (s === 'true' || s === '1') return true;
+      if (s === 'false' || s === '0') return false;
+      return def;
+    };
+
     const reports = rawReports.map((r) => {
       const rid = String(r.reportId || '').trim();
+      let statusOverride = null;
+      let isDel = false;
       if (overrides[rid]) {
-        return {
-          ...r,
-          status: overrides[rid].status || 'DELETED',
-          isDeleted: (overrides[rid].status || 'DELETED') === 'DELETED',
-        };
+        statusOverride = overrides[rid].status || 'DELETED';
+        isDel = statusOverride === 'DELETED';
       }
-      return r;
+
+      // Map with master test list
+      const rTestId = String(r.testId || '').trim();
+      const normTestId = rTestId.replace(/^t/i, '').trim();
+      const rName = String(r.testName || '').toLowerCase().trim();
+      const matchedTest = masterTests.find((t) => {
+        const mId = String(t['Test Id'] || t.testId || t.id || '').trim();
+        if (mId.toLowerCase() === rTestId.toLowerCase()) return true;
+        const mNorm = mId.replace(/^t/i, '').trim();
+        if (mNorm && normTestId && mNorm.toLowerCase() === normTestId.toLowerCase()) return true;
+        const mName = String(t.Name || t.name || '').toLowerCase().trim();
+        return Boolean(mName && rName && mName === rName);
+      });
+
+      return {
+        ...r,
+        ...(statusOverride ? { status: statusOverride, isDeleted: isDel } : {}),
+        possibleCalculate: r.possibleCalculate !== undefined
+          ? toBoolFlag(r.possibleCalculate, false)
+          : (matchedTest ? toBoolFlag(matchedTest.possibleCalculate, false) : false),
+        possibleDownload: r.possibleDownload !== undefined
+          ? toBoolFlag(r.possibleDownload, true)
+          : (matchedTest ? toBoolFlag(matchedTest.possibleDownload, true) : true),
+        possibleEntry: r.possibleEntry !== undefined
+          ? toBoolFlag(r.possibleEntry, true)
+          : (matchedTest ? toBoolFlag(matchedTest.possibleEntry, true) : true),
+        possibleUpload: r.possibleUpload !== undefined
+          ? toBoolFlag(r.possibleUpload, false)
+          : (matchedTest ? toBoolFlag(matchedTest.possibleUpload, false) : false),
+      };
     });
 
     const templates = (payload.templates || []).map((t) => {
@@ -141,7 +189,7 @@ export const getPatientReport = async (req, res, next) => {
     });
 
     let billing = upstreamService.getCachedBilling(cleanPatientId);
-    if (!billing || req.query.withBilling === 'true') {
+    if (!billing || req.query.withBilling === 'true' || req.query.fresh === 'true') {
       try {
         billing = await upstreamService.getBillingSummary(cleanPatientId, req.user?.upstreamSid);
       } catch (e) {
@@ -181,7 +229,7 @@ export const getPatientReport = async (req, res, next) => {
 
     const effectiveDue = isPaid
       ? 0
-      : (billing && Math.abs(Number(billing.total || 0) - effectiveTotal) < 0.01
+      : (billing && billing.due !== undefined
           ? Number(billing.due)
           : Math.max(0, effectiveTotal - paidAmount));
 
@@ -285,8 +333,14 @@ export const syncPatientBillFromReportRate = async (cleanPatientId, reportId, te
       });
 
       if (matchedIdx !== -1) {
+        if (Math.abs(items[matchedIdx].amount - newRate) < 0.01) {
+          return;
+        }
         items[matchedIdx].amount = newRate;
       } else if (items.length === 1) {
+        if (Math.abs(items[0].amount - newRate) < 0.01) {
+          return;
+        }
         items[0].amount = newRate;
       } else {
         items.push({
@@ -409,33 +463,109 @@ export const updateReport = async (req, res, next) => {
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
 
+    // Resolve Master IDs for method and unit
+    let finalMethodId = String(method || '').trim();
+    let finalUnitId = String(resolvedUnit || '').trim();
+
+    try {
+      if (finalMethodId || finalUnitId) {
+        const [methodListRes, unitListRes] = await Promise.all([
+          cacheService.getList(CACHE_KEYS.METHOD_LIST).catch(() => ({ data: [] })),
+          cacheService.getList(CACHE_KEYS.UNIT_LIST).catch(() => ({ data: [] })),
+        ]);
+        const masterMethods = methodListRes?.data || [];
+        const masterUnits = unitListRes?.data || [];
+
+        if (finalMethodId) {
+          const cleanM = finalMethodId.toLowerCase();
+          const matchById = masterMethods.find(
+            (m) =>
+              String(m['Method Id'] || m.id || '').trim().toLowerCase() === cleanM ||
+              String(m['Method Id'] || m.id || '').replace(/^M/i, '').toLowerCase() === cleanM.replace(/^M/i, '')
+          );
+          if (matchById) {
+            finalMethodId = String(matchById['Method Id'] || matchById.id || '').trim();
+          } else {
+            const matchByName = masterMethods.find(
+              (m) => String(m.Name || m.name || '').toLowerCase().trim() === cleanM
+            );
+            if (matchByName) {
+              finalMethodId = String(matchByName['Method Id'] || matchByName.id || '').trim();
+            }
+          }
+        }
+
+        if (finalUnitId) {
+          const cleanU = finalUnitId.toLowerCase();
+          const matchById = masterUnits.find(
+            (u) =>
+              String(u['Unit Id'] || u.id || '').trim().toLowerCase() === cleanU ||
+              String(u['Unit Id'] || u.id || '').replace(/^U/i, '').toLowerCase() === cleanU.replace(/^U/i, '')
+          );
+          if (matchById) {
+            finalUnitId = String(matchById['Unit Id'] || matchById.id || '').trim();
+          } else {
+            const matchByName = masterUnits.find(
+              (u) => String(u.Name || u.name || '').toLowerCase().trim() === cleanU
+            );
+            if (matchByName) {
+              finalUnitId = String(matchByName['Unit Id'] || matchByName.id || '').trim();
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[UpdateReport] Master ID resolution note:', e.message);
+    }
+
+    let finalRate = rate !== undefined && rate !== null ? String(rate).trim() : '';
+    let finalResultData = resultData !== undefined && resultData !== null ? String(resultData) : '';
+
+    if (!finalRate || !finalResultData) {
+      try {
+        const cached = reportCache.get(cleanPatientId);
+        const repList = cached?.data?.reports || [];
+        const existingRep = repList.find((r) => String(r.reportId || '').trim() === String(reportId).trim());
+        if (existingRep) {
+          if (!finalRate) {
+            finalRate = String(existingRep.rate || existingRep.Rate || existingRep.amount || existingRep.Amount || '').trim();
+          }
+          if (!finalResultData) {
+            finalResultData = String(existingRep.resultData || existingRep.ResultData || '').trim();
+          }
+        }
+      } catch (e) {
+        // non-blocking fallback
+      }
+    }
+
     const params = {
-      profileName,
-      deptName,
+      profileName: profileName || '',
+      deptName: deptName || 'D1',
       reportId,
       patientId: cleanPatientId,
-      sampleId,
-      testName,
-      rate,
+      sampleId: sampleId || '',
+      testName: testName || '',
+      rate: finalRate,
       sampletype: resolvedSampleType,
       sampleType: resolvedSampleType,
-      method,
-      refRange,
-      unitref: resolvedUnitRef,
-      resultData,
-      unit: resolvedUnit,
-      comment,
+      method: finalMethodId,
+      refRange: refRange || '',
+      unitref: finalUnitId,
+      resultData: finalResultData,
+      unit: finalUnitId,
+      comment: comment || '',
     };
 
     const upstreamData = await upstreamService.post('UPDATEREPORT', params, null, req.user?.upstreamSid);
 
     // If a rate was provided or changed, automatically sync the patient's bill (BILLUPDATE)
-    if (rate !== undefined && rate !== null && String(rate).trim() !== '') {
+    if (finalRate !== '' && !isNaN(Number(finalRate)) && Number(finalRate) > 0) {
       await syncPatientBillFromReportRate(
         cleanPatientId,
         reportId,
         testName,
-        rate,
+        finalRate,
         profileName,
         req.user?.upstreamSid
       );
@@ -844,11 +974,54 @@ export const uploadOrder = async (req, res, next) => {
 export const sendWhatsApp = async (req, res, next) => {
   try {
     const { patientId } = req.body;
-    const upstreamData = await upstreamService.post('SENDWHATSAPP', { patientId }, null, req.user?.upstreamSid);
+    if (!patientId) {
+      return res.status(400).json({ STATUS: 'FAILED', Message: 'patientId is required' });
+    }
+
+    const rawPid = String(patientId).trim();
+    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+      ? `P${rawPid.replace(/^P+/i, '')}`
+      : `P${rawPid}`;
+
+    // 1. Initial attempt to dispatch WhatsApp via upstream SENDWHATSAPP
+    let upstreamData = await upstreamService.post('SENDWHATSAPP', { patientId: cleanPatientId }, null, req.user?.upstreamSid);
+
+    // 2. If upstream returns 1211 (Unreleased report), automatically release report upstream and retry
+    if (upstreamData?.StatusCode === '1211' || upstreamData?.STATUS === 'FAILED') {
+      try {
+        console.log(`[sendWhatsApp] Upstream returned 1211 for ${cleanPatientId}. Automatically triggering RELEASEREPORT...`);
+        const releaseRes = await upstreamService.post('RELEASEREPORT', { patientId: cleanPatientId }, null, req.user?.upstreamSid);
+        invalidateReportCache(cleanPatientId);
+        invalidateReportCache(rawPid);
+
+        if (releaseRes?.STATUS === 'SUCCESS' || releaseRes?.StatusCode === '0000') {
+          // Retry SENDWHATSAPP after report has been released
+          upstreamData = await upstreamService.post('SENDWHATSAPP', { patientId: cleanPatientId }, null, req.user?.upstreamSid);
+        }
+      } catch (releaseErr) {
+        console.warn(`[sendWhatsApp] Auto-release fallback failed for ${cleanPatientId}:`, releaseErr.message);
+      }
+    }
+
+    // 3. If STILL failing after release attempt, return HTTP 400 with actionable clinical guidance
+    if (upstreamData?.STATUS === 'FAILED' || upstreamData?.StatusCode === '1211' || (upstreamData?.StatusCode && upstreamData?.StatusCode !== '0000')) {
+      const errorMsg =
+        upstreamData?.Message && upstreamData?.Message !== 'Error In Proccessing - 1211'
+          ? upstreamData.Message
+          : 'Unable to send WhatsApp (1211): Report must be released and patient must have a valid mobile number registered.';
+      return res.status(400).json({
+        STATUS: 'FAILED',
+        StatusCode: upstreamData?.StatusCode || '1211',
+        Message: errorMsg,
+        data: upstreamData,
+      });
+    }
+
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
       StatusCode: upstreamData?.StatusCode || '0000',
-      Message: upstreamData?.Message || 'Report sent to WhatsApp',
+      Message: upstreamData?.Message || 'Report sent to WhatsApp successfully',
+      data: upstreamData,
     });
   } catch (err) {
     next(err);

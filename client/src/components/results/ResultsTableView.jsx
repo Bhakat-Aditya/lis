@@ -23,12 +23,15 @@ import {
   getTestPhaseInfo,
   evaluateResultValue,
   getDefaultHealthyValue,
+  getTestOperationPermissions,
 } from '../../utils/labTestUtils.js';
+import { useMaster } from '../../context/context.master.jsx';
 
 export default function ResultsTableView({
   reports = [],
   resultsState = {},
   patient = {},
+  masterTests = null,
   savingId = null,
   calculatingId = null,
   deletingId = null,
@@ -46,6 +49,8 @@ export default function ResultsTableView({
   onDownloadResult,
   onOpenEditReport,
 }) {
+  const { tests: contextMasterTests = [] } = useMaster();
+  const activeMasterTests = masterTests || contextMasterTests || [];
   const [focusedIndex, setFocusedIndex] = useState(null);
   const inputRefs = useRef([]);
 
@@ -125,6 +130,7 @@ export default function ResultsTableView({
           </thead>
           <tbody className="divide-y divide-slate-100">
             {reports.map((report, idx) => {
+              const permissions = getTestOperationPermissions(report, activeMasterTests);
               const current = resultsState[report.reportId] || {};
               const enteredVal = current.resultData;
               const evalRes = evaluateResultValue(enteredVal, report.refRange, report.unit);
@@ -244,81 +250,95 @@ export default function ResultsTableView({
 
                   {/* Observed Reading Input */}
                   <td className="py-1.5 px-3 min-w-[170px]">
-                    <div className="relative">
-                      <input
-                        ref={(el) => (inputRefs.current[idx] = el)}
-                        type="text"
-                        value={current.resultData || ''}
-                        onChange={(e) => onInputChange(report.reportId, 'resultData', e.target.value)}
-                        onKeyDown={(e) => handleKeyDown(e, idx)}
-                        onFocus={() => setFocusedIndex(idx)}
-                        onBlur={() => setFocusedIndex(null)}
-                        placeholder={getDefaultHealthyValue(report.refRange, report.testName) || 'Enter reading'}
-                        className={`w-full px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all border outline-none ${inputHighlightClass}`}
-                      />
-                      {current.resultData === '' && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const defVal = getDefaultHealthyValue(report.refRange, report.testName);
-                            if (defVal) onInputChange(report.reportId, 'resultData', defVal);
-                          }}
-                          title="Click to fill normal baseline value"
-                          className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-200 transition-all cursor-pointer"
-                        >
-                          Auto
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Multi-run version options (resultData1 through resultData5) */}
-                    {(() => {
-                      const vers = [
-                        { num: 1, val: report.resultData1 },
-                        { num: 2, val: report.resultData2 },
-                        { num: 3, val: report.resultData3 },
-                        { num: 4, val: report.resultData4 },
-                        { num: 5, val: report.resultData5 },
-                      ].filter((v) => v.val !== undefined && v.val !== null && String(v.val).trim() !== '');
-
-                      if (vers.length === 0) return null;
-
-                      return (
-                        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap select-none">
-                          <span className="text-[9px] text-purple-800 font-bold uppercase tracking-wider">Runs:</span>
-                          {vers.map((v) => {
-                            const isDefault = String(current.resultData || '').trim() === String(v.val).trim();
-                            return (
-                              <div
-                                key={v.num}
-                                className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-lg border transition-all ${
-                                  isDefault
-                                    ? 'bg-purple-100 border-purple-400 font-bold text-purple-950 shadow-2xs'
-                                    : 'bg-[#f6effe] border-purple-200 text-slate-800'
-                                }`}
-                              >
-                                <span className="font-mono font-bold">v{v.num}: {v.val}</span>
-                                {isDefault ? (
-                                  <span className="text-[9px] font-extrabold text-emerald-700 ml-1">✓ Default</span>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      onInputChange(report.reportId, 'resultData', v.val);
-                                      if (onSetDefaultResult) onSetDefaultResult(report.reportId, v.num);
-                                    }}
-                                    className="ml-1 bg-red-600 hover:bg-red-700 active:scale-95 text-white font-bold text-[9px] px-1.5 py-0.2 rounded cursor-pointer shadow-2xs transition-all"
-                                    title={`Set Version v${v.num} (${v.val}) as Default Result`}
-                                  >
-                                    ✓ Set
-                                  </button>
-                                )}
-                              </div>
-                            );
-                          })}
+                    {permissions.possibleEntry ? (
+                      <>
+                        <div className="relative">
+                          <input
+                            ref={(el) => (inputRefs.current[idx] = el)}
+                            type="text"
+                            value={current.resultData || ''}
+                            onChange={(e) => onInputChange(report.reportId, 'resultData', e.target.value)}
+                            onKeyDown={(e) => handleKeyDown(e, idx)}
+                            onFocus={() => setFocusedIndex(idx)}
+                            onBlur={() => setFocusedIndex(null)}
+                            placeholder={getDefaultHealthyValue(report.refRange, report.testName) || 'Enter reading'}
+                            className={`w-full px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all border outline-none ${inputHighlightClass}`}
+                          />
+                          {current.resultData === '' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const defVal = getDefaultHealthyValue(report.refRange, report.testName);
+                                if (defVal) onInputChange(report.reportId, 'resultData', defVal);
+                              }}
+                              title="Click to fill normal baseline value"
+                              className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-200 transition-all cursor-pointer"
+                            >
+                              Auto
+                            </button>
+                          )}
                         </div>
-                      );
-                    })()}
+
+                        {/* Multi-run version options (resultData1 through resultData5) */}
+                        {(() => {
+                          const vers = [
+                            { num: 1, val: report.resultData1 },
+                            { num: 2, val: report.resultData2 },
+                            { num: 3, val: report.resultData3 },
+                            { num: 4, val: report.resultData4 },
+                            { num: 5, val: report.resultData5 },
+                          ].filter((v) => v.val !== undefined && v.val !== null && String(v.val).trim() !== '');
+
+                          if (vers.length === 0) return null;
+
+                          return (
+                            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap select-none">
+                              <span className="text-[9px] text-purple-800 font-bold uppercase tracking-wider">Runs:</span>
+                              {vers.map((v) => {
+                                const isDefault = String(current.resultData || '').trim() === String(v.val).trim();
+                                return (
+                                  <div
+                                    key={v.num}
+                                    className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-lg border transition-all ${
+                                      isDefault
+                                        ? 'bg-purple-100 border-purple-400 font-bold text-purple-950 shadow-2xs'
+                                        : 'bg-[#f6effe] border-purple-200 text-slate-800'
+                                    }`}
+                                  >
+                                    <span className="font-mono font-bold">v{v.num}: {v.val}</span>
+                                    {isDefault ? (
+                                      <span className="text-[9px] font-extrabold text-emerald-700 ml-1">✓ Default</span>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          onInputChange(report.reportId, 'resultData', v.val);
+                                          if (onSetDefaultResult) onSetDefaultResult(report.reportId, v.num);
+                                        }}
+                                        className="ml-1 bg-red-600 hover:bg-red-700 active:scale-95 text-white font-bold text-[9px] px-1.5 py-0.2 rounded cursor-pointer shadow-2xs transition-all"
+                                        title={`Set Version v${v.num} (${v.val}) as Default Result`}
+                                      >
+                                        ✓ Set
+                                      </button>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()}
+                      </>
+                    ) : (
+                      <div
+                        className="w-full px-2.5 py-1 rounded-lg text-xs font-mono font-semibold bg-slate-100/90 text-slate-600 border border-slate-200 select-none flex items-center justify-between"
+                        title="Result entry option is disabled for this test parameter"
+                      >
+                        <span className="truncate">{current.resultData || '—'}</span>
+                        <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider ml-1 bg-slate-200/80 px-1.5 py-0.2 rounded shrink-0">
+                          Entry Disabled
+                        </span>
+                      </div>
+                    )}
                   </td>
 
 
@@ -397,67 +417,77 @@ export default function ResultsTableView({
                             <Edit className="w-3.5 h-3.5" />
                           </button>
 
-                          {/* Upload Order to Analyzer (UPLOADORDER) */}
-                          <button
-                            type="button"
-                            onClick={() => onUploadOrder && onUploadOrder(report)}
-                            disabled={uploadingId === report.reportId || isSaving || isDeleting}
-                            title="Upload order to analyzer equipment (UPLOADORDER)"
-                            className="p-1 rounded-lg border font-bold text-xs bg-white hover:bg-sky-50 text-sky-600 hover:text-sky-700 border-slate-200 hover:border-sky-300 transition-all cursor-pointer shadow-2xs disabled:opacity-50"
-                          >
-                            {uploadingId === report.reportId ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-600" />
-                            ) : (
-                              <Upload className="w-3.5 h-3.5" />
-                            )}
-                          </button>
+                          {/* Upload Order to Analyzer (UPLOADORDER) - Only show if possibleUpload is true */}
+                          {permissions.possibleUpload && (
+                            <button
+                              type="button"
+                              onClick={() => onUploadOrder && onUploadOrder(report)}
+                              disabled={uploadingId === report.reportId || isSaving || isDeleting}
+                              title="Upload order to analyzer equipment (UPLOADORDER)"
+                              className="p-1 rounded-lg border font-bold text-xs bg-white hover:bg-sky-50 text-sky-600 hover:text-sky-700 border-slate-200 hover:border-sky-300 transition-all cursor-pointer shadow-2xs disabled:opacity-50"
+                            >
+                              {uploadingId === report.reportId ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-600" />
+                              ) : (
+                                <Upload className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          )}
 
-                          {/* Download Result from Analyzer (DOWNLOADRESULT) */}
-                          <button
-                            type="button"
-                            onClick={() => onDownloadResult && onDownloadResult(report)}
-                            disabled={downloadingId === report.reportId || isSaving || isDeleting}
-                            title="Download reading from analyzer equipment (DOWNLOADRESULT)"
-                            className="p-1 rounded-lg border font-bold text-xs bg-white hover:bg-violet-50 text-violet-600 hover:text-violet-700 border-slate-200 hover:border-violet-300 transition-all cursor-pointer shadow-2xs disabled:opacity-50"
-                          >
-                            {downloadingId === report.reportId ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-600" />
-                            ) : (
-                              <Download className="w-3.5 h-3.5" />
-                            )}
-                          </button>
+                          {/* Download Result from Analyzer (DOWNLOADRESULT) - Only show if possibleDownload is true */}
+                          {permissions.possibleDownload && (
+                            <button
+                              type="button"
+                              onClick={() => onDownloadResult && onDownloadResult(report)}
+                              disabled={downloadingId === report.reportId || isSaving || isDeleting}
+                              title="Download reading from analyzer equipment (DOWNLOADRESULT)"
+                              className="p-1 rounded-lg border font-bold text-xs bg-white hover:bg-violet-50 text-violet-600 hover:text-violet-700 border-slate-200 hover:border-violet-300 transition-all cursor-pointer shadow-2xs disabled:opacity-50"
+                            >
+                              {downloadingId === report.reportId ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-600" />
+                              ) : (
+                                <Download className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          )}
 
-                          <button
-                            type="button"
-                            onClick={() => onSaveSingle(report)}
-                            disabled={isSaving}
-                            title="Save result for this parameter"
-                            className={`p-1 rounded-lg border font-bold text-xs transition-all cursor-pointer ${
-                              hasUnsavedVal
-                                ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600 shadow-xs active:scale-95'
-                                : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
-                            } disabled:opacity-50`}
-                          >
-                            {isSaving ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Save className="w-3.5 h-3.5" />
-                            )}
-                          </button>
+                          {/* Save Result - Only show if possibleEntry is true */}
+                          {permissions.possibleEntry && (
+                            <button
+                              type="button"
+                              onClick={() => onSaveSingle(report)}
+                              disabled={isSaving}
+                              title="Save result for this parameter"
+                              className={`p-1 rounded-lg border font-bold text-xs transition-all cursor-pointer ${
+                                hasUnsavedVal
+                                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600 shadow-xs active:scale-95'
+                                  : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
+                              } disabled:opacity-50`}
+                            >
+                              {isSaving ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Save className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          )}
 
-                          <button
-                            type="button"
-                            onClick={() => onCalculate(report.reportId)}
-                            disabled={calculatingId === report.reportId || isSaving}
-                            title="Evaluate automated formula calculation"
-                            className="p-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 hover:text-indigo-600 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-                          >
-                            {calculatingId === report.reportId ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
-                            ) : (
-                              <Calculator className="w-3.5 h-3.5" />
-                            )}
-                          </button>
+                          {/* Calculate Formula - Only show if possibleCalculate is true */}
+                          {permissions.possibleCalculate && (
+                            <button
+                              type="button"
+                              onClick={() => onCalculate(report.reportId)}
+                              disabled={calculatingId === report.reportId || isSaving}
+                              title="Evaluate automated formula calculation"
+                              className="p-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 hover:text-indigo-600 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                            >
+                              {calculatingId === report.reportId ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+                              ) : (
+                                <Calculator className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          )}
 
                           <button
                             type="button"
