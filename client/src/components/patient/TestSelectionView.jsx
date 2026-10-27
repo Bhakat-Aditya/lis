@@ -297,10 +297,18 @@ export default function TestSelectionView({
           items.push({ name: editingLotRate.name, amount: newPrice, date: '' });
         }
 
-        await api.post('/billing/update-bill', {
+        const updateRes = await api.post('/billing/update-bill', {
           patientId: cleanPid || rawPid,
           items,
         });
+
+        if (
+          updateRes.data?.STATUS === 'FAILED' ||
+          updateRes.data?.STATUS === 'ERROR' ||
+          (updateRes.data?.StatusCode && updateRes.data?.StatusCode !== '0000')
+        ) {
+          throw new Error(updateRes.data?.Message || 'BILLUPDATE failed on upstream server');
+        }
       }
 
       // Update local state immediately
@@ -317,7 +325,7 @@ export default function TestSelectionView({
       setEditingLotRate(null);
       if (onRefresh) await onRefresh();
     } catch (err) {
-      setRateError(err.response?.data?.Message || 'Failed to update price');
+      setRateError(err.response?.data?.Message || err.message || 'Failed to update price');
     } finally {
       setSavingRate(false);
     }

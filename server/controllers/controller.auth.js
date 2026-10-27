@@ -17,18 +17,29 @@ export const login = async (req, res, next) => {
       });
     }
 
-    // Extract client IP and User-Agent
+    // Extract client IP and User-Agent (Compulsory for Login v2 / LOGINV2)
     const rawIp =
       req.body.ip ||
       req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
       req.headers['x-real-ip'] ||
       req.socket?.remoteAddress ||
       req.ip ||
-      '127.0.0.1';
-    const ip = rawIp.replace(/^.*:/, '') || rawIp;
-    const userAgent = req.body.userAgent || req.headers['user-agent'] || 'Unknown Browser';
+      '';
+    let ip = rawIp.replace(/^.*:/, '') || rawIp;
+    if (ip === '1' || ip === '::1' || ip === 'localhost' || !ip) {
+      ip = '127.0.0.1';
+    }
+    const userAgent = req.body.userAgent || req.headers['user-agent'] || 'Mozilla/5.0';
 
-    // Call upstream APIServlet LOGIN or LOGIN2FA with IP and User-Agent
+    if (!ip || !userAgent) {
+      return res.status(400).json({
+        STATUS: 'FAILED',
+        StatusCode: '400',
+        Message: 'IP and UserAgent are compulsory for Login v2',
+      });
+    }
+
+    // Call upstream APIServlet LOGINV2 with compulsory IP and User-Agent
     const upstreamRes = await upstreamService.userLogin(loginId, password, totp, ip, userAgent);
 
     if (upstreamRes?.STATUS !== 'SUCCESS' && !upstreamRes?.sid) {

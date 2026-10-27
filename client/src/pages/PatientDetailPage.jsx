@@ -66,7 +66,7 @@ export default function PatientDetailPage() {
   const [showEditBillModal, setShowEditBillModal] = useState(false);
   const [showEditPatientModal, setShowEditPatientModal] = useState(false);
   const [depositAmount, setDepositAmount] = useState('');
-  const [paymentMode, setPaymentMode] = useState('Cash');
+  const [paymentMode, setPaymentMode] = useState('CASH');
   const [notification, setNotification] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [submittingDeposit, setSubmittingDeposit] = useState(false);
@@ -779,9 +779,9 @@ export default function PatientDetailPage() {
               disabled={submittingDeposit}
               className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-xs focus:outline-none focus:bg-white"
             >
-              <option value="Cash">Cash (Counter Desk)</option>
-              <option value="UPI">UPI / QR Code Scan</option>
-              <option value="Card">Debit / Credit Card</option>
+              <option value="CASH">CASH</option>
+              <option value="OFFLINE_UPI">OFFLINE_UPI</option>
+              <option value="CARD">CARD</option>
             </select>
           </div>
 

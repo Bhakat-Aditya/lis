@@ -13,13 +13,15 @@ import {
   Printer,
   PlusCircle,
   ExternalLink,
+  Globe,
+  MoreHorizontal,
 } from 'lucide-react';
 import { formatDisplayDate } from '../../utils/dateUtils.js';
 
 export default function FinancialDrilldownModal({
   isOpen,
   onClose,
-  type, // 'discount', 'roundoff', 'upi', 'cash', 'card', 'due', 'invoiced', 'collected'
+  type, // 'discount', 'roundoff', 'cash', 'offline_upi', 'card', 'online_upi', 'others', 'upi', 'due'
   items = [],
   onOpenEditBill,
   onOpenDeposit,
@@ -48,35 +50,65 @@ export default function FinancialDrilldownModal({
       badgeColor: 'bg-teal-100 text-teal-800 border-teal-200',
       getTotal: (list) => list.reduce((sum, p) => sum + Number(p.roundOff || 0), 0),
     },
-    upi: {
-      title: 'UPI / QR Payments Ledger',
-      subtitle: 'Verified digital collections via Dynamic UPI and QR codes',
-      icon: QrCode,
-      iconColor: 'text-blue-600 bg-blue-50 border-blue-200',
-      filter: (p) => Number(p.upiPayment || 0) > 0,
-      badgeText: 'Total UPI Received',
-      badgeColor: 'bg-blue-100 text-blue-800 border-blue-200',
-      getTotal: (list) => list.reduce((sum, p) => sum + Number(p.upiPayment || 0), 0),
-    },
     cash: {
-      title: 'Cash Collections Ledger',
+      title: 'Cash Collections Ledger (CASH)',
       subtitle: 'Direct counter cash receipts recorded for diagnostic bills',
       icon: Banknote,
       iconColor: 'text-emerald-600 bg-emerald-50 border-emerald-200',
       filter: (p) => Number(p.cashPayment || 0) > 0,
-      badgeText: 'Total Cash Received',
+      badgeText: 'Total CASH Received',
       badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-200',
       getTotal: (list) => list.reduce((sum, p) => sum + Number(p.cashPayment || 0), 0),
     },
+    offline_upi: {
+      title: 'Offline UPI Payments Ledger (OFFLINE_UPI)',
+      subtitle: 'Counter dynamic & static QR code scans via Offline UPI',
+      icon: QrCode,
+      iconColor: 'text-blue-600 bg-blue-50 border-blue-200',
+      filter: (p) => Number(p.offlineUpiPayment || 0) > 0,
+      badgeText: 'Total OFFLINE_UPI Received',
+      badgeColor: 'bg-blue-100 text-blue-800 border-blue-200',
+      getTotal: (list) => list.reduce((sum, p) => sum + Number(p.offlineUpiPayment || 0), 0),
+    },
     card: {
-      title: 'Card / POS Payments Ledger',
+      title: 'Card / POS Payments Ledger (CARD)',
       subtitle: 'Credit and Debit card swipe transactions',
       icon: CreditCard,
       iconColor: 'text-indigo-600 bg-indigo-50 border-indigo-200',
       filter: (p) => Number(p.cardPayment || 0) > 0,
-      badgeText: 'Total Card Received',
+      badgeText: 'Total CARD Received',
       badgeColor: 'bg-indigo-100 text-indigo-800 border-indigo-200',
       getTotal: (list) => list.reduce((sum, p) => sum + Number(p.cardPayment || 0), 0),
+    },
+    online_upi: {
+      title: 'Online UPI Payments Ledger (ONLINE_UPI)',
+      subtitle: 'Verified digital collections via online UPI payment gateways',
+      icon: Globe,
+      iconColor: 'text-cyan-600 bg-cyan-50 border-cyan-200',
+      filter: (p) => Number(p.onlineUpiPayment || 0) > 0,
+      badgeText: 'Total ONLINE_UPI Received',
+      badgeColor: 'bg-cyan-100 text-cyan-800 border-cyan-200',
+      getTotal: (list) => list.reduce((sum, p) => sum + Number(p.onlineUpiPayment || 0), 0),
+    },
+    others: {
+      title: 'Other Payments Ledger (OTHERS)',
+      subtitle: 'Alternate payment receipts (Cheque, NEFT/RTGS, etc.)',
+      icon: MoreHorizontal,
+      iconColor: 'text-slate-600 bg-slate-100 border-slate-300',
+      filter: (p) => Number(p.othersPayment || 0) > 0,
+      badgeText: 'Total OTHERS Received',
+      badgeColor: 'bg-slate-100 text-slate-800 border-slate-300',
+      getTotal: (list) => list.reduce((sum, p) => sum + Number(p.othersPayment || 0), 0),
+    },
+    upi: {
+      title: 'UPI / QR Payments Ledger',
+      subtitle: 'Verified digital collections via UPI',
+      icon: QrCode,
+      iconColor: 'text-blue-600 bg-blue-50 border-blue-200',
+      filter: (p) => Number(p.upiPayment || 0) > 0 || Number(p.offlineUpiPayment || 0) > 0 || Number(p.onlineUpiPayment || 0) > 0,
+      badgeText: 'Total UPI Received',
+      badgeColor: 'bg-blue-100 text-blue-800 border-blue-200',
+      getTotal: (list) => list.reduce((sum, p) => sum + Number(p.upiPayment || (p.offlineUpiPayment || 0) + (p.onlineUpiPayment || 0)), 0),
     },
     due: {
       title: 'Outstanding Accounts Due',
@@ -141,9 +173,12 @@ export default function FinancialDrilldownModal({
                   <th className="py-2.5 px-3 text-right">Gross Bill</th>
                   {type === 'discount' && <th className="py-2.5 px-3 text-right text-purple-700">Discount</th>}
                   {type === 'roundoff' && <th className="py-2.5 px-3 text-right text-teal-700">Round Off</th>}
+                  {type === 'cash' && <th className="py-2.5 px-3 text-right text-emerald-700">CASH Paid</th>}
+                  {type === 'offline_upi' && <th className="py-2.5 px-3 text-right text-blue-700">OFFLINE_UPI Paid</th>}
+                  {type === 'card' && <th className="py-2.5 px-3 text-right text-indigo-700">CARD Paid</th>}
+                  {type === 'online_upi' && <th className="py-2.5 px-3 text-right text-cyan-700">ONLINE_UPI Paid</th>}
+                  {type === 'others' && <th className="py-2.5 px-3 text-right text-slate-700">OTHERS Paid</th>}
                   {type === 'upi' && <th className="py-2.5 px-3 text-right text-blue-700">UPI Paid</th>}
-                  {type === 'cash' && <th className="py-2.5 px-3 text-right text-emerald-700">Cash Paid</th>}
-                  {type === 'card' && <th className="py-2.5 px-3 text-right text-indigo-700">Card Paid</th>}
                   {type === 'due' && <th className="py-2.5 px-3 text-right text-rose-700">Balance Due</th>}
                   <th className="py-2.5 px-3 text-right text-slate-500">Net Amount</th>
                   <th className="py-2.5 px-3 text-center">Actions</th>
@@ -195,19 +230,34 @@ export default function FinancialDrilldownModal({
                           {Number(p.roundOff || 0) >= 0 ? '+' : ''}₹{Number(p.roundOff || 0).toLocaleString('en-IN')}
                         </td>
                       )}
-                      {type === 'upi' && (
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-blue-700">
-                          ₹{Number(p.upiPayment || 0).toLocaleString('en-IN')}
-                        </td>
-                      )}
                       {type === 'cash' && (
                         <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-700">
                           ₹{Number(p.cashPayment || 0).toLocaleString('en-IN')}
                         </td>
                       )}
+                      {type === 'offline_upi' && (
+                        <td className="py-2.5 px-3 text-right font-mono font-bold text-blue-700">
+                          ₹{Number(p.offlineUpiPayment || 0).toLocaleString('en-IN')}
+                        </td>
+                      )}
                       {type === 'card' && (
                         <td className="py-2.5 px-3 text-right font-mono font-bold text-indigo-700">
                           ₹{Number(p.cardPayment || 0).toLocaleString('en-IN')}
+                        </td>
+                      )}
+                      {type === 'online_upi' && (
+                        <td className="py-2.5 px-3 text-right font-mono font-bold text-cyan-700">
+                          ₹{Number(p.onlineUpiPayment || 0).toLocaleString('en-IN')}
+                        </td>
+                      )}
+                      {type === 'others' && (
+                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-700">
+                          ₹{Number(p.othersPayment || 0).toLocaleString('en-IN')}
+                        </td>
+                      )}
+                      {type === 'upi' && (
+                        <td className="py-2.5 px-3 text-right font-mono font-bold text-blue-700">
+                          ₹{Number(p.upiPayment || (p.offlineUpiPayment || 0) + (p.onlineUpiPayment || 0)).toLocaleString('en-IN')}
                         </td>
                       )}
                       {type === 'due' && (

@@ -21,6 +21,8 @@ import {
   Banknote,
   ArrowRight,
   Filter,
+  Globe,
+  MoreHorizontal,
 } from 'lucide-react';
 import Modal from '../components/common/Modal.jsx';
 import BillPreviewModal from '../components/billing/BillPreviewModal.jsx';
@@ -31,6 +33,22 @@ import {
   getLocalDateString,
   shiftDateDays,
 } from '../utils/dateUtils.js';
+
+/**
+ * Standard LIS payment categories: CASH, OFFLINE_UPI, CARD, ONLINE_UPI, OTHERS
+ */
+export const PAYMENT_MODES = ['CASH', 'OFFLINE_UPI', 'CARD', 'ONLINE_UPI', 'OTHERS'];
+
+export const normalizePaymentCategory = (raw) => {
+  const m = String(raw || '').trim().toUpperCase();
+  if (m === 'CARD' || m.includes('CARD') || m.includes('POS')) return 'CARD';
+  if (m === 'ONLINE_UPI' || (m.includes('ONLINE') && m.includes('UPI'))) return 'ONLINE_UPI';
+  if (m === 'OFFLINE_UPI' || m === 'OFFLINE UPI' || m === 'OFFLINE-UPI' || m.includes('UPI')) return 'OFFLINE_UPI';
+  if (m === 'OTHERS' || m === 'OTHER' || m.includes('OTHER')) return 'OTHERS';
+  if (m === 'CASH') return 'CASH';
+  if (m) return 'OTHERS';
+  return 'CASH';
+};
 
 export default function BillingPage() {
   const navigate = useNavigate();
@@ -48,9 +66,9 @@ export default function BillingPage() {
   const [statusFilter, setStatusFilter] = useState('ALL'); // ALL, PAID, DUE
   const [depositPatient, setDepositPatient] = useState(null);
   const [previewPatient, setPreviewPatient] = useState(null);
-  const [drilldownType, setDrilldownType] = useState(null); // 'discount' | 'roundoff' | 'upi' | 'cash' | 'card' | 'due'
+  const [drilldownType, setDrilldownType] = useState(null); // 'discount' | 'roundoff' | 'cash' | 'offline_upi' | 'card' | 'online_upi' | 'others' | 'due' | 'upi'
   const [amount, setAmount] = useState('500');
-  const [paymentMode, setPaymentMode] = useState('Cash');
+  const [paymentMode, setPaymentMode] = useState('CASH');
   const [notification, setNotification] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -112,22 +130,31 @@ export default function BillingPage() {
         const billName = b['Bill Name'] || 'TXN/RECEIPT';
         const billId = b['Bill Id'] || '';
 
-        // Calculate breakdown of UPI, Cash, Card
-        let upiPayment = 0;
+        // Calculate breakdown of CASH, OFFLINE_UPI, CARD, ONLINE_UPI, OTHERS
         let cashPayment = 0;
+        let offlineUpiPayment = 0;
         let cardPayment = 0;
+        let onlineUpiPayment = 0;
+        let othersPayment = 0;
 
         paymentList.forEach((pm) => {
           const amt = Number(pm.Amount || pm.amount || 0);
-          const mode = String(pm['Payment Mode'] || pm.paymentMode || pm.mode || '').toUpperCase();
-          if (mode.includes('UPI')) upiPayment += amt;
-          else if (mode.includes('CARD') || mode.includes('POS')) cardPayment += amt;
+          const rawMode = pm['Payment Mode'] || pm.paymentMode || pm.mode || '';
+          const category = normalizePaymentCategory(rawMode);
+
+          if (category === 'CASH') cashPayment += amt;
+          else if (category === 'OFFLINE_UPI') offlineUpiPayment += amt;
+          else if (category === 'CARD') cardPayment += amt;
+          else if (category === 'ONLINE_UPI') onlineUpiPayment += amt;
+          else if (category === 'OTHERS') othersPayment += amt;
           else cashPayment += amt;
         });
 
         if (paymentList.length === 0 && totalPayment > 0) {
           cashPayment = totalPayment;
         }
+
+        const upiPayment = offlineUpiPayment + onlineUpiPayment;
 
         return {
           ...p,
@@ -144,9 +171,12 @@ export default function BillingPage() {
           testList,
           billName,
           billId,
-          upiPayment,
           cashPayment,
+          offlineUpiPayment,
           cardPayment,
+          onlineUpiPayment,
+          othersPayment,
+          upiPayment,
         };
       });
 
@@ -209,16 +239,18 @@ export default function BillingPage() {
     });
   }, [billingPatients, statusFilter, searchTerm]);
 
-  // Financial aggregates across all mapped bills
+  // Financial aggregates across all mapped bills (5 modes: CASH, OFFLINE_UPI, CARD, ONLINE_UPI, OTHERS)
   const aggregates = useMemo(() => {
     let totalInvoiced = 0;
     let totalCollected = 0;
     let totalDue = 0;
     let totalDiscount = 0;
     let totalRoundOff = 0;
-    let totalUpi = 0;
     let totalCash = 0;
+    let totalOfflineUpi = 0;
     let totalCard = 0;
+    let totalOnlineUpi = 0;
+    let totalOthers = 0;
 
     billingPatients.forEach((p) => {
       totalInvoiced += Number(p.totalBill || 0);
@@ -226,9 +258,11 @@ export default function BillingPage() {
       totalDue += Number(p.totalOutstanding || 0);
       totalDiscount += Number(p.discountAmount || 0);
       totalRoundOff += Number(p.roundOff || 0);
-      totalUpi += Number(p.upiPayment || 0);
       totalCash += Number(p.cashPayment || 0);
+      totalOfflineUpi += Number(p.offlineUpiPayment || 0);
       totalCard += Number(p.cardPayment || 0);
+      totalOnlineUpi += Number(p.onlineUpiPayment || 0);
+      totalOthers += Number(p.othersPayment || 0);
     });
 
     return {
@@ -237,9 +271,12 @@ export default function BillingPage() {
       totalDue,
       totalDiscount,
       totalRoundOff,
-      totalUpi,
       totalCash,
+      totalOfflineUpi,
       totalCard,
+      totalOnlineUpi,
+      totalOthers,
+      totalUpi: totalOfflineUpi + totalOnlineUpi,
     };
   }, [billingPatients]);
 
@@ -365,146 +402,199 @@ export default function BillingPage() {
       )}
 
       {/* Summary KPI Divs at the top of the list (Clickable with interactive popup breakdown) */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-            Financial Summary & Payment Reconciliation
-          </h2>
-          <span className="text-[11px] text-slate-400 italic">
-            Click on any card to view detailed bill-by-bill breakdown
-          </span>
+      <div className="space-y-3">
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              Financial Summary & Accounts Overview
+            </h2>
+            <span className="text-[11px] text-slate-400 italic">
+              Click on any card to view detailed bill-by-bill breakdown
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {/* 1. Total Bill */}
+            <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block truncate">
+                Total Invoiced
+              </span>
+              <div className="text-lg font-extrabold text-slate-900 font-mono">
+                ₹{aggregates.totalInvoiced.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </div>
+              <span className="text-[10px] text-slate-400 block truncate">Gross billing</span>
+            </div>
+
+            {/* 2. Total Collected */}
+            <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 block truncate">
+                Total Realized
+              </span>
+              <div className="text-lg font-extrabold text-emerald-600 font-mono">
+                ₹{aggregates.totalCollected.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </div>
+              <span className="text-[10px] text-emerald-700/70 block truncate">Collected</span>
+            </div>
+
+            {/* 3. Total Due (Clickable) */}
+            <button
+              type="button"
+              onClick={() => setDrilldownType('due')}
+              className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-1 text-left hover:border-amber-400 hover:shadow-xs transition-all cursor-pointer group"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 block truncate">
+                  Outstanding Due
+                </span>
+                <AlertCircle className="w-3 h-3 text-amber-600 opacity-60 group-hover:opacity-100 transition-opacity" />
+              </div>
+              <div className="text-lg font-extrabold text-amber-600 font-mono">
+                ₹{aggregates.totalDue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </div>
+              <span className="text-[10px] text-amber-600/80 block truncate font-medium">Click to view ↗</span>
+            </button>
+
+            {/* 4. Total Discount (Clickable) */}
+            <button
+              type="button"
+              onClick={() => setDrilldownType('discount')}
+              className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-1 text-left hover:border-purple-400 hover:shadow-xs transition-all cursor-pointer group"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-700 block truncate">
+                  Total Discount
+                </span>
+                <Percent className="w-3 h-3 text-purple-600 opacity-60 group-hover:opacity-100 transition-opacity" />
+              </div>
+              <div className="text-lg font-extrabold text-purple-700 font-mono">
+                ₹{aggregates.totalDiscount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </div>
+              <span className="text-[10px] text-purple-600/80 block truncate font-medium">Click to view ↗</span>
+            </button>
+
+            {/* 5. Total Round Off (Clickable) */}
+            <button
+              type="button"
+              onClick={() => setDrilldownType('roundoff')}
+              className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-1 text-left hover:border-teal-400 hover:shadow-xs transition-all cursor-pointer group"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-teal-700 block truncate">
+                  Total Round Off
+                </span>
+                <Calculator className="w-3 h-3 text-teal-600 opacity-60 group-hover:opacity-100 transition-opacity" />
+              </div>
+              <div className="text-lg font-extrabold text-teal-700 font-mono">
+                ₹{aggregates.totalRoundOff.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </div>
+              <span className="text-[10px] text-teal-600/80 block truncate font-medium">Click to view ↗</span>
+            </button>
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
-          {/* 1. Total Bill */}
-          <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block truncate">
-              Total Invoiced
+        {/* Payment Modes Breakdown (CASH, OFFLINE_UPI, CARD, ONLINE_UPI, OTHERS) */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+              <span>Payment Mode Breakdown</span>
+              <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded font-medium border border-slate-200">Reconciliation</span>
+            </h3>
+            <span className="text-[11px] text-slate-400 italic">
+              All 5 payment categories calculated & tracked
             </span>
-            <div className="text-lg font-extrabold text-slate-900 font-mono">
-              ₹{aggregates.totalInvoiced.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-            </div>
-            <span className="text-[10px] text-slate-400 block truncate">Gross billing</span>
           </div>
 
-          {/* 2. Total Collected */}
-          <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 block truncate">
-              Total Realized
-            </span>
-            <div className="text-lg font-extrabold text-emerald-600 font-mono">
-              ₹{aggregates.totalCollected.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-            </div>
-            <span className="text-[10px] text-emerald-700/70 block truncate">Collected</span>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {/* 1. CASH */}
+            <button
+              type="button"
+              onClick={() => setDrilldownType('cash')}
+              className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-1 text-left hover:border-emerald-400 hover:shadow-xs transition-all cursor-pointer group"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 block truncate">
+                  CASH
+                </span>
+                <Banknote className="w-3 h-3 text-emerald-600 opacity-60 group-hover:opacity-100 transition-opacity" />
+              </div>
+              <div className="text-lg font-extrabold text-emerald-700 font-mono">
+                ₹{aggregates.totalCash.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </div>
+              <span className="text-[10px] text-emerald-600/80 block truncate font-medium">Counter cash ↗</span>
+            </button>
+
+            {/* 2. OFFLINE_UPI */}
+            <button
+              type="button"
+              onClick={() => setDrilldownType('offline_upi')}
+              className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-1 text-left hover:border-blue-400 hover:shadow-xs transition-all cursor-pointer group"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 block truncate">
+                  OFFLINE_UPI
+                </span>
+                <QrCode className="w-3 h-3 text-blue-600 opacity-60 group-hover:opacity-100 transition-opacity" />
+              </div>
+              <div className="text-lg font-extrabold text-blue-700 font-mono">
+                ₹{aggregates.totalOfflineUpi.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </div>
+              <span className="text-[10px] text-blue-600/80 block truncate font-medium">QR code scans ↗</span>
+            </button>
+
+            {/* 3. CARD */}
+            <button
+              type="button"
+              onClick={() => setDrilldownType('card')}
+              className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-1 text-left hover:border-indigo-400 hover:shadow-xs transition-all cursor-pointer group"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 block truncate">
+                  CARD
+                </span>
+                <CreditCard className="w-3 h-3 text-indigo-600 opacity-60 group-hover:opacity-100 transition-opacity" />
+              </div>
+              <div className="text-lg font-extrabold text-indigo-700 font-mono">
+                ₹{aggregates.totalCard.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </div>
+              <span className="text-[10px] text-indigo-600/80 block truncate font-medium">POS swipe / chip ↗</span>
+            </button>
+
+            {/* 4. ONLINE_UPI */}
+            <button
+              type="button"
+              onClick={() => setDrilldownType('online_upi')}
+              className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-1 text-left hover:border-cyan-400 hover:shadow-xs transition-all cursor-pointer group"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-700 block truncate">
+                  ONLINE_UPI
+                </span>
+                <Globe className="w-3 h-3 text-cyan-600 opacity-60 group-hover:opacity-100 transition-opacity" />
+              </div>
+              <div className="text-lg font-extrabold text-cyan-700 font-mono">
+                ₹{aggregates.totalOnlineUpi.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </div>
+              <span className="text-[10px] text-cyan-600/80 block truncate font-medium">Online gateways ↗</span>
+            </button>
+
+            {/* 5. OTHERS */}
+            <button
+              type="button"
+              onClick={() => setDrilldownType('others')}
+              className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-1 text-left hover:border-slate-400 hover:shadow-xs transition-all cursor-pointer group"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-700 block truncate">
+                  OTHERS
+                </span>
+                <MoreHorizontal className="w-3 h-3 text-slate-600 opacity-60 group-hover:opacity-100 transition-opacity" />
+              </div>
+              <div className="text-lg font-extrabold text-slate-700 font-mono">
+                ₹{aggregates.totalOthers.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+              </div>
+              <span className="text-[10px] text-slate-600/80 block truncate font-medium">Cheque / NEFT ↗</span>
+            </button>
           </div>
-
-          {/* 3. Total Due (Clickable) */}
-          <button
-            type="button"
-            onClick={() => setDrilldownType('due')}
-            className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-1 text-left hover:border-amber-400 hover:shadow-xs transition-all cursor-pointer group"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 block truncate">
-                Outstanding Due
-              </span>
-              <AlertCircle className="w-3 h-3 text-amber-600 opacity-60 group-hover:opacity-100 transition-opacity" />
-            </div>
-            <div className="text-lg font-extrabold text-amber-600 font-mono">
-              ₹{aggregates.totalDue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-            </div>
-            <span className="text-[10px] text-amber-600/80 block truncate font-medium">Click to view ↗</span>
-          </button>
-
-          {/* 4. Total Discount (Clickable) */}
-          <button
-            type="button"
-            onClick={() => setDrilldownType('discount')}
-            className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-1 text-left hover:border-purple-400 hover:shadow-xs transition-all cursor-pointer group"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-700 block truncate">
-                Total Discount
-              </span>
-              <Percent className="w-3 h-3 text-purple-600 opacity-60 group-hover:opacity-100 transition-opacity" />
-            </div>
-            <div className="text-lg font-extrabold text-purple-700 font-mono">
-              ₹{aggregates.totalDiscount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-            </div>
-            <span className="text-[10px] text-purple-600/80 block truncate font-medium">Click to view ↗</span>
-          </button>
-
-          {/* 5. Total Round Off (Clickable) */}
-          <button
-            type="button"
-            onClick={() => setDrilldownType('roundoff')}
-            className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-1 text-left hover:border-teal-400 hover:shadow-xs transition-all cursor-pointer group"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-teal-700 block truncate">
-                Total Round Off
-              </span>
-              <Calculator className="w-3 h-3 text-teal-600 opacity-60 group-hover:opacity-100 transition-opacity" />
-            </div>
-            <div className="text-lg font-extrabold text-teal-700 font-mono">
-              ₹{aggregates.totalRoundOff.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-            </div>
-            <span className="text-[10px] text-teal-600/80 block truncate font-medium">Click to view ↗</span>
-          </button>
-
-          {/* 6. Total UPI Payment (Clickable) */}
-          <button
-            type="button"
-            onClick={() => setDrilldownType('upi')}
-            className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-1 text-left hover:border-blue-400 hover:shadow-xs transition-all cursor-pointer group"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 block truncate">
-                UPI Payment
-              </span>
-              <QrCode className="w-3 h-3 text-blue-600 opacity-60 group-hover:opacity-100 transition-opacity" />
-            </div>
-            <div className="text-lg font-extrabold text-blue-700 font-mono">
-              ₹{aggregates.totalUpi.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-            </div>
-            <span className="text-[10px] text-blue-600/80 block truncate font-medium">Click to view ↗</span>
-          </button>
-
-          {/* 7. Cash Payment (Clickable) */}
-          <button
-            type="button"
-            onClick={() => setDrilldownType('cash')}
-            className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-1 text-left hover:border-emerald-400 hover:shadow-xs transition-all cursor-pointer group"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 block truncate">
-                Cash Payment
-              </span>
-              <Banknote className="w-3 h-3 text-emerald-600 opacity-60 group-hover:opacity-100 transition-opacity" />
-            </div>
-            <div className="text-lg font-extrabold text-emerald-700 font-mono">
-              ₹{aggregates.totalCash.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-            </div>
-            <span className="text-[10px] text-emerald-600/80 block truncate font-medium">Click to view ↗</span>
-          </button>
-
-          {/* 8. Card Payment (Clickable) */}
-          <button
-            type="button"
-            onClick={() => setDrilldownType('card')}
-            className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-1 text-left hover:border-indigo-400 hover:shadow-xs transition-all cursor-pointer group"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 block truncate">
-                Card Payment
-              </span>
-              <CreditCard className="w-3 h-3 text-indigo-600 opacity-60 group-hover:opacity-100 transition-opacity" />
-            </div>
-            <div className="text-lg font-extrabold text-indigo-700 font-mono">
-              ₹{aggregates.totalCard.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-            </div>
-            <span className="text-[10px] text-indigo-600/80 block truncate font-medium">Click to view ↗</span>
-          </button>
         </div>
       </div>
 
@@ -686,22 +776,32 @@ export default function BillingPage() {
                         )}
                       </td>
 
-                      {/* 9. Payment Mode Badges */}
+                      {/* 9. Payment Mode Badges (CASH, OFFLINE_UPI, CARD, ONLINE_UPI, OTHERS) */}
                       <td className="py-3 px-3 text-center whitespace-nowrap">
                         <div className="inline-flex items-center gap-1">
-                          {p.upiPayment > 0 && (
-                            <span className="text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded">
-                              UPI
-                            </span>
-                          )}
                           {p.cashPayment > 0 && (
                             <span className="text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded">
-                              Cash
+                              CASH
+                            </span>
+                          )}
+                          {p.offlineUpiPayment > 0 && (
+                            <span className="text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded">
+                              OFFLINE_UPI
                             </span>
                           )}
                           {p.cardPayment > 0 && (
                             <span className="text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.5 rounded">
-                              Card
+                              CARD
+                            </span>
+                          )}
+                          {p.onlineUpiPayment > 0 && (
+                            <span className="text-[9px] font-bold bg-cyan-50 text-cyan-700 border border-cyan-200 px-1.5 py-0.5 rounded">
+                              ONLINE_UPI
+                            </span>
+                          )}
+                          {p.othersPayment > 0 && (
+                            <span className="text-[9px] font-bold bg-slate-100 text-slate-700 border border-slate-300 px-1.5 py-0.5 rounded">
+                              OTHERS
                             </span>
                           )}
                           {p.totalPayment === 0 && (
@@ -863,11 +963,11 @@ export default function BillingPage() {
             <select
               value={paymentMode}
               onChange={(e) => setPaymentMode(e.target.value)}
-              className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-medium text-xs focus:outline-none focus:bg-white"
+              className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-semibold text-xs focus:outline-none focus:bg-white"
             >
-              <option value="Cash">Cash (Counter Receipt)</option>
-              <option value="UPI">UPI / Dynamic QR Code</option>
-              <option value="Card">Debit / Credit Card (POS Machine)</option>
+              <option value="CASH">CASH</option>
+              <option value="OFFLINE_UPI">OFFLINE_UPI</option>
+              <option value="CARD">CARD</option>
             </select>
           </div>
 

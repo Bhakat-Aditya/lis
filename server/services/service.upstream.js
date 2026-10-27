@@ -1,6 +1,8 @@
 import axios from 'axios';
 import { config } from '../config/config.env.js';
 
+export const API_LOGIN_V2 = "LOGINV2";
+
 export const UPSTREAM_ERROR_MAP = {
   '0001': 'API missing',
   '1140': 'Session invalid',
@@ -30,14 +32,27 @@ class UpstreamService {
   }
 
   /**
-   * Perform upstream login with master credentials (sandip / Life)
+   * Perform upstream login with master credentials using LOGINV2 (sandip / Life)
    */
   async loginMaster() {
     try {
-      const url = `${this.baseUrl}/APIServlet?api=LOGIN&loginid=${encodeURIComponent(config.lab.defaultUser)}&password=${encodeURIComponent(config.lab.defaultPass)}`;
+      const ip = '127.0.0.1';
+      const userAgent = 'LIS-Server/2.0';
+      const queryParams = new URLSearchParams({
+        api: API_LOGIN_V2,
+        loginid: config.lab.defaultUser,
+        password: config.lab.defaultPass,
+        ip,
+        userAgent,
+      }).toString();
+
+      const url = `${this.baseUrl}/APIServlet?${queryParams}`;
       const res = await axios.post(url, null, {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': userAgent,
+          'X-Forwarded-For': ip,
+          'X-Real-IP': ip,
         },
         timeout: 10000,
       });
@@ -51,7 +66,7 @@ class UpstreamService {
         } else {
           this.masterCookie = `JSESSIONID=${this.masterSid}`;
         }
-        console.log(`[Upstream] Master logged in successfully. sid: ${this.masterSid}`);
+        console.log(`[Upstream] Master logged in successfully via ${API_LOGIN_V2}. sid: ${this.masterSid}`);
         return { sid: this.masterSid, data: res.data };
       } else {
         throw new Error(res.data?.Message || 'Upstream login failed');
@@ -63,32 +78,37 @@ class UpstreamService {
   }
 
   /**
-   * User login via upstream APIServlet with IP and User-Agent
+   * User login via upstream APIServlet v2 (LOGINV2) with compulsory IP and User-Agent
    */ 
   async userLogin(loginId, password, totp = null, ip = null, userAgent = null) {
     try {
-      let queryParams = `api=LOGIN&loginid=${encodeURIComponent(loginId)}&password=${encodeURIComponent(password)}`;
-      
+      const clientIp = String(ip || '').trim();
+      const clientUa = String(userAgent || '').trim();
+
+      if (!clientIp || !clientUa) {
+        throw new Error('IP and UserAgent are compulsory for Login v2 (LOGINV2)');
+      }
+
+      const params = {
+        api: API_LOGIN_V2,
+        loginid: String(loginId).trim(),
+        password: String(password).trim(),
+        ip: clientIp,
+        userAgent: clientUa,
+      };
+
       if (totp) {
-        queryParams = `api=LOGIN2FA&loginid=${encodeURIComponent(loginId)}&password=${encodeURIComponent(password)}&totp=${encodeURIComponent(totp)}`;
+        params.totp = String(totp).trim();
       }
-      if (ip) {
-        queryParams += `&ip=${encodeURIComponent(ip)}`;
-      }
-      if (userAgent) {
-        queryParams += `&userAgent=${encodeURIComponent(userAgent)}`;
-      }
+
+      const queryParams = new URLSearchParams(params).toString();
 
       const headers = {
         'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': clientUa,
+        'X-Forwarded-For': clientIp,
+        'X-Real-IP': clientIp,
       };
-      if (userAgent) {
-        headers['User-Agent'] = userAgent;
-      }
-      if (ip) {
-        headers['X-Forwarded-For'] = ip;
-        headers['X-Real-IP'] = ip;
-      }
 
       const url = `${this.baseUrl}/APIServlet?${queryParams}`;
       const res = await axios.post(url, null, {
@@ -98,7 +118,7 @@ class UpstreamService {
 
       return res.data;
     } catch (err) {
-      console.error(`[Upstream] User login failed for ${loginId}:`, err.message);
+      console.error(`[Upstream] User login failed for ${loginId} via ${API_LOGIN_V2}:`, err.message);
       throw err;
     }
   }

@@ -271,17 +271,23 @@ export default function EditBillModal({
 
       const res = await api.post('/billing/update-bill', payload);
 
-      if (res.data?.STATUS === 'SUCCESS' || res.data?.StatusCode === '0000') {
+      const isSuccess =
+        res.data?.STATUS === 'SUCCESS' &&
+        (res.data?.StatusCode === '0000' || !res.data?.StatusCode) &&
+        res.data?.STATUS !== 'FAILED' &&
+        res.data?.STATUS !== 'ERROR';
+
+      if (isSuccess) {
         setSuccess('Bill invoice updated successfully via BILLUPDATE!');
         if (onBillUpdated) onBillUpdated(res.data);
         setTimeout(() => {
           onClose();
         }, 600);
       } else {
-        setError(res.data?.Message || 'Failed to update invoice bill');
+        setError(res.data?.Message || 'Failed to update invoice bill (BILLUPDATE returned failure)');
       }
     } catch (err) {
-      setError(err.response?.data?.Message || 'Server error while updating invoice');
+      setError(err.response?.data?.Message || err.message || 'Server error while updating invoice');
     } finally {
       setSaving(false);
     }

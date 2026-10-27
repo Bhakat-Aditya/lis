@@ -415,7 +415,11 @@ export const syncPatientBillFromReportRate = async (cleanPatientId, reportId, te
         billParams[`amt${n}`] = String(it.amount !== undefined ? it.amount : 0);
       });
 
-      await upstreamService.post('BILLUPDATE', billParams, null, sid);
+      const billRes = await upstreamService.post('BILLUPDATE', billParams, null, sid);
+      if (billRes && (billRes.STATUS === 'FAILED' || billRes.STATUS === 'ERROR' || (billRes.StatusCode && String(billRes.StatusCode).trim() !== '0000'))) {
+        console.warn('[SyncBill] Upstream BILLUPDATE returned failed response:', billRes.Message || billRes.StatusCode);
+        return;
+      }
 
       upstreamService.clearBillingCache(cleanPatientId);
       upstreamService.clearBillingCache(altPid);

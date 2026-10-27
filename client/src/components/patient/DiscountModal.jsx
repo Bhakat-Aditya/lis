@@ -42,6 +42,14 @@ export default function DiscountModal({ isOpen, onClose, patient, totalAmount, o
         reason,
       });
 
+      if (
+        res.data?.STATUS === 'FAILED' ||
+        res.data?.STATUS === 'ERROR' ||
+        (res.data?.StatusCode && res.data?.StatusCode !== '0000')
+      ) {
+        throw new Error(res.data?.Message || 'Failed to apply discount via BILLUPDATE');
+      }
+
       if (onDiscountApplied) {
         onDiscountApplied({
           type: discountType,
@@ -54,7 +62,7 @@ export default function DiscountModal({ isOpen, onClose, patient, totalAmount, o
       onClose();
     } catch (err) {
       console.error('Failed to apply discount:', err);
-      setErrorMsg(err.response?.data?.Message || 'Failed to apply discount on server');
+      setErrorMsg(err.response?.data?.Message || err.message || 'Failed to apply discount on server');
     } finally {
       setSubmitting(false);
     }

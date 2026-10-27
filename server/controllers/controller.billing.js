@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { upstreamService } from '../services/service.upstream.js';
+import { upstreamService, UPSTREAM_ERROR_MAP } from '../services/service.upstream.js';
 import { invalidateReportCache } from './controller.report.js';
 import { invalidatePatientListCache } from './controller.patient.js';
 
@@ -51,6 +51,41 @@ function numberToWordsINR(amount) {
   return `${result.trim()} Rupees Only`;
 }
 
+/**
+ * Normalizes payment modes into official LIS accounting categories:
+ * CASH, OFFLINE_UPI, CARD, ONLINE_UPI, OTHERS
+ */
+export const normalizePaymentMode = (rawMode) => {
+  const m = String(rawMode || '').trim().toUpperCase();
+  if (m === 'CARD' || m.includes('CARD') || m.includes('POS')) return 'CARD';
+  if (m === 'ONLINE_UPI' || (m.includes('ONLINE') && m.includes('UPI'))) return 'ONLINE_UPI';
+  if (m === 'OFFLINE_UPI' || m === 'OFFLINE UPI' || m === 'OFFLINE-UPI') return 'OFFLINE_UPI';
+  if (m.includes('UPI')) return 'OFFLINE_UPI';
+  if (m === 'OTHERS' || m === 'OTHER' || m.includes('OTHER')) return 'OTHERS';
+  if (m === 'CASH') return 'CASH';
+  return 'CASH';
+};
+
+/**
+ * Accurately determines if an upstream response succeeded
+ */
+export const isUpstreamSuccess = (res) => {
+  if (!res || typeof res !== 'object') return false;
+  const statusUpper = String(res.STATUS || res.status || '').trim().toUpperCase();
+  if (statusUpper === 'FAILED' || statusUpper === 'ERROR') return false;
+  if (res.StatusCode && String(res.StatusCode).trim() !== '0000') return false;
+  if (statusUpper === 'SUCCESS' || String(res.StatusCode).trim() === '0000') return true;
+
+  if (res.payLoadJSON && typeof res.payLoadJSON === 'object') {
+    const pStatus = String(res.payLoadJSON.STATUS || res.payLoadJSON.status || '').trim().toUpperCase();
+    if (pStatus === 'FAILED' || pStatus === 'ERROR') return false;
+    if (res.payLoadJSON.StatusCode && String(res.payLoadJSON.StatusCode).trim() !== '0000') return false;
+    if (pStatus === 'SUCCESS' || String(res.payLoadJSON.StatusCode).trim() === '0000') return true;
+  }
+
+  return false;
+};
+
 export const generateBill = async (req, res, next) => {
   try {
     const { patientId, amount, paymentMode = 'CASH', date, info } = req.body;
@@ -81,7 +116,7 @@ export const generateBill = async (req, res, next) => {
     const m = String(today.getMonth() + 1).padStart(2, '0');
     const y = today.getFullYear();
     const formattedDate = date || `${d}/${m}/${y}`;
-    const mode = (paymentMode || '').toUpperCase().includes('UPI') ? 'OFFLINE_UPI' : 'CASH';
+    const mode = normalizePaymentMode(paymentMode);
 
     // 1. Post real payment using BILLPAYMENTUPDATE or fallback to BillingServlet
     let upstreamData = null;
@@ -113,6 +148,20 @@ export const generateBill = async (req, res, next) => {
           },
           req.user?.upstreamSid
         );
+      }
+
+      if (upstreamData && !isUpstreamSuccess(upstreamData)) {
+        const errMsg =
+          upstreamData?.Message ||
+          upstreamData?.error ||
+          (upstreamData?.StatusCode && UPSTREAM_ERROR_MAP[upstreamData.StatusCode]) ||
+          'Failed to record payment on upstream server';
+        return res.status(400).json({
+          STATUS: 'FAILED',
+          StatusCode: upstreamData?.StatusCode || '1001',
+          Message: errMsg,
+          data: upstreamData,
+        });
       }
     }
 
@@ -275,7 +324,22 @@ export const applyDiscount = async (req, res, next) => {
 
     const updateRes = await upstreamService.post('BILLUPDATE', params, null, req.user?.upstreamSid);
 
-    // Refresh summary
+    if (!isUpstreamSuccess(updateRes)) {
+      const errMsg =
+        updateRes?.Message ||
+        updateRes?.error ||
+        (updateRes?.StatusCode && UPSTREAM_ERROR_MAP[updateRes.StatusCode]) ||
+        'BILLUPDATE failed while applying discount';
+
+      return res.status(400).json({
+        STATUS: 'FAILED',
+        StatusCode: updateRes?.StatusCode || '1001',
+        Message: errMsg,
+        data: updateRes,
+      });
+    }
+
+    // Refresh summary only on success
     const freshSummary = await upstreamService.getBillingSummary(cleanPatientId, req.user?.upstreamSid);
     invalidateReportCache(cleanPatientId);
     invalidatePatientListCache();
@@ -386,7 +450,22 @@ export const updateBill = async (req, res, next) => {
 
     const updateRes = await upstreamService.post('BILLUPDATE', params, null, req.user?.upstreamSid);
 
-    // Two-way synchronization: update corresponding report rates in upstream
+    if (!isUpstreamSuccess(updateRes)) {
+      const errMsg =
+        updateRes?.Message ||
+        updateRes?.error ||
+        (updateRes?.StatusCode && UPSTREAM_ERROR_MAP[updateRes.StatusCode]) ||
+        'BILLUPDATE failed on upstream server';
+
+      return res.status(400).json({
+        STATUS: 'FAILED',
+        StatusCode: updateRes?.StatusCode || '1001',
+        Message: errMsg,
+        data: updateRes,
+      });
+    }
+
+    // Two-way synchronization: update corresponding report rates in upstream ONLY on successful BILLUPDATE
     try {
       const pRep = await upstreamService.get('GETPATIENTREPORT', { patientId: cleanPatientId }, req.user?.upstreamSid);
       const repList = pRep?.payLoadJSON?.reports || [];
@@ -426,8 +505,8 @@ export const updateBill = async (req, res, next) => {
     }
 
     return res.json({
-      STATUS: updateRes?.STATUS || 'SUCCESS',
-      StatusCode: updateRes?.StatusCode || '0000',
+      STATUS: 'SUCCESS',
+      StatusCode: '0000',
       Message: updateRes?.Message || 'Bill updated successfully',
       data: updateRes,
       summary: freshSummary,
@@ -608,7 +687,7 @@ export const getInvoice = async (req, res, next) => {
         paidAmount: deposited,
         totalDue: due,
         dueAmount: due,
-        paymentMode: summary?.paymentLines?.[0]?.mode || 'Cash',
+        paymentMode: summary?.paymentLines?.[0]?.mode ? normalizePaymentMode(summary.paymentLines[0].mode) : 'CASH',
         amountInWords: numberToWordsINR(netAmount),
         payments: summary?.paymentLines || [],
         billUrl: summary?.billUrl || '',
