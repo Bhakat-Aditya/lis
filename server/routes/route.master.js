@@ -6,6 +6,7 @@ import {
   forceRefresh,
   updateDepartment,
   updateUnit,
+  updateMethod,
   updateTest,
   updateProfile,
   updatePackage,
@@ -29,14 +30,15 @@ router.get('/list/:key', getMasterList);
 router.post('/refresh', forceRefresh);
 
 // Update endpoints (Protected to Admin/Super or authorized staff)
-router.post('/department', requireRoles([ROLES.SUPER]), updateDepartment);
-router.post('/unit', requireRoles([ROLES.SUPER]), updateUnit);
-router.post('/test', requireRoles([ROLES.SUPER]), updateTest);
-router.post('/profile', requireRoles([ROLES.SUPER]), updateProfile);
-router.post('/package', requireRoles([ROLES.SUPER]), updatePackage);
+router.post('/department', requireRoles([ROLES.SUPER, ROLES.RECEPTIONIST]), updateDepartment);
+router.post('/unit', requireRoles([ROLES.SUPER, ROLES.RECEPTIONIST]), updateUnit);
+router.post('/method', requireRoles([ROLES.SUPER, ROLES.RECEPTIONIST, ROLES.TECHNICIAN]), updateMethod);
+router.post('/test', requireRoles([ROLES.SUPER, ROLES.RECEPTIONIST, ROLES.TECHNICIAN]), updateTest);
+router.post('/profile', requireRoles([ROLES.SUPER, ROLES.RECEPTIONIST, ROLES.TECHNICIAN]), updateProfile);
+router.post('/package', requireRoles([ROLES.SUPER, ROLES.RECEPTIONIST]), updatePackage);
 router.post('/doctor', requireRoles([ROLES.SUPER, ROLES.RECEPTIONIST]), updateDoctor);
 router.post('/reference', requireRoles([ROLES.SUPER, ROLES.RECEPTIONIST]), updateReference);
-router.post('/branch', requireRoles([ROLES.SUPER]), updateBranch);
+router.post('/branch', requireRoles([ROLES.SUPER, ROLES.RECEPTIONIST]), updateBranch);
 router.post('/user', requireRoles([ROLES.SUPER]), updateUser);
 router.post('/interpretation', requireRoles([ROLES.SUPER, ROLES.DOCTOR]), updateInterpretation);
 

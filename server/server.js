@@ -12,6 +12,7 @@ import patientRoutes from './routes/route.patient.js';
 import reportRoutes from './routes/route.report.js';
 import billingRoutes from './routes/route.billing.js';
 import masterRoutes from './routes/route.master.js';
+import analyticsRoutes from './routes/route.analytics.js';
 
 const app = express();
 
@@ -51,6 +52,7 @@ app.use('/api/patients', patientRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/master', masterRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // Global Error Handler
 app.use(errorHandler);

@@ -56,6 +56,17 @@ export const MasterProvider = ({ children }) => {
     }
   };
 
+  const updateMasterItem = async (type, payload) => {
+    try {
+      const res = await api.post(`/master/${type}`, payload);
+      await fetchAllMaster(true);
+      return { success: true, message: res.data?.Message || 'Master catalog updated successfully' };
+    } catch (err) {
+      const errorMsg = err.response?.data?.Message || err.message || 'Failed to update master catalog item';
+      return { success: false, error: errorMsg };
+    }
+  };
+
   return (
     <MasterContext.Provider
       value={{
@@ -74,6 +85,7 @@ export const MasterProvider = ({ children }) => {
         cacheStats,
         loadingMaster,
         refreshCache,
+        updateMasterItem,
         fetchAllMaster,
       }}
     >

@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useMaster } from '../../context/context.master.jsx';
+import MasterEditModal from './MasterEditModal.jsx';
 import {
   Database,
   RefreshCw,
@@ -14,6 +15,8 @@ import {
   FileSpreadsheet,
   MapPin,
   Ruler,
+  Edit3,
+  Plus,
 } from 'lucide-react';
 
 export default function MasterDataManager() {
@@ -37,6 +40,20 @@ export default function MasterDataManager() {
   const [searchTerm, setSearchTerm] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [msg, setMsg] = useState('');
+
+  // Edit / Add modal state
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState(null);
+
+  const handleEditItem = (item) => {
+    setSelectedItem(item);
+    setEditModalOpen(true);
+  };
+
+  const handleAddItem = () => {
+    setSelectedItem(null);
+    setEditModalOpen(true);
+  };
 
   // Lookup maps to resolve IDs to human-readable names
   const deptMap = useMemo(() => {
@@ -184,35 +201,49 @@ export default function MasterDataManager() {
               >
                 <t.icon className={`w-3.5 h-3.5 ${activeTab === t.id ? 'text-indigo-600' : 'text-slate-400'}`} />
                 <span>{t.label}</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
-                  activeTab === t.id ? 'bg-indigo-50 text-indigo-700 font-bold' : 'bg-slate-200/70 text-slate-600'
-                }`}>
+                <span
+                  className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
+                    activeTab === t.id ? 'bg-indigo-50 text-indigo-700 font-bold' : 'bg-slate-200/70 text-slate-600'
+                  }`}
+                >
                   {t.count}
                 </span>
               </button>
             ))}
           </div>
 
-          {/* Search box */}
-          <div className="relative w-full sm:w-64 shrink-0">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder={`Search ${activeTab}...`}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-8 pr-7 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            />
-            {searchTerm && (
-              <button
-                type="button"
-                onClick={() => setSearchTerm('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
-                title="Clear search"
-              >
-                &times;
-              </button>
-            )}
+          {/* Search box & Add New Button */}
+          <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+            <div className="relative w-full sm:w-60 shrink-0">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder={`Search ${activeTab}...`}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-8 pr-7 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
+                  title="Clear search"
+                >
+                  &times;
+                </button>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={handleAddItem}
+              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs py-1.5 px-3 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap shrink-0"
+              title={`Add new ${activeTab.replace(/s$/, '')} to Master Catalog`}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add {tabs.find((t) => t.id === activeTab)?.label.replace(/s$/, '') || 'Item'}</span>
+            </button>
           </div>
         </div>
 
@@ -232,6 +263,7 @@ export default function MasterDataManager() {
                   <th className="py-2.5 px-4">Ref Range</th>
                   <th className="py-2.5 px-4">Rate (₹)</th>
                   <th className="py-2.5 px-4">Status</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -268,6 +300,16 @@ export default function MasterDataManager() {
                             {t.Status || 'Active'}
                           </span>
                         </td>
+                        <td className="py-2 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleEditItem(t)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
@@ -286,6 +328,7 @@ export default function MasterDataManager() {
                   <th className="py-2.5 px-4 min-w-[260px]">Included Tests</th>
                   <th className="py-2.5 px-4">Rate (₹)</th>
                   <th className="py-2.5 px-4">Status</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -337,6 +380,16 @@ export default function MasterDataManager() {
                             {p.Status || 'Active'}
                           </span>
                         </td>
+                        <td className="py-2 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleEditItem(p)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
@@ -356,12 +409,13 @@ export default function MasterDataManager() {
                   <th className="py-2.5 px-4 min-w-[180px]">Included Profiles</th>
                   <th className="py-2.5 px-4">Rate (₹)</th>
                   <th className="py-2.5 px-4">Status</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {packages.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-6 text-center text-slate-400">
+                    <td colSpan={8} className="py-6 text-center text-slate-400">
                       No packages found in master catalog.
                     </td>
                   </tr>
@@ -437,6 +491,16 @@ export default function MasterDataManager() {
                               {pkg.Status || 'Active'}
                             </span>
                           </td>
+                          <td className="py-2 px-4 text-right">
+                            <button
+                              type="button"
+                              onClick={() => handleEditItem(pkg)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                              <span>Edit</span>
+                            </button>
+                          </td>
                         </tr>
                       );
                     })
@@ -455,6 +519,7 @@ export default function MasterDataManager() {
                   <th className="py-2.5 px-4">Degrees / Specialization</th>
                   <th className="py-2.5 px-4">Contact</th>
                   <th className="py-2.5 px-4">Status</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -479,6 +544,16 @@ export default function MasterDataManager() {
                           {d.Status || 'Active'}
                         </span>
                       </td>
+                      <td className="py-2 px-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() => handleEditItem(d)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                        >
+                          <Edit3 className="w-3 h-3" />
+                          <span>Edit</span>
+                        </button>
+                      </td>
                     </tr>
                   ))}
               </tbody>
@@ -494,6 +569,7 @@ export default function MasterDataManager() {
                   <th className="py-2.5 px-4">Department Name</th>
                   <th className="py-2.5 px-4">Short Name</th>
                   <th className="py-2.5 px-4">Status</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -516,6 +592,16 @@ export default function MasterDataManager() {
                           {dept.Status || 'Active'}
                         </span>
                       </td>
+                      <td className="py-2 px-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() => handleEditItem(dept)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                        >
+                          <Edit3 className="w-3 h-3" />
+                          <span>Edit</span>
+                        </button>
+                      </td>
                     </tr>
                   ))}
               </tbody>
@@ -530,12 +616,13 @@ export default function MasterDataManager() {
                   <th className="py-2.5 px-4 w-24">Unit ID</th>
                   <th className="py-2.5 px-4">Unit Name / Symbol</th>
                   <th className="py-2.5 px-4">Status</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {units.length === 0 ? (
                   <tr>
-                    <td colSpan={3} className="py-6 text-center text-slate-400">
+                    <td colSpan={4} className="py-6 text-center text-slate-400">
                       No measurement units found in catalog.
                     </td>
                   </tr>
@@ -557,6 +644,16 @@ export default function MasterDataManager() {
                             {u.Status || 'Active'}
                           </span>
                         </td>
+                        <td className="py-2 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleEditItem(u)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
                       </tr>
                     ))
                 )}
@@ -574,12 +671,13 @@ export default function MasterDataManager() {
                   <th className="py-2.5 px-4">Location / Address</th>
                   <th className="py-2.5 px-4">Contact Phone</th>
                   <th className="py-2.5 px-4">Status</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {branches.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-6 text-center text-slate-400">
+                    <td colSpan={6} className="py-6 text-center text-slate-400">
                       No branches found in catalog.
                     </td>
                   </tr>
@@ -607,6 +705,16 @@ export default function MasterDataManager() {
                             {b.status || 'Active'}
                           </span>
                         </td>
+                        <td className="py-2 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleEditItem(b)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
                       </tr>
                     ))
                 )}
@@ -626,6 +734,7 @@ export default function MasterDataManager() {
                   <th className="py-2.5 px-4">Mobile</th>
                   <th className="py-2.5 px-4">2FA Status</th>
                   <th className="py-2.5 px-4">Status</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -671,6 +780,16 @@ export default function MasterDataManager() {
                             {u.status || 'Active'}
                           </span>
                         </td>
+                        <td className="py-2 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleEditItem(u)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
@@ -679,6 +798,18 @@ export default function MasterDataManager() {
           )}
         </div>
       </div>
+
+      {/* Edit & Add Master Modal */}
+      <MasterEditModal
+        isOpen={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        category={activeTab}
+        item={selectedItem}
+        onSaved={() => {
+          setMsg(`Successfully updated ${activeTab} in master catalog!`);
+          setTimeout(() => setMsg(''), 4000);
+        }}
+      />
     </div>
   );
 }
