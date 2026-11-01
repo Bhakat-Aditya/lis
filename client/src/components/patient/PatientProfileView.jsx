@@ -27,12 +27,18 @@ import {
   Edit,
   Send,
   MessageSquare,
+  Activity,
+  UserCheck,
+  Stethoscope,
+  Building2,
 } from 'lucide-react';
 import { formatDisplayDate } from '../../utils/dateUtils.js';
 import { useMaster } from '../../context/context.master.jsx';
+import { useAuth } from '../../context/context.auth.jsx';
 import { groupInvestigationsIntoLots } from '../../utils/labTestUtils.js';
 import PatientEmrHistory from './PatientEmrHistory.jsx';
 import ReportActivityLog from './ReportActivityLog.jsx';
+import PatientJourneyTimeline from './PatientJourneyTimeline.jsx';
 
 const formatGender = (raw) => {
   const s = String(raw || '').trim().toLowerCase();
@@ -52,13 +58,15 @@ export default function PatientProfileView({
   onReceiveSample,
   onReleaseReport,
   onSendWhatsApp,
+  onOpenWhatsAppModal,
   onAddDeposit,
   onAddDiscount,
   onOpenSettings,
   onEditPatient,
   onEditBill,
 }) {
-  const [activeTab, setActiveTab] = useState('tests'); // 'tests' or 'deposits'
+  const [activeTab, setActiveTab] = useState('tests'); // 'tests' | 'timeline' | 'deposits'
+  const [showWhatsAppDropdown, setShowWhatsAppDropdown] = useState(false);
 
   if (!patient) {
     return (
@@ -69,6 +77,7 @@ export default function PatientProfileView({
   }
 
   const pid = patient.patientId || patient.slNo || '';
+  const { canViewPatientLogs, canViewPatientEmr } = useAuth();
   const { tests: catalogTests = [], profiles: catalogProfiles = [], packages: catalogPackages = [] } = useMaster();
   const [expandedLots, setExpandedLots] = useState({});
 
@@ -172,15 +181,19 @@ export default function PatientProfileView({
               <Phone className="w-4 h-4 text-sky-600 shrink-0" />
               <span className="font-semibold text-slate-500 w-28 shrink-0">Mobile:</span>
               <span className="font-semibold text-slate-800">{patient.mobile || '-'}</span>
-              {patient.mobile && onSendWhatsApp && (
+              {patient.mobile && (onOpenWhatsAppModal || onSendWhatsApp) && (
                 <button
                   type="button"
-                  onClick={onSendWhatsApp}
+                  onClick={() =>
+                    onOpenWhatsAppModal
+                      ? onOpenWhatsAppModal('patientReportMsg')
+                      : onSendWhatsApp && onSendWhatsApp('patientReportMsg')
+                  }
                   className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-md transition-colors cursor-pointer shadow-2xs"
-                  title="Resend diagnostic report via WhatsApp"
+                  title="Open WhatsApp Notification Hub (4 message channels)"
                 >
                   <MessageSquare className="w-3 h-3 text-emerald-600" />
-                  <span>WhatsApp</span>
+                  <span>WhatsApp Hub</span>
                 </button>
               )}
             </div>
@@ -246,7 +259,7 @@ export default function PatientProfileView({
               />
             </div>
 
-            <div className="pt-1">
+            <div className="pt-1 flex items-center justify-between">
               {isReady ? (
                 <span className="inline-flex items-center gap-1 px-3 py-1 rounded bg-[#10b981] text-white text-[11px] font-bold">
                   <CheckCircle className="w-3.5 h-3.5" />
@@ -258,6 +271,14 @@ export default function PatientProfileView({
                   <span>Registered</span>
                 </span>
               )}
+              <button
+                type="button"
+                onClick={() => setActiveTab('timeline')}
+                className="text-[11px] text-blue-600 hover:text-blue-800 font-bold hover:underline cursor-pointer inline-flex items-center gap-1"
+                title="View 10-Stage Flipkart-style diagnostic journey"
+              >
+                <span>Track 10-Stage Journey →</span>
+              </button>
             </div>
           </div>
 
@@ -362,14 +383,216 @@ export default function PatientProfileView({
               <span className="truncate">Release Report</span>
             </button>
 
-            {/* 7. WhatsApp Resend (WhatsApp Emerald) */}
+            {/* 7. WhatsApp Resend with Message Type Dropdown (Task 11) */}
+            <div className="relative">
+              <div className="flex rounded-xl shadow-xs overflow-hidden h-full">
+                <button
+                  type="button"
+                  onClick={() =>
+                    onOpenWhatsAppModal
+                      ? onOpenWhatsAppModal('patientReportMsg')
+                      : onSendWhatsApp && onSendWhatsApp('patientReportMsg')
+                  }
+                  className="flex-1 flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs py-2 px-2 transition-all cursor-pointer truncate"
+                  title="Send report directly to patient via WhatsApp (sendType=patientReportMsg)"
+                >
+                  <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">WhatsApp</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowWhatsAppDropdown((prev) => !prev)}
+                  className="px-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center border-l border-emerald-500/50 cursor-pointer transition-colors"
+                  title="Select WhatsApp Message Type"
+                >
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${showWhatsAppDropdown ? 'rotate-180' : ''}`} />
+                </button>
+              </div>
+
+              {/* Dropdown Menu for all 4 types */}
+              {showWhatsAppDropdown && (
+                <div
+                  className="absolute right-0 top-full mt-1.5 w-64 bg-white border border-slate-200 rounded-2xl shadow-xl z-40 p-2 space-y-1 animate-in fade-in zoom-in-95 duration-150 text-xs"
+                  onClick={() => setShowWhatsAppDropdown(false)}
+                >
+                  <div className="px-2 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 flex items-center justify-between">
+                    <span>Select Message Type</span>
+                    <span className="font-mono text-indigo-600">sendType</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onSendWhatsApp
+                        ? onSendWhatsApp('onboardingMsg')
+                        : onOpenWhatsAppModal && onOpenWhatsAppModal('onboardingMsg')
+                    }
+                    className="w-full text-left px-2.5 py-2 hover:bg-indigo-50 text-slate-700 hover:text-indigo-800 rounded-xl flex items-center gap-2.5 font-medium cursor-pointer transition-colors"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-indigo-50 border border-indigo-200 flex items-center justify-center shrink-0">
+                      <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
+                    </div>
+                    <div>
+                      <span className="font-bold block text-xs text-slate-900">1. Onboarding Message</span>
+                      <span className="text-[10px] text-slate-400 font-mono">sendType=onboardingMsg</span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onSendWhatsApp
+                        ? onSendWhatsApp('patientReportMsg')
+                        : onOpenWhatsAppModal && onOpenWhatsAppModal('patientReportMsg')
+                    }
+                    className="w-full text-left px-2.5 py-2 hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 rounded-xl flex items-center gap-2.5 font-medium cursor-pointer transition-colors"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center shrink-0">
+                      <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                    </div>
+                    <div>
+                      <span className="font-bold block text-xs text-slate-900">2. Report to Patient</span>
+                      <span className="text-[10px] text-slate-400 font-mono">sendType=patientReportMsg</span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onSendWhatsApp
+                        ? onSendWhatsApp('doctorReportMsg')
+                        : onOpenWhatsAppModal && onOpenWhatsAppModal('doctorReportMsg')
+                    }
+                    className="w-full text-left px-2.5 py-2 hover:bg-blue-50 text-slate-700 hover:text-blue-800 rounded-xl flex items-center gap-2.5 font-medium cursor-pointer transition-colors"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center shrink-0">
+                      <Stethoscope className="w-3.5 h-3.5 text-blue-600" />
+                    </div>
+                    <div>
+                      <span className="font-bold block text-xs text-slate-900">3. Report to Doctor</span>
+                      <span className="text-[10px] text-slate-400 font-mono">sendType=doctorReportMsg</span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onSendWhatsApp
+                        ? onSendWhatsApp('agentReportMsg')
+                        : onOpenWhatsAppModal && onOpenWhatsAppModal('agentReportMsg')
+                    }
+                    className="w-full text-left px-2.5 py-2 hover:bg-purple-50 text-slate-700 hover:text-purple-800 rounded-xl flex items-center gap-2.5 font-medium cursor-pointer transition-colors"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-purple-50 border border-purple-200 flex items-center justify-center shrink-0">
+                      <Building2 className="w-3.5 h-3.5 text-purple-600" />
+                    </div>
+                    <div>
+                      <span className="font-bold block text-xs text-slate-900">4. Report to Agent</span>
+                      <span className="text-[10px] text-slate-400 font-mono">sendType=agentReportMsg</span>
+                    </div>
+                  </button>
+
+                  <div className="pt-1.5 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => onOpenWhatsAppModal && onOpenWhatsAppModal('patientReportMsg')}
+                      className="w-full text-center py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-50 rounded-xl cursor-pointer transition-colors"
+                    >
+                      Open WhatsApp Notification Hub...
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Dedicated WhatsApp Report Dispatch Section (Task 11: 4 Channels) */}
+        <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-2.5">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center">
+                <MessageSquare className="w-3.5 h-3.5" />
+              </div>
+              <h4 className="text-xs font-bold text-slate-800">
+                WhatsApp Dispatch Center
+              </h4>
+              <span className="text-[10px] font-mono bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded-full border border-emerald-200">
+                4 Supported Channels
+              </span>
+            </div>
+
+            {onOpenWhatsAppModal && (
+              <button
+                type="button"
+                onClick={() => onOpenWhatsAppModal('patientReportMsg')}
+                className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <span>Dispatch Hub & Preview →</span>
+              </button>
+            )}
+          </div>
+
+          {/* 4 Separate Buttons */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {/* Button 1: Onboarding Message */}
             <button
-              onClick={onSendWhatsApp}
-              className="flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer"
-              title="Send report directly to patient via WhatsApp (SENDWHATSAPP)"
+              type="button"
+              onClick={() =>
+                onSendWhatsApp
+                  ? onSendWhatsApp('onboardingMsg')
+                  : onOpenWhatsAppModal && onOpenWhatsAppModal('onboardingMsg')
+              }
+              className="flex items-center justify-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 font-bold text-xs py-2 px-2 rounded-xl transition-all active:scale-95 cursor-pointer shadow-2xs"
+              title="Dispatches welcome greetings, patient ID & barcode (sendType=onboardingMsg)"
             >
-              <MessageSquare className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">WhatsApp Resend</span>
+              <UserCheck className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+              <span className="truncate">1. Onboarding Msg</span>
+            </button>
+
+            {/* Button 2: Report to Patient */}
+            <button
+              type="button"
+              onClick={() =>
+                onSendWhatsApp
+                  ? onSendWhatsApp('patientReportMsg')
+                  : onOpenWhatsAppModal && onOpenWhatsAppModal('patientReportMsg')
+              }
+              className="flex items-center justify-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/80 font-bold text-xs py-2 px-2 rounded-xl transition-all active:scale-95 cursor-pointer shadow-2xs"
+              title="Dispatches official diagnostic PDF report link to patient (sendType=patientReportMsg)"
+            >
+              <FileText className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span className="truncate">2. Report to Patient</span>
+            </button>
+
+            {/* Button 3: Report to Doctor */}
+            <button
+              type="button"
+              onClick={() =>
+                onSendWhatsApp
+                  ? onSendWhatsApp('doctorReportMsg')
+                  : onOpenWhatsAppModal && onOpenWhatsAppModal('doctorReportMsg')
+              }
+              className="flex items-center justify-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200/80 font-bold text-xs py-2 px-2 rounded-xl transition-all active:scale-95 cursor-pointer shadow-2xs"
+              title="Dispatches diagnostic findings & report to referring doctor (sendType=doctorReportMsg)"
+            >
+              <Stethoscope className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+              <span className="truncate">3. Report to Doctor</span>
+            </button>
+
+            {/* Button 4: Report to Referring Agent */}
+            <button
+              type="button"
+              onClick={() =>
+                onSendWhatsApp
+                  ? onSendWhatsApp('agentReportMsg')
+                  : onOpenWhatsAppModal && onOpenWhatsAppModal('agentReportMsg')
+              }
+              className="flex items-center justify-center gap-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200/80 font-bold text-xs py-2 px-2 rounded-xl transition-all active:scale-95 cursor-pointer shadow-2xs"
+              title="Dispatches report copy & collection update to referring agent (sendType=agentReportMsg)"
+            >
+              <Building2 className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+              <span className="truncate">4. Report to Agent</span>
             </button>
           </div>
         </div>
@@ -462,6 +685,18 @@ export default function PatientProfileView({
               >
                 <FileText className="w-3.5 h-3.5" />
                 <span>Tests ({reports.length})</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('timeline')}
+                className={`py-2 px-3 border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  activeTab === 'timeline'
+                    ? 'border-indigo-600 text-indigo-700 bg-white font-bold'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <Activity className="w-3.5 h-3.5 text-blue-600" />
+                <span>10-Stage Workflow Journey</span>
               </button>
 
               <button
@@ -704,20 +939,40 @@ export default function PatientProfileView({
               </table>
             </div>
           )}
+
+          {/* Tab 3: 10-Stage Journey Timeline (Flipkart Order Tracking Style) */}
+          {activeTab === 'timeline' && (
+            <div className="p-3 bg-slate-50/50">
+              <PatientJourneyTimeline
+                patient={patient}
+                reports={reports}
+                onReceiveSample={onReceiveSample}
+                onReleaseReport={onReleaseReport}
+                onSendWhatsApp={onSendWhatsApp}
+                onOpenWhatsAppModal={onOpenWhatsAppModal}
+              />
+            </div>
+          )}
         </div>
       </div>
 
-      {/* BOTTOM SECTION: Patient EMR History & Report Activity Log */}
-      <div className="lg:col-span-12 space-y-4 pt-1">
-        <PatientEmrHistory
-          patientId={pid}
-          currentPatient={patient}
-        />
+      {/* BOTTOM SECTION: Patient EMR History & Report Activity Log (Restricted for Branch) */}
+      {(canViewPatientEmr || canViewPatientLogs) && (
+        <div className="lg:col-span-12 space-y-4 pt-1">
+          {canViewPatientEmr && (
+            <PatientEmrHistory
+              patientId={pid}
+              currentPatient={patient}
+            />
+          )}
 
-        <ReportActivityLog
-          patientId={pid}
-        />
-      </div>
+          {canViewPatientLogs && (
+            <ReportActivityLog
+              patientId={pid}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }

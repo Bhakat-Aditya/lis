@@ -613,6 +613,12 @@ export const addMultipleTests = async (req, res, next) => {
         continue;
       }
 
+      // Case 2b: Token marked as Template (TEMPLATE)
+      if (prefix === 'TEMPLATE') {
+        validTokens.push(`TEMPLATE|${val}`);
+        continue;
+      }
+
       // Case 3: Token marked as Test (TEST)
       if (prefix === 'TEST') {
         const matchedTestId = testMap.get(upperVal) || testNameMap.get(lowerVal);

@@ -4,6 +4,8 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import { usePatientContext } from '../context/context.patient.jsx';
 import PatientProfileView from '../components/patient/PatientProfileView.jsx';
+import PatientJourneyTimeline from '../components/patient/PatientJourneyTimeline.jsx';
+import WhatsAppModal from '../components/patient/WhatsAppModal.jsx';
 import TestSelectionView from '../components/patient/TestSelectionView.jsx';
 import ResultsEntry from '../components/results/ResultsEntry.jsx';
 import PrintableInvoice from '../components/billing/PrintableInvoice.jsx';
@@ -65,6 +67,8 @@ export default function PatientDetailPage() {
   const [showBillPreviewModal, setShowBillPreviewModal] = useState(false);
   const [showEditBillModal, setShowEditBillModal] = useState(false);
   const [showEditPatientModal, setShowEditPatientModal] = useState(false);
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+  const [whatsAppDefaultType, setWhatsAppDefaultType] = useState('patientReportMsg');
   const [depositAmount, setDepositAmount] = useState('');
   const [paymentMode, setPaymentMode] = useState('CASH');
   const [notification, setNotification] = useState('');
@@ -379,18 +383,42 @@ export default function PatientDetailPage() {
     });
   };
 
-  const handleSendWhatsApp = () => {
+  const WHATSAPP_TYPE_LABELS = {
+    onboardingMsg: {
+      title: 'Onboarding Message',
+      desc: 'Dispatches registration welcome greetings, Patient ID, Barcode, and booking confirmation.',
+      target: patient?.mobile || 'Patient Mobile',
+    },
+    patientReportMsg: {
+      title: 'Report to Patient',
+      desc: 'Dispatches official diagnostic report PDF download link directly to patient.',
+      target: patient?.mobile || 'Patient Mobile',
+    },
+    doctorReportMsg: {
+      title: 'Report to Doctor',
+      desc: 'Dispatches diagnostic findings and clinical report directly to referring doctor.',
+      target: patient?.referedDr || 'Referring Doctor',
+    },
+    agentReportMsg: {
+      title: 'Report to Referring Agent',
+      desc: 'Dispatches diagnostic report copy and test status to referring agent / center.',
+      target: patient?.center || 'Referring Agent',
+    },
+  };
+
+  const handleSendWhatsApp = (sendType = 'patientReportMsg') => {
     const rawPid = patient?.patientId || id;
     const cleanPid = rawPid
       ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
       : '';
     const phone = patient?.mobile || patient?.phone || '';
+    const meta = WHATSAPP_TYPE_LABELS[sendType] || WHATSAPP_TYPE_LABELS.patientReportMsg;
 
     setConfirmDialog({
       isOpen: true,
-      title: 'Send Report via WhatsApp',
-      message: `Send diagnostic report PDF via WhatsApp to ${patient?.name || 'Patient'}${phone ? ` (${phone})` : ''}?`,
-      description: 'An automated WhatsApp notification and PDF download link will be dispatched to the registered mobile number (SENDWHATSAPP).',
+      title: `Send ${meta.title} via WhatsApp`,
+      message: `Send ${meta.title} via WhatsApp for ${patient?.name || 'Patient'} to ${meta.target}?`,
+      description: `${meta.desc} (API parameter: sendType=${sendType})`,
       confirmText: 'Send WhatsApp',
       cancelText: 'Cancel',
       variant: 'whatsapp',
@@ -399,11 +427,14 @@ export default function PatientDetailPage() {
         setErrorMessage('');
         setNotification('');
         try {
-          const res = await api.post('/reports/send-whatsapp', { patientId: cleanPid || rawPid });
+          const res = await api.post('/reports/send-whatsapp', {
+            patientId: cleanPid || rawPid,
+            sendType,
+          });
           if (res.data?.STATUS === 'FAILED' || res.data?.StatusCode === '1211') {
             throw new Error(res.data?.Message || 'Failed to send report via WhatsApp (1211)');
           }
-          setNotification(res.data?.Message || 'Report sent to WhatsApp successfully!');
+          setNotification(res.data?.Message || `${meta.title} dispatched via WhatsApp successfully!`);
           setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
           await fetchPatientData();
         } catch (err) {
@@ -519,6 +550,16 @@ export default function PatientDetailPage() {
               Overview
             </button>
             <button
+              onClick={() => setSearchParams({ tab: 'journey' })}
+              className={`py-1.5 px-3 rounded transition-all cursor-pointer ${
+                activeTab === 'journey'
+                  ? 'bg-white text-indigo-700 font-bold shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              10-Stage Journey
+            </button>
+            <button
               onClick={() => setSearchParams({ tab: 'tests' })}
               className={`py-1.5 px-3 rounded transition-all cursor-pointer ${
                 activeTab === 'tests'
@@ -613,11 +654,30 @@ export default function PatientDetailPage() {
           onReceiveSample={handleReceiveSample}
           onReleaseReport={handleReleaseReport}
           onSendWhatsApp={handleSendWhatsApp}
+          onOpenWhatsAppModal={(defaultType) => {
+            setWhatsAppDefaultType(defaultType || 'patientReportMsg');
+            setShowWhatsAppModal(true);
+          }}
           onAddDeposit={handleOpenDepositModal}
           onAddDiscount={() => setShowDiscountModal(true)}
           onOpenSettings={() => setShowBarcodeModal(true)}
           onEditPatient={() => setShowEditPatientModal(true)}
           onEditBill={() => setShowEditBillModal(true)}
+        />
+      )}
+
+      {activeTab === 'journey' && (
+        <PatientJourneyTimeline
+          patient={patient}
+          reports={reports}
+          onReceiveSample={handleReceiveSample}
+          onReleaseReport={handleReleaseReport}
+          onSendWhatsApp={handleSendWhatsApp}
+          onOpenWhatsAppModal={(defaultType) => {
+            setWhatsAppDefaultType(defaultType || 'patientReportMsg');
+            setShowWhatsAppModal(true);
+          }}
+          onOpenApproval={() => setShowApproval(true)}
         />
       )}
 
@@ -688,6 +748,19 @@ export default function PatientDetailPage() {
         reports={reports}
         onApproved={() => {
           setNotification('Doctor review and approval status updated successfully!');
+          fetchPatientData();
+        }}
+      />
+
+      {/* WhatsApp Dispatch Hub Modal (Task 11: 4 Message Types) */}
+      <WhatsAppModal
+        isOpen={showWhatsAppModal}
+        onClose={() => setShowWhatsAppModal(false)}
+        patient={patient}
+        defaultType={whatsAppDefaultType}
+        onSuccess={(type, msg) => {
+          setNotification(msg);
+          setShowWhatsAppModal(false);
           fetchPatientData();
         }}
       />

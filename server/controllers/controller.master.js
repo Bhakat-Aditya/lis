@@ -83,7 +83,7 @@ export const forceRefresh = async (req, res, next) => {
       });
     }
 
-    await cacheService.warmAllCaches();
+    await cacheService.warmAllCaches(req.user?.upstreamSid);
     return res.json({
       STATUS: 'SUCCESS',
       StatusCode: '0000',
@@ -414,6 +414,76 @@ export const updateInterpretation = async (req, res, next) => {
     }
     await cacheService.invalidate(CACHE_KEYS.TEMPLATE_LIST);
     return res.json({ STATUS: 'SUCCESS', Message: upstreamRes?.Message || 'Interpretation updated successfully', upstream: upstreamRes });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Update / Add Sample Type (API_ADD_UPDATE_SAMPLE="UPDATESAMPLE")
+ * /APIServlet?api=UPDATESAMPLE&id=1&name=Serum&status=Active
+ */
+export const updateSample = async (req, res, next) => {
+  try {
+    const params = {
+      id: req.body.id ?? req.body['Sample Id'] ?? req.body.sampleId ?? '',
+      name: req.body.name ?? req.body.Name ?? '',
+      status: req.body.status ?? req.body.Status ?? 'Active',
+      ...req.body,
+    };
+    const upstreamRes = await upstreamService.post('UPDATESAMPLE', params, null, req.user?.upstreamSid);
+    if (upstreamRes?.STATUS === 'FAILED' || (upstreamRes?.StatusCode && upstreamRes?.StatusCode !== '0000')) {
+      return res.status(400).json({
+        STATUS: 'FAILED',
+        StatusCode: upstreamRes?.StatusCode || '1000',
+        Message: upstreamRes?.Message || 'Failed to update sample type',
+        upstream: upstreamRes,
+      });
+    }
+    await cacheService.invalidate(CACHE_KEYS.SAMPLE_LIST);
+    return res.json({
+      STATUS: 'SUCCESS',
+      Message: upstreamRes?.Message || 'Sample Updated',
+      upstream: upstreamRes,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Update Template Metadata (API_UPDATE_TEMPLATE="UPDATETEMPLATE")
+ * /APIServlet?api=UPDATETEMPLATE&reportId=P14R3&status=SAVED&price=100&TEMPLATE_NAME=STOOL%20EXAMINATION
+ */
+export const updateTemplate = async (req, res, next) => {
+  try {
+    const params = {
+      reportId: req.body.reportId ?? req.body.id ?? '',
+      status: req.body.status ?? req.body.Status ?? 'Active',
+      price: req.body.price ?? req.body.rate ?? '0',
+      price1: req.body.price1 ?? '',
+      price2: req.body.price2 ?? '',
+      price3: req.body.price3 ?? '',
+      price4: req.body.price4 ?? '',
+      price5: req.body.price5 ?? '',
+      TEMPLATE_NAME: req.body.TEMPLATE_NAME ?? req.body.name ?? req.body.templateName ?? '',
+      ...req.body,
+    };
+    const upstreamRes = await upstreamService.post('UPDATETEMPLATE', params, null, req.user?.upstreamSid);
+    if (upstreamRes?.STATUS === 'FAILED' || (upstreamRes?.StatusCode && upstreamRes?.StatusCode !== '0000')) {
+      return res.status(400).json({
+        STATUS: 'FAILED',
+        StatusCode: upstreamRes?.StatusCode || '1000',
+        Message: upstreamRes?.Message || 'Failed to update template',
+        upstream: upstreamRes,
+      });
+    }
+    await cacheService.invalidate(CACHE_KEYS.TEMPLATE_LIST);
+    return res.json({
+      STATUS: 'SUCCESS',
+      Message: upstreamRes?.Message || 'Template Report Updated',
+      upstream: upstreamRes,
+    });
   } catch (err) {
     next(err);
   }

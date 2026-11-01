@@ -15,6 +15,8 @@ import {
   updateBranch,
   updateUser,
   updateInterpretation,
+  updateSample,
+  updateTemplate,
 } from '../controllers/controller.master.js';
 import { requireAuth } from '../middleware/middleware.auth.js';
 import { requireRoles, ROLES } from '../middleware/middleware.role.js';
@@ -23,23 +25,32 @@ const router = express.Router();
 
 router.use(requireAuth);
 
-// Read endpoints
+// 1. View Master Static Data & Cache Refresh - Accessible to authenticated clinic staff
 router.get('/all', getAllMasterData);
 router.get('/status', getCacheStatus);
 router.get('/list/:key', getMasterList);
 router.post('/refresh', forceRefresh);
 
-// Update endpoints (Protected to Admin/Super or authorized staff)
-router.post('/department', requireRoles([ROLES.SUPER, ROLES.RECEPTIONIST]), updateDepartment);
-router.post('/unit', requireRoles([ROLES.SUPER, ROLES.RECEPTIONIST]), updateUnit);
-router.post('/method', requireRoles([ROLES.SUPER, ROLES.RECEPTIONIST, ROLES.TECHNICIAN]), updateMethod);
-router.post('/test', requireRoles([ROLES.SUPER, ROLES.RECEPTIONIST, ROLES.TECHNICIAN]), updateTest);
-router.post('/profile', requireRoles([ROLES.SUPER, ROLES.RECEPTIONIST, ROLES.TECHNICIAN]), updateProfile);
-router.post('/package', requireRoles([ROLES.SUPER, ROLES.RECEPTIONIST]), updatePackage);
-router.post('/doctor', requireRoles([ROLES.SUPER, ROLES.RECEPTIONIST]), updateDoctor);
-router.post('/reference', requireRoles([ROLES.SUPER, ROLES.RECEPTIONIST]), updateReference);
-router.post('/branch', requireRoles([ROLES.SUPER, ROLES.RECEPTIONIST]), updateBranch);
-router.post('/user', requireRoles([ROLES.SUPER]), updateUser);
-router.post('/interpretation', requireRoles([ROLES.SUPER, ROLES.DOCTOR]), updateInterpretation);
+// 2. Update Master Static Data - Rule 5: Master Control - Setting ONLY
+// Rule 6: Super has all access EXCEPT Update Master Data static settings
+const requireMasterUpdate = requireRoles([ROLES.SETTING], {
+  allowSuper: false,
+  deniedMessage:
+    "Access denied. Updating Master static settings is strictly restricted to 'Master Control - Setting'. Super has all access EXCEPT updating Master Data static settings.",
+});
+
+router.post('/department', requireMasterUpdate, updateDepartment);
+router.post('/unit', requireMasterUpdate, updateUnit);
+router.post('/method', requireMasterUpdate, updateMethod);
+router.post('/test', requireMasterUpdate, updateTest);
+router.post('/profile', requireMasterUpdate, updateProfile);
+router.post('/package', requireMasterUpdate, updatePackage);
+router.post('/doctor', requireMasterUpdate, updateDoctor);
+router.post('/reference', requireMasterUpdate, updateReference);
+router.post('/branch', requireMasterUpdate, updateBranch);
+router.post('/user', requireMasterUpdate, updateUser);
+router.post('/interpretation', requireMasterUpdate, updateInterpretation);
+router.post('/sample', requireMasterUpdate, updateSample);
+router.post('/template', requireMasterUpdate, updateTemplate);
 
 export default router;

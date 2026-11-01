@@ -31,7 +31,11 @@ export default function EditIndividualReportModal({
   patient,
   onSaveSuccess,
 }) {
-  const { methods: masterMethods = [], units: masterUnits = [] } = useMaster();
+  const { methods: masterMethods = [], units: masterUnits = [], samples: masterSamples = [] } = useMaster();
+
+  const availableSampleTypes = (masterSamples && masterSamples.length > 0)
+    ? Array.from(new Set([...masterSamples.map((s) => s.Name || s.name).filter(Boolean), ...DEFAULT_SAMPLE_TYPES]))
+    : DEFAULT_SAMPLE_TYPES;
 
   // Helper function to resolve master Method ID from ID or Name
   const resolveMethodId = useCallback(
@@ -300,7 +304,7 @@ export default function EditIndividualReportModal({
                   }}
                   className="w-full px-3 py-2 text-xs font-semibold text-slate-800 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all cursor-pointer"
                 >
-                  {DEFAULT_SAMPLE_TYPES.map((st) => (
+                  {availableSampleTypes.map((st) => (
                     <option key={st} value={st}>
                       {st}
                     </option>

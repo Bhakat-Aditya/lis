@@ -30,6 +30,8 @@ import {
   Send,
   MessageSquare,
   TestTube,
+  Edit3,
+  FileText,
 } from 'lucide-react';
 
 import api from '../../services/api';
@@ -39,6 +41,7 @@ import ResultsCardView from './ResultsCardView.jsx';
 import ClinicalGuideModal from '../common/ClinicalGuideModal.jsx';
 import DoctorApprovalModal from './DoctorApprovalModal.jsx';
 import EditIndividualReportModal from './EditIndividualReportModal.jsx';
+import TemplateReportModal from './TemplateReportModal.jsx';
 import ConfirmationModal from '../common/ConfirmationModal.jsx';
 import {
   getTestPhaseInfo,
@@ -63,7 +66,9 @@ export default function ResultsEntry({
   templates = [],
   onRefresh,
 }) {
-  const { tests: masterTests = [] } = useMaster();
+  const { tests: masterTests = [], templates: masterTemplateCatalog = [] } = useMaster();
+  const [showTemplatesSection, setShowTemplatesSection] = useState(true);
+  const [editingTemplate, setEditingTemplate] = useState(null);
   // Helper to normalize status into one of 10 official upstream LIS statuses
   const resolveStatus = (report = {}, current = {}) => {
     const raw = String(current.status || report.status || '').toUpperCase().trim();
@@ -264,6 +269,70 @@ export default function ResultsEntry({
     return stats;
   }, [activeReports, resultsState]);
 
+  // Identify whether a report item is a template report
+  const isTemplateItem = useMemo(() => {
+    const catalogNames = new Set(
+      masterTemplateCatalog.map((t) => String(t.TEMPLATE_NAME || t.name || '').toLowerCase().trim()).filter(Boolean)
+    );
+    const catalogIds = new Set(
+      masterTemplateCatalog.map((t) => String(t.templatesId || t.id || t.reportId || '').toLowerCase().trim()).filter(Boolean)
+    );
+
+    return (item) => {
+      if (!item) return false;
+      if (item.isTemplate || item.category === 'Template') return true;
+      if (item.resultJson || item.resultJSON) return true;
+      const tId = String(item.testId || item.id || '').toUpperCase().trim();
+      if (tId.startsWith('TEMPLATE')) return true;
+      if (catalogIds.has(tId.toLowerCase())) return true;
+      const tName = String(item.testName || item.TEMPLATE_NAME || item.name || '').toLowerCase().trim();
+      if (catalogNames.has(tName)) return true;
+      return false;
+    };
+  }, [masterTemplateCatalog]);
+
+  // Combined template reports list for this patient
+  const templateReports = useMemo(() => {
+    const list = [];
+    const seen = new Set();
+
+    // 1. From templates prop
+    (templates || []).forEach((t) => {
+      const repId = String(t.reportId || t.templatesId || t.id || '').trim();
+      if (repId && !seen.has(repId)) {
+        seen.add(repId);
+        list.push({
+          reportId: repId,
+          testName: t.TEMPLATE_NAME || t.name || t.testName || `Template Report (${repId})`,
+          status: t.status || t.Status || 'SAVED',
+          date: t.templatesDate || t.date || '',
+          resultJson: t.resultJson || t.resultJSON,
+          raw: t,
+        });
+      }
+    });
+
+    // 2. From activeReports
+    (activeReports || []).forEach((r) => {
+      if (isTemplateItem(r)) {
+        const repId = String(r.reportId || r.id || '').trim();
+        if (repId && !seen.has(repId)) {
+          seen.add(repId);
+          list.push({
+            reportId: repId,
+            testName: r.testName || r.TEMPLATE_NAME || `Template Report (${repId})`,
+            status: r.status || 'SAVED',
+            date: r.date || r.reportDate || '',
+            resultJson: r.resultJson || r.resultJSON,
+            raw: r,
+          });
+        }
+      }
+    });
+
+    return list;
+  }, [templates, activeReports, isTemplateItem]);
+
   // Filtered Reports list
   const filteredReports = useMemo(() => {
     return activeReports.filter((r) => {
@@ -271,6 +340,11 @@ export default function ResultsEntry({
       const val = cur.resultData !== undefined ? cur.resultData : r.resultData;
       const status = resolveStatus(r, cur);
       const isDeleted = status === 'DELETED';
+
+      // Exclude template reports from regular numeric parameter tables
+      if (isTemplateItem(r) || templateReports.some((t) => t.reportId === r.reportId)) {
+        return false;
+      }
 
       // 1. Search term match
       if (searchTerm) {
@@ -303,7 +377,7 @@ export default function ResultsEntry({
       // Exact match for all 10 statuses
       return status === phaseFilter;
     });
-  }, [reports, resultsState, searchTerm, phaseFilter]);
+  }, [activeReports, resultsState, searchTerm, phaseFilter, isTemplateItem, templateReports]);
 
   const handleInputChange = (reportId, field, val) => {
     setResultsState((prev) => {
@@ -884,6 +958,47 @@ export default function ResultsEntry({
     }
   };
 
+  // Template Report Delete Handler
+  const handleDeleteTemplateReport = (tmpl) => {
+    if (!tmpl?.reportId) return;
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Template Report',
+      message: `Are you sure you want to delete template report "${tmpl.testName}" (${tmpl.reportId})?`,
+      description: "This full-page template report will be removed from this patient's active worklist.",
+      confirmText: 'Delete Report',
+      variant: 'danger',
+      icon: Trash2,
+      onConfirm: async () => {
+        const targetPid = patient?.patientId || patient?.slNo;
+        setDeletingId(tmpl.reportId);
+        setErrorMsg('');
+
+        try {
+          const res = await api.post('/reports/delete', {
+            patientId: targetPid,
+            reportId: tmpl.reportId,
+            testName: tmpl.testName,
+            reportType: 1,
+          });
+
+          if (res.data?.STATUS === 'FAILED') {
+            throw new Error(res.data?.Message || 'Failed to delete template report');
+          }
+
+          setSuccessMsg(`Template report "${tmpl.testName}" deleted successfully.`);
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+          if (onRefresh) await onRefresh(true);
+        } catch (err) {
+          setErrorMsg(err.response?.data?.Message || err.message || 'Failed to delete template report');
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        } finally {
+          setDeletingId(null);
+        }
+      },
+    });
+  };
+
   // Individual Report Upload Order Handler (UPLOADORDER)
   const handleUploadOrder = (report) => {
     if (!report?.reportId) return;
@@ -978,7 +1093,10 @@ export default function ResultsEntry({
         setErrorMsg('');
         setSuccessMsg('');
         try {
-          const res = await api.post('/reports/send-whatsapp', { patientId: cleanPid || rawPid });
+          const res = await api.post('/reports/send-whatsapp', {
+            patientId: cleanPid || rawPid,
+            sendType: 'patientReportMsg',
+          });
           if (res.data?.STATUS === 'FAILED' || res.data?.StatusCode === '1211') {
             throw new Error(res.data?.Message || 'Failed to send report via WhatsApp (1211)');
           }
@@ -1523,6 +1641,128 @@ export default function ResultsEntry({
         </div>
       )}
 
+      {/* 4c. Dedicated Template Reports Section (Full-Page Report Structure) */}
+      {templateReports.length > 0 && (
+        <div className="bg-white rounded-xl border border-purple-200 shadow-2xs overflow-hidden mt-4">
+          <div
+            onClick={() => setShowTemplatesSection((prev) => !prev)}
+            className="px-4 py-3 bg-purple-50/70 border-b border-purple-200/70 flex items-center justify-between cursor-pointer hover:bg-purple-100/60 transition-colors select-none"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-xs shadow-2xs">
+                <FileText className="w-3.5 h-3.5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-bold text-purple-950">
+                    Template Reports (Full-Page Reports) ({templateReports.length})
+                  </h3>
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-200 text-purple-800">
+                    Structured Clinical Formats
+                  </span>
+                </div>
+                <p className="text-[11px] text-purple-700/80">
+                  Full-page examinations (Stool, Urine, Semen, CSF, Histopathology). Use "Edit" to modify examination findings or "Delete" to remove.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold text-purple-700">
+                {showTemplatesSection ? 'Hide' : 'Show Reports'}
+              </span>
+              {showTemplatesSection ? (
+                <ChevronUp className="w-4 h-4 text-purple-600" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-purple-600" />
+              )}
+            </div>
+          </div>
+
+          {showTemplatesSection && (
+            <div className="p-2 sm:p-3 overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-500 text-[11px] font-bold">
+                    <th className="py-2 px-3 w-12">#</th>
+                    <th className="py-2 px-3">Template Report Name</th>
+                    <th className="py-2 px-3">Report ID</th>
+                    <th className="py-2 px-3 hidden sm:table-cell">Report Date</th>
+                    <th className="py-2 px-3">Status</th>
+                    <th className="py-2 px-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {templateReports.map((tmpl, idx) => {
+                    const isDeleting = deletingId === tmpl.reportId;
+
+                    return (
+                      <tr key={tmpl.reportId || idx} className="hover:bg-purple-50/40 transition-colors">
+                        <td className="py-2.5 px-3 font-mono text-slate-400 text-xs">
+                          {idx + 1}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="font-bold text-slate-800">
+                            {tmpl.testName}
+                          </div>
+                          <div className="text-[10px] text-purple-600 font-medium">
+                            Full-Page Dynamic Result Format
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 font-mono text-xs font-bold text-purple-700">
+                          {tmpl.reportId}
+                        </td>
+                        <td className="py-2.5 px-3 hidden sm:table-cell text-slate-500 font-mono text-[11px]">
+                          {tmpl.date || 'Today'}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              String(tmpl.status || '').toUpperCase() === 'SAVED'
+                                ? 'bg-blue-100 text-blue-800'
+                                : 'bg-emerald-100 text-emerald-800'
+                            }`}
+                          >
+                            {tmpl.status || 'SAVED'}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-right">
+                          <div className="inline-flex items-center gap-1.5 justify-end">
+                            <button
+                              type="button"
+                              onClick={() => setEditingTemplate(tmpl)}
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer"
+                              title="Open full-page dynamic result editor"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                              <span>Edit</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteTemplateReport(tmpl)}
+                              disabled={isDeleting}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-50 hover:bg-rose-100 active:scale-95 text-rose-700 rounded-lg text-xs font-bold border border-rose-200 transition-all cursor-pointer disabled:opacity-50"
+                              title="Delete this template report"
+                            >
+                              {isDeleting ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                              )}
+                              <span>Delete</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 5. Floating Sticky Unsaved Changes Action Bar */}
       {dirtyReportIds.length > 0 && (
         <div className="sticky bottom-3 z-30 p-2.5 px-4 bg-slate-900/95 backdrop-blur-md text-white rounded-xl shadow-xl border border-slate-700 flex flex-col sm:flex-row items-center justify-between gap-2.5 animate-in fade-in slide-in-from-bottom-2">
@@ -1606,6 +1846,21 @@ export default function ResultsEntry({
                 setResultsState(fresh);
               }
             }
+          }}
+        />
+      )}
+
+      {/* 8. Dedicated Full-Page Template Report Modal */}
+      {editingTemplate && (
+        <TemplateReportModal
+          isOpen={Boolean(editingTemplate)}
+          onClose={() => setEditingTemplate(null)}
+          template={editingTemplate}
+          patient={patient}
+          onSaveSuccess={async () => {
+            setEditingTemplate(null);
+            setSuccessMsg('Template report findings saved successfully!');
+            if (onRefresh) await onRefresh(true);
           }}
         />
       )}

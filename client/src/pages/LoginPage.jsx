@@ -8,12 +8,17 @@ import {
   User,
   KeyRound,
   AlertCircle,
-  Phone,
+  Eye,
+  EyeOff,
   Activity,
   Sparkles,
-  Stethoscope,
+  FlaskConical,
   Building2,
   CheckCircle2,
+  ArrowRight,
+  Headphones,
+  FileCheck2,
+  Stethoscope,
 } from 'lucide-react';
 
 export default function LoginPage() {
@@ -22,8 +27,10 @@ export default function LoginPage() {
   const [searchParams] = useSearchParams();
   const sessionLogoutReason = searchParams.get('reason') || '';
 
-  const [loginId, setLoginId] = useState('sandip');
-  const [password, setPassword] = useState('Life');
+  // Clean, normal login state - ZERO auto-filled credentials
+  const [loginId, setLoginId] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [totp, setTotp] = useState('');
   const [showTotp, setShowTotp] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -31,184 +38,305 @@ export default function LoginPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!loginId.trim() || !password) {
+      setError('Please provide your operator username and access password.');
+      return;
+    }
+
     setError('');
     setLoading(true);
 
-    const res = await login(loginId, password, totp || null);
-    setLoading(false);
+    try {
+      const res = await login(loginId.trim(), password, totp || null);
+      setLoading(false);
 
-    if (res.success) {
-      navigate('/');
-    } else {
-      if (res.message?.includes('2FA') || res.message?.includes('totp')) {
-        setShowTotp(true);
+      if (res.success) {
+        navigate('/');
+      } else {
+        if (res.message?.includes('2FA') || res.message?.includes('totp')) {
+          setShowTotp(true);
+        }
+        setError(res.message || 'Login credentials invalid or account locked.');
       }
-      setError(res.message || 'Login credentials invalid or account locked.');
+    } catch (err) {
+      setLoading(false);
+      setError(err.message || 'Unable to connect to authentication server. Please check your network.');
     }
   };
 
-  const handleQuickFill = (u, p) => {
-    setLoginId(u);
-    setPassword(p);
-    setShowTotp(false);
-  };
-
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-4 relative overflow-hidden select-none">
+    <main className="min-h-screen w-full bg-slate-950 flex flex-col justify-between items-center relative overflow-x-hidden selection:bg-blue-500 selection:text-white font-sans">
       <Helmet>
-        <title>Clinic Portal Login | New Life Care Diagnostic Center LIS</title>
+        <title>Staff Portal Login | New Life Care Midnapore</title>
         <meta
           name="description"
-          content="Authorized clinic staff login for New Life Care Diagnostic Center Laboratory Information System."
+          content="Secure authorized staff and clinician authentication gateway for New Life Care Midnapore Laboratory Information System (LIS)."
         />
       </Helmet>
 
-      {/* Subtle background glow */}
-      <div className="absolute top-1/4 -left-20 w-96 h-96 bg-blue-100/50 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 -right-20 w-96 h-96 bg-indigo-100/50 rounded-full blur-3xl pointer-events-none" />
+      {/* Atmospheric Ambient Glows & Medical Grid Texture */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none select-none">
+        {/* Soft Radial Backlight Orbs */}
+        <div className="absolute -top-40 -left-32 w-[520px] h-[520px] bg-blue-600/20 rounded-full blur-[140px]" />
+        <div className="absolute top-1/3 -right-40 w-[560px] h-[560px] bg-emerald-500/15 rounded-full blur-[150px]" />
+        <div className="absolute -bottom-32 left-1/3 w-[600px] h-[600px] bg-indigo-600/15 rounded-full blur-[160px]" />
 
-      <div className="w-full max-w-md bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden relative z-10 animate-in fade-in zoom-in-95 duration-200">
-        {/* Header with Hospital & Clinical Branding */}
-        <div className="bg-white border-b border-slate-100 p-7 text-center relative overflow-hidden">
-          {/* Crest */}
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/25 font-extrabold text-2xl mb-3">
-            <Activity className="w-7 h-7" />
+        {/* Subtle Precision Laboratory Grid */}
+        <div
+          className="absolute inset-0 opacity-[0.035]"
+          style={{
+            backgroundImage:
+              'linear-gradient(#FFFFFF 1px, transparent 1px), linear-gradient(to right, #FFFFFF 1px, transparent 1px)',
+            backgroundSize: '36px 36px',
+          }}
+        />
+
+        {/* Subtle Animated Cardiac ECG Pulse Path in Background */}
+        <svg
+          className="absolute bottom-16 left-0 right-0 w-full h-32 opacity-15 pointer-events-none"
+          preserveAspectRatio="none"
+          viewBox="0 0 1200 120"
+        >
+          <path
+            d="M0,60 L280,60 L310,60 L325,10 L340,110 L355,40 L370,80 L385,60 L420,60 L700,60 L730,60 L745,10 L760,110 L775,40 L790,80 L805,60 L840,60 L1200,60"
+            fill="none"
+            stroke="url(#ecgGradient)"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <defs>
+            <linearGradient id="ecgGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.1" />
+              <stop offset="30%" stopColor="#38BDF8" stopOpacity="0.8" />
+              <stop offset="70%" stopColor="#10B981" stopOpacity="0.8" />
+              <stop offset="100%" stopColor="#6366F1" stopOpacity="0.1" />
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+
+      {/* Top Clinical Header Banner */}
+      <header className="w-full px-6 py-4 flex items-center justify-between z-10 relative">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-cyan-500 p-0.5 shadow-lg shadow-blue-500/20">
+            <div className="w-full h-full bg-slate-900/90 rounded-[14px] flex items-center justify-center text-white">
+              <FlaskConical className="w-5 h-5 text-cyan-400" />
+            </div>
           </div>
-
-          <h1 className="text-base font-extrabold tracking-tight text-slate-900">
-            NEW LIFE CARE DIAGNOSTIC CENTER
-          </h1>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Laboratory Information System (LIS) Expert Portal
-          </p>
-
-          <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 rounded-full text-[10px]">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Authorized Medical Staff Access Only</span>
+          <div>
+            <span className="text-sm font-extrabold text-white tracking-tight block">
+              NEW LIFE CARE MIDNAPORE
+            </span>
+            <span className="text-[10px] font-medium text-slate-400 block tracking-wider uppercase">
+              Clinical Laboratory Information System
+            </span>
           </div>
         </div>
 
-        {/* Login Form Body */}
-        <div className="p-6 sm:p-7 space-y-4">
-          {sessionLogoutReason && !error && (
-            <div className="p-3 bg-amber-50 border border-amber-300 text-amber-800 rounded-xl text-xs flex items-center gap-2 font-medium shadow-2xs">
-              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>{sessionLogoutReason}</span>
-            </div>
-          )}
+        <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/80 border border-slate-800 text-[11px] font-semibold text-slate-300">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span>Core Node: Midnapore Central</span>
+        </div>
+      </header>
 
-          {error && (
-            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center gap-2 font-medium">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-            <div>
-              <label className="font-bold text-slate-700 block mb-1.5 uppercase tracking-wider text-[10px]">
-                Staff Login ID / Operator Username
-              </label>
-              <div className="relative">
-                <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="e.g. sandip"
-                  value={loginId}
-                  onChange={(e) => setLoginId(e.target.value)}
-                  autoComplete="username"
-                  required
-                  className="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 focus:bg-white text-xs font-semibold text-slate-900 transition-all"
-                />
+      {/* Central Hero Form Container */}
+      <section className="w-full max-w-md px-4 py-6 z-10 relative my-auto">
+        <div className="backdrop-blur-2xl bg-white/[0.98] dark:bg-slate-900/[0.92] border border-white/80 dark:border-slate-800/90 rounded-3xl shadow-2xl shadow-black/40 overflow-hidden transition-all duration-300">
+          {/* Card Brand Header */}
+          <div className="pt-8 pb-6 px-7 text-center relative border-b border-slate-100 dark:border-slate-800/80">
+            {/* Glowing Icon Crest */}
+            <div className="inline-flex items-center justify-center relative mb-4">
+              <div className="absolute -inset-3 rounded-full bg-blue-500/20 blur-md animate-pulse" />
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-cyan-500 text-white flex items-center justify-center shadow-xl shadow-blue-600/30 relative">
+                <Activity className="w-8 h-8 text-white drop-shadow-sm" />
               </div>
             </div>
 
-            <div>
-              <label className="font-bold text-slate-700 block mb-1.5 uppercase tracking-wider text-[10px]">
-                Access Password
-              </label>
-              <div className="relative">
-                <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
-                  required
-                  className="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 focus:bg-white text-xs font-semibold text-slate-900 transition-all"
-                />
-              </div>
-            </div>
+            <h1 className="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight uppercase">
+              NEW LIFE CARE MIDNAPORE
+            </h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">
+              Authorized Clinician &amp; Diagnostic Portal Access
+            </p>
 
-            {showTotp && (
-              <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-xl space-y-1">
-                <label className="font-bold text-blue-900 block text-[10px] uppercase tracking-wider">
-                  Two-Factor Authentication (2FA TOTP)
-                </label>
-                <div className="relative">
-                  <KeyRound className="w-4 h-4 text-blue-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    placeholder="Enter 6-digit code"
-                    value={totp}
-                    onChange={(e) => setTotp(e.target.value)}
-                    className="w-full pl-10 pr-3 py-2 bg-white border border-blue-300 rounded-lg focus:outline-none font-mono text-center tracking-widest text-sm font-bold text-blue-900"
-                  />
-                </div>
+            <div className="mt-3.5 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/50 text-[10.5px] font-bold text-emerald-700 dark:text-emerald-400">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>256-Bit SSL Encrypted Verification</span>
+            </div>
+          </div>
+
+          {/* Form Content */}
+          <div className="p-7 space-y-4">
+            {sessionLogoutReason && !error && (
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 rounded-xl text-xs flex items-center gap-2.5 font-medium shadow-xs animate-in fade-in duration-200">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>{sessionLogoutReason}</span>
               </div>
             )}
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-extrabold py-3 px-4 rounded-xl shadow-md shadow-blue-600/20 transition-all cursor-pointer disabled:opacity-50 text-xs flex items-center justify-center gap-2 mt-2"
-            >
-              <span>{loading ? 'Authenticating Secure Session...' : 'Sign In to Clinical Portal'}</span>
-            </button>
-          </form>
+            {error && (
+              <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-xl text-xs flex items-center justify-between gap-2 font-medium shadow-xs animate-in fade-in shake duration-200">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{error}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setError('')}
+                  className="text-rose-500 hover:text-rose-700 text-xs font-bold cursor-pointer ml-1"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
 
-          {/* Quick Staff Credentials Preset Switcher */}
-          <div className="pt-4 border-t border-slate-100 text-[11px] text-slate-500 space-y-2">
-            <span className="font-bold text-slate-700 block uppercase tracking-wider text-[10px]">
-              Fast Staff Role Demo Accounts:
-            </span>
-            <div className="grid grid-cols-2 gap-2">
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Username Input */}
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="loginId"
+                  className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider"
+                >
+                  Operator ID / Username
+                </label>
+                <div className="relative">
+                  <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                    <User className="w-4 h-4" />
+                  </div>
+                  <input
+                    id="loginId"
+                    type="text"
+                    placeholder="Enter staff login ID"
+                    value={loginId}
+                    onChange={(e) => {
+                      setLoginId(e.target.value);
+                      if (error) setError('');
+                    }}
+                    autoComplete="username"
+                    autoFocus
+                    required
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 text-xs font-semibold transition-all focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-600 focus:bg-white dark:focus:bg-slate-800 shadow-2xs"
+                  />
+                </div>
+              </div>
+
+              {/* Password Input with Show/Hide Toggle */}
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="password"
+                  className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider"
+                >
+                  Access Password
+                </label>
+                <div className="relative">
+                  <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                  <input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="Enter access password"
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      if (error) setError('');
+                    }}
+                    autoComplete="current-password"
+                    required
+                    className="w-full pl-10 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 text-xs font-semibold transition-all focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-600 focus:bg-white dark:focus:bg-slate-800 shadow-2xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg cursor-pointer transition-colors"
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Dynamic 2FA TOTP (Shows only if prompted by backend security) */}
+              {showTotp && (
+                <div className="p-3.5 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-2xl space-y-2 animate-in fade-in duration-200">
+                  <label
+                    htmlFor="totp"
+                    className="block text-[10.5px] font-extrabold text-blue-950 dark:text-blue-300 uppercase tracking-wider"
+                  >
+                    Two-Factor Authentication (2FA TOTP)
+                  </label>
+                  <div className="relative">
+                    <KeyRound className="w-4 h-4 text-blue-600 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      id="totp"
+                      type="text"
+                      maxLength={6}
+                      placeholder="Enter 6-digit authenticator code"
+                      value={totp}
+                      onChange={(e) => setTotp(e.target.value.replace(/\D/g, ''))}
+                      className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-700 rounded-xl text-center font-mono text-sm font-bold tracking-widest text-blue-900 dark:text-blue-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <p className="text-[10px] text-blue-700 dark:text-blue-300">
+                    Open your Google Authenticator or registered 2FA app to provide the current verification code.
+                  </p>
+                </div>
+              )}
+
+              {/* Submit Action Button */}
               <button
-                type="button"
-                onClick={() => handleQuickFill('sandip', 'Life')}
-                className="p-2 bg-slate-50 hover:bg-indigo-50/70 border border-slate-200 hover:border-indigo-300 rounded-xl text-left transition-all cursor-pointer group"
+                type="submit"
+                disabled={loading}
+                className="w-full mt-2 py-3 px-4 rounded-xl font-extrabold text-xs text-white bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:via-indigo-700 hover:to-blue-800 shadow-md shadow-blue-600/30 hover:shadow-lg hover:shadow-blue-600/40 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                <span className="font-bold text-slate-800 group-hover:text-indigo-900 block text-xs">
-                  Super Admin
-                </span>
-                <span className="text-[10px] text-slate-400 font-mono">sandip / Life</span>
+                {loading ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Verifying Clinical Credentials...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Sign In to Clinical Portal</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
-              <button
-                type="button"
-                onClick={() => handleQuickFill('entry', '010101')}
-                className="p-2 bg-slate-50 hover:bg-indigo-50/70 border border-slate-200 hover:border-indigo-300 rounded-xl text-left transition-all cursor-pointer group"
-              >
-                <span className="font-bold text-slate-800 group-hover:text-indigo-900 block text-xs">
-                  Reception / Desk
-                </span>
-                <span className="text-[10px] text-slate-400 font-mono">entry / 010101</span>
-              </button>
-            </div>
+            </form>
+          </div>
+
+          {/* Card Footer: Clinical Credentials Notice */}
+          <div className="py-3 px-6 bg-slate-50 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800 text-center text-[10.5px] text-slate-500 dark:text-slate-400">
+            <span>Staff access is monitored and logged in compliance with clinical laboratory auditing protocols.</span>
           </div>
         </div>
+      </section>
 
-        {/* Support & Quality Accreditation Footer */}
-        <div className="p-3.5 bg-slate-50 border-t border-slate-100 text-center text-[10px] text-slate-500 flex flex-col items-center justify-center gap-1">
-          <div className="flex items-center gap-2">
-            <Phone className="w-3 h-3 text-indigo-600" />
-            <span>Support Helplines: <strong>8799021616</strong> / <strong>9733525031</strong></span>
-          </div>
-          <div className="text-slate-400">
-            Midnapore Main Center • Keranitola • ISO 9001:2015 & NABL Standards
-          </div>
+      {/* Global Bottom Quality & Center Standards Footer */}
+      <footer className="w-full py-4 px-6 z-10 text-center text-slate-400 text-xs flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-900/60 bg-slate-950/80 backdrop-blur-md">
+        <div className="flex items-center gap-2">
+          <Building2 className="w-3.5 h-3.5 text-blue-400" />
+          <span className="text-[11px] font-semibold text-slate-300">
+            New Life Care Midnapore • Main Diagnostic Lab Center, Keranitola
+          </span>
         </div>
-      </div>
-    </div>
+
+        <div className="flex items-center gap-3 text-[11px] text-slate-400">
+          <span className="flex items-center gap-1">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+            <span>NABL Reference Standard</span>
+          </span>
+          <span>•</span>
+          <span className="flex items-center gap-1">
+            <Headphones className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Desk: +91 86702 07475</span>
+          </span>
+        </div>
+      </footer>
+    </main>
   );
 }

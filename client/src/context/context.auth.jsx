@@ -8,7 +8,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const stored = localStorage.getItem('lis_user');
       return stored ? JSON.parse(stored) : null;
-    } catch (e) {
+    } catch {
       return null;
     }
   });
@@ -96,7 +96,7 @@ export const AuthProvider = ({ children }) => {
       if (token) {
         await api.post('/auth/logout');
       }
-    } catch (e) {
+    } catch {
       // Ignore network errors on logout
     } finally {
       setUser(null);
@@ -107,9 +107,99 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const role = user?.role || 'Receptionist';
+
+  /**
+   * Permission Evaluator implementing official handwritten access rules:
+   * 1. Reception / Office: Patient Entry, Add Test, Received Sample, Delete Report, Restore Report, Send WhatsApp
+   * 2. Branch: Patient Entry/Update, Add Test, Payment Receive, Send WhatsApp, [X] Log Patient, [X] EMR Patient
+   * 3. Technician: Set Default Result, Upload Order, Download Result, Calculate Result, Receive Sample, Release Report, Report Update
+   * 4. Microbiology User: Update specific live Microbiology Dept
+   * 5. Master Control - Setting: View/Update Master static Data
+   * 6. Super: All Access (X) except Update Master Data static settings
+   */
+  const can = (action) => {
+    if (!user) return false;
+    const r = user.role;
+
+    switch (action) {
+      // 1. Reception / Office & 2. Branch: Patient Entry (Add/Update)
+      case 'patient_entry':
+      case 'add_patient':
+      case 'update_patient':
+        return ['Super', 'Receptionist', 'Office', 'Branch'].includes(r);
+
+      // 1. Reception / Office & 2. Branch: Add Test (ADD TEST MULTIPLE)
+      case 'add_test':
+      case 'add_test_multiple':
+        return ['Super', 'Receptionist', 'Office', 'Branch'].includes(r);
+
+      // 1. Reception / Office & 3. Technician: Received Sample
+      case 'receive_sample':
+        return ['Super', 'Receptionist', 'Office', 'Technician'].includes(r);
+
+      // 1. Reception / Office: Delete Report & Restore Report
+      case 'delete_report':
+      case 'restore_report':
+        return ['Super', 'Receptionist', 'Office'].includes(r);
+
+      // 1. Reception / Office & 2. Branch: Send WhatsApp
+      case 'send_whatsapp':
+        return ['Super', 'Receptionist', 'Office', 'Branch', 'Technician', 'Doctor'].includes(r);
+
+      // 2. Branch: Payment Receive
+      case 'payment_receive':
+      case 'deposit':
+        return ['Super', 'Receptionist', 'Office', 'Branch'].includes(r);
+
+      // 2. Branch: X Log Patient & X EMR Patient (Explicitly Forbidden for Branch)
+      case 'log_patient':
+      case 'patient_logs':
+        return r !== 'Branch';
+
+      case 'emr_patient':
+      case 'patient_emr':
+        return r !== 'Branch';
+
+      // 3. Technician permissions
+      case 'set_default_result':
+        return ['Super', 'Technician', 'Doctor'].includes(r);
+
+      case 'upload_order':
+        return ['Super', 'Technician'].includes(r);
+
+      case 'download_result':
+        return ['Super', 'Technician', 'Doctor'].includes(r);
+
+      case 'calculate_result':
+        return ['Super', 'Technician'].includes(r);
+
+      case 'release_report':
+        return ['Super', 'Technician', 'Doctor'].includes(r);
+
+      case 'report_update':
+      case 'update_report':
+        return ['Super', 'Technician', 'Doctor', 'Microbiology'].includes(r);
+
+      // 4. Microbiology User: Update specific live Microbiology Dept
+      case 'microbiology_update':
+        return ['Super', 'Technician', 'Microbiology'].includes(r);
+
+      // 5. Master Control - Setting: View / Update Master static Data
+      case 'view_master':
+        return true; // All roles can view
+
+      // 6. Super: All Access EXCEPT Update Master Data static settings
+      case 'update_master':
+        return r === 'Setting'; // ONLY Master Control - Setting
+
+      default:
+        return r === 'Super';
+    }
+  };
+
   const hasRole = (allowedRoles = []) => {
     if (!user) return false;
-    if (user.role === 'Super') return true;
     return allowedRoles.includes(user.role);
   };
 
@@ -123,6 +213,16 @@ export const AuthProvider = ({ children }) => {
         login,
         logout,
         hasRole,
+        can,
+        canUpdateMaster: role === 'Setting',
+        canViewPatientLogs: role !== 'Branch',
+        canViewPatientEmr: role !== 'Branch',
+        isSuper: role === 'Super',
+        isBranch: role === 'Branch',
+        isTechnician: role === 'Technician',
+        isMicrobiology: role === 'Microbiology',
+        isSetting: role === 'Setting',
+        isReceptionOrOffice: role === 'Receptionist' || role === 'Office',
       }}
     >
       {children}

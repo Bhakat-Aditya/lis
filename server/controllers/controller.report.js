@@ -467,6 +467,24 @@ export const updateReport = async (req, res, next) => {
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
 
+    // Rule 4: Microbiology User can only update specific live Microbiology Dept investigations
+    if (req.user?.role === 'Microbiology') {
+      const isMicro =
+        String(deptName || '').toLowerCase().includes('micro') ||
+        String(profileName || '').toLowerCase().includes('micro') ||
+        String(testName || '').toLowerCase().includes('micro') ||
+        String(deptName || '').toLowerCase().includes('culture');
+
+      if (!isMicro) {
+        return res.status(403).json({
+          STATUS: 'FAILED',
+          StatusCode: '403',
+          Message:
+            'Access denied. Microbiology User is only permitted to update investigations in the Microbiology department.',
+        });
+      }
+    }
+
     // Resolve Master IDs for method and unit
     let finalMethodId = String(method || '').trim();
     let finalUnitId = String(resolvedUnit || '').trim();
@@ -977,7 +995,7 @@ export const uploadOrder = async (req, res, next) => {
 
 export const sendWhatsApp = async (req, res, next) => {
   try {
-    const { patientId } = req.body;
+    const { patientId, sendType = 'patientReportMsg' } = req.body;
     if (!patientId) {
       return res.status(400).json({ STATUS: 'FAILED', Message: 'patientId is required' });
     }
@@ -987,8 +1005,19 @@ export const sendWhatsApp = async (req, res, next) => {
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
 
+    // Valid sendType values: onboardingMsg | patientReportMsg | doctorReportMsg | agentReportMsg
+    const validSendTypes = ['onboardingMsg', 'patientReportMsg', 'doctorReportMsg', 'agentReportMsg'];
+    const effectiveSendType = validSendTypes.includes(sendType) ? sendType : 'patientReportMsg';
+
+    const sendParams = {
+      patientId: cleanPatientId,
+      sendType: effectiveSendType,
+    };
+
+    console.log(`[sendWhatsApp] Dispatching WhatsApp for ${cleanPatientId} with sendType=${effectiveSendType}`);
+
     // 1. Initial attempt to dispatch WhatsApp via upstream SENDWHATSAPP
-    let upstreamData = await upstreamService.post('SENDWHATSAPP', { patientId: cleanPatientId }, null, req.user?.upstreamSid);
+    let upstreamData = await upstreamService.post('SENDWHATSAPP', sendParams, null, req.user?.upstreamSid);
 
     // 2. If upstream returns 1211 (Unreleased report), automatically release report upstream and retry
     if (upstreamData?.StatusCode === '1211' || upstreamData?.STATUS === 'FAILED') {
@@ -1000,7 +1029,7 @@ export const sendWhatsApp = async (req, res, next) => {
 
         if (releaseRes?.STATUS === 'SUCCESS' || releaseRes?.StatusCode === '0000') {
           // Retry SENDWHATSAPP after report has been released
-          upstreamData = await upstreamService.post('SENDWHATSAPP', { patientId: cleanPatientId }, null, req.user?.upstreamSid);
+          upstreamData = await upstreamService.post('SENDWHATSAPP', sendParams, null, req.user?.upstreamSid);
         }
       } catch (releaseErr) {
         console.warn(`[sendWhatsApp] Auto-release fallback failed for ${cleanPatientId}:`, releaseErr.message);
@@ -1012,7 +1041,7 @@ export const sendWhatsApp = async (req, res, next) => {
       const errorMsg =
         upstreamData?.Message && upstreamData?.Message !== 'Error In Proccessing - 1211'
           ? upstreamData.Message
-          : 'Unable to send WhatsApp (1211): Report must be released and patient must have a valid mobile number registered.';
+          : `Unable to dispatch WhatsApp (${effectiveSendType}): Report must be released and patient must have a valid mobile number registered.`;
       return res.status(400).json({
         STATUS: 'FAILED',
         StatusCode: upstreamData?.StatusCode || '1211',
@@ -1021,10 +1050,18 @@ export const sendWhatsApp = async (req, res, next) => {
       });
     }
 
+    const typeLabels = {
+      onboardingMsg: 'Onboarding Welcome Message',
+      patientReportMsg: 'Diagnostic Report to Patient',
+      doctorReportMsg: 'Diagnostic Report to Doctor',
+      agentReportMsg: 'Diagnostic Report to Referring Agent',
+    };
+
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
       StatusCode: upstreamData?.StatusCode || '0000',
-      Message: upstreamData?.Message || 'Report sent to WhatsApp successfully',
+      sendType: effectiveSendType,
+      Message: upstreamData?.Message || `${typeLabels[effectiveSendType] || 'Notification'} sent via WhatsApp successfully!`,
       data: upstreamData,
     });
   } catch (err) {
@@ -1212,3 +1249,346 @@ export const restoreReport = async (req, res, next) => {
 };
 
 
+
+/**
+ * Default structured schema generator for full-page template reports (T1 to T15)
+ */
+export const getDefaultTemplateResultJson = (templateName = 'STOOL EXAMINATION') => {
+  const norm = String(templateName || '').toUpperCase().trim();
+  if (norm.includes('STOOL')) {
+    return {
+      TEMPLATE_NAME: 'STOOL EXAMINATION',
+      Exam: {
+        'Physical Examination': [
+          { Name: 'Quantity', Value: '' },
+          { Name: 'Colour', Value: '' },
+          { Name: 'Odour', Value: '' },
+          { Name: 'Consistency', Value: '' },
+          { Name: 'Mucus', Value: '' },
+          { Name: 'Parasite', Value: '' },
+        ],
+        'Chemical Examination': [
+          { Name: 'Occult Blood', Value: '' },
+          { Name: 'Reducing Substance', Value: '' },
+          { Name: 'pH', Value: '' },
+        ],
+        'Microscopic Examination': [
+          { Name: 'OVA / LARVAE', Value: '' },
+          { Name: 'Trophozoites', Value: '' },
+          { Name: 'Crystals', Value: '' },
+          { Name: 'Ghost Cells', Value: '' },
+          { Name: 'RBC', Value: '' },
+          { Name: 'Bacteria', Value: '' },
+          { Name: 'Cysts', Value: '' },
+          { Name: 'Pyknotic Bodies', Value: '' },
+          { Name: 'Pus cells', Value: '' },
+          { Name: 'Epithelial Cells', Value: '' },
+          { Name: 'Veg. cells', Value: '' },
+        ],
+        Others: [
+          { Name: 'Others 1', Value: '' },
+          { Name: 'Others 2', Value: '' },
+        ],
+      },
+    };
+  }
+  if (norm.includes('URINE')) {
+    return {
+      TEMPLATE_NAME: norm.includes('COMPLETE') ? 'URINE EXAMINATION - COMPLETE' : 'URINE EXAMINATION',
+      Exam: {
+        'Physical Examination': [
+          { Name: 'Quantity', Value: '' },
+          { Name: 'Colour', Value: '' },
+          { Name: 'Appearance', Value: '' },
+          { Name: 'Specific Gravity', Value: '' },
+          { Name: 'Deposit', Value: '' },
+        ],
+        'Chemical Examination': [
+          { Name: 'Reaction (pH)', Value: '' },
+          { Name: 'Protein / Albumin', Value: '' },
+          { Name: 'Sugar / Glucose', Value: '' },
+          { Name: 'Ketone Bodies', Value: '' },
+          { Name: 'Bile Salts', Value: '' },
+          { Name: 'Bile Pigments', Value: '' },
+          { Name: 'Urobilinogen', Value: '' },
+          { Name: 'Blood / Hemoglobin', Value: '' },
+        ],
+        'Microscopic Examination': [
+          { Name: 'Pus Cells', Value: '' },
+          { Name: 'R.B.C.', Value: '' },
+          { Name: 'Epithelial Cells', Value: '' },
+          { Name: 'Casts', Value: '' },
+          { Name: 'Crystals', Value: '' },
+          { Name: 'Bacteria', Value: '' },
+          { Name: 'Yeast Cells', Value: '' },
+        ],
+        Others: [
+          { Name: 'Mucus Threads', Value: '' },
+          { Name: 'Amorphous Phosphates', Value: '' },
+        ],
+      },
+    };
+  }
+  if (norm.includes('SEMEN')) {
+    return {
+      TEMPLATE_NAME: 'SEMEN ANALYSIS',
+      Exam: {
+        'Physical Examination': [
+          { Name: 'Period of Abstinence', Value: '' },
+          { Name: 'Time of Collection', Value: '' },
+          { Name: 'Time of Examination', Value: '' },
+          { Name: 'Volume', Value: '' },
+          { Name: 'Colour & Appearance', Value: '' },
+          { Name: 'Liquefaction Time', Value: '' },
+          { Name: 'Viscosity', Value: '' },
+          { Name: 'pH', Value: '' },
+        ],
+        'Microscopic Examination': [
+          { Name: 'Total Sperm Count', Value: '' },
+          { Name: 'Active Motility (Grade a)', Value: '' },
+          { Name: 'Sluggish Motility (Grade b)', Value: '' },
+          { Name: 'Non-Progressive (Grade c)', Value: '' },
+          { Name: 'Immotile (Grade d)', Value: '' },
+          { Name: 'Normal Morphology', Value: '' },
+          { Name: 'Abnormal Forms', Value: '' },
+          { Name: 'Pus Cells', Value: '' },
+          { Name: 'Epithelial Cells', Value: '' },
+          { Name: 'Agglutination', Value: '' },
+        ],
+        Others: [
+          { Name: 'Fructose', Value: '' },
+          { Name: 'Impression / Note', Value: '' },
+        ],
+      },
+    };
+  }
+  if (norm.includes('CSF') || norm.includes('FLUID') || norm.includes('ASCITIC') || norm.includes('SYNOVIAL') || norm.includes('PLEURAL')) {
+    return {
+      TEMPLATE_NAME: templateName,
+      Exam: {
+        'Physical Examination': [
+          { Name: 'Quantity', Value: '' },
+          { Name: 'Colour', Value: '' },
+          { Name: 'Appearance / Clarity', Value: '' },
+          { Name: 'Coagulum / Clot', Value: '' },
+          { Name: 'Specific Gravity', Value: '' },
+        ],
+        'Chemical Examination': [
+          { Name: 'Protein', Value: '' },
+          { Name: 'Glucose', Value: '' },
+          { Name: 'Chloride', Value: '' },
+          { Name: 'L.D.H.', Value: '' },
+          { Name: 'Adenosine Deaminase (ADA)', Value: '' },
+        ],
+        'Microscopic / Cytological Examination': [
+          { Name: 'Total WBC Count', Value: '' },
+          { Name: 'Polymorphs (Neutrophils)', Value: '' },
+          { Name: 'Lymphocytes', Value: '' },
+          { Name: 'RBCs', Value: '' },
+          { Name: 'Malignant / Atypical Cells', Value: '' },
+        ],
+        'Microbiological Examination': [
+          { Name: 'Gram Stain', Value: '' },
+          { Name: 'ZN Stain for AFB', Value: '' },
+          { Name: 'India Ink Preparation', Value: '' },
+        ],
+      },
+    };
+  }
+  if (norm.includes('HISTOPATHOLOGY') || norm.includes('FNAC') || norm.includes('BIOPSY')) {
+    return {
+      TEMPLATE_NAME: templateName,
+      Exam: {
+        'Gross Examination': [
+          { Name: 'Specimen Received', Value: '' },
+          { Name: 'Dimensions / Weight', Value: '' },
+          { Name: 'External Surface & Cut Surface', Value: '' },
+          { Name: 'Number of Blocks Processed', Value: '' },
+        ],
+        'Microscopic Examination': [
+          { Name: 'Section Findings', Value: '' },
+          { Name: 'Cellular Architecture', Value: '' },
+          { Name: 'Nuclear Atypia / Mitotic Figures', Value: '' },
+          { Name: 'Stromal / Vascular Infiltration', Value: '' },
+          { Name: 'Surgical Resection Margins', Value: '' },
+        ],
+        'Diagnostic Impression': [
+          { Name: 'Final Histopathological Diagnosis', Value: '' },
+          { Name: 'Pathological Staging / Grade', Value: '' },
+          { Name: 'Comments / Recommendations', Value: '' },
+        ],
+      },
+    };
+  }
+  return {
+    TEMPLATE_NAME: templateName,
+    Exam: {
+      'General Observations': [
+        { Name: 'Parameter 1', Value: '' },
+        { Name: 'Parameter 2', Value: '' },
+        { Name: 'Parameter 3', Value: '' },
+      ],
+      'Clinical Findings': [
+        { Name: 'Finding 1', Value: '' },
+        { Name: 'Finding 2', Value: '' },
+      ],
+      'Impression / Remarks': [
+        { Name: 'Interpretation', Value: '' },
+        { Name: 'Note', Value: '' },
+      ],
+    },
+  };
+};
+
+// In-memory store for template reports updated locally
+const localTemplateReports = new Map();
+
+/**
+ * Fetch structured full-page template JSON (API_GET_TEMPLATE_JSON="GETTEMPLATEJSON")
+ * /GetAPIServlet?api=GETTEMPLATEJSON&reportId=P14R3
+ */
+export const getTemplateJson = async (req, res, next) => {
+  try {
+    const { reportId, templateName = 'STOOL EXAMINATION' } = req.query;
+    if (!reportId) {
+      return res.status(400).json({ STATUS: 'FAILED', Message: 'reportId is required' });
+    }
+
+    const cleanReportId = String(reportId).trim();
+
+    // 1. Check local in-memory store
+    if (localTemplateReports.has(cleanReportId)) {
+      const stored = localTemplateReports.get(cleanReportId);
+      return res.json({
+        STATUS: 'SUCCESS',
+        StatusCode: '0000',
+        payLoadJSON: {
+          TemplateReport: stored,
+        },
+        templateReport: stored,
+      });
+    }
+
+    // 2. Fetch from upstream GETTEMPLATEJSON
+    try {
+      const upstreamRes = await upstreamService.get(
+        'GETTEMPLATEJSON',
+        { reportId: cleanReportId },
+        req.user?.upstreamSid
+      );
+      if (upstreamRes?.payLoadJSON?.TemplateReport) {
+        const report = upstreamRes.payLoadJSON.TemplateReport;
+        localTemplateReports.set(cleanReportId, report);
+        return res.json({
+          STATUS: 'SUCCESS',
+          StatusCode: '0000',
+          payLoadJSON: upstreamRes.payLoadJSON,
+          templateReport: report,
+        });
+      }
+    } catch (upstreamErr) {
+      console.warn(`[getTemplateJson] Upstream GETTEMPLATEJSON warning for ${cleanReportId}:`, upstreamErr.message);
+    }
+
+    // 3. Fallback: generate standard structured resultJSON
+    const fallbackResultJson = getDefaultTemplateResultJson(templateName);
+    const fallbackReport = {
+      resultJSON: fallbackResultJson,
+      TEMPLATE_NAME: fallbackResultJson.TEMPLATE_NAME,
+      reportId: cleanReportId,
+      name: fallbackResultJson.TEMPLATE_NAME,
+      templatesDate: new Date().toISOString().slice(0, 10),
+      status: 'Active',
+    };
+    localTemplateReports.set(cleanReportId, fallbackReport);
+
+    return res.json({
+      STATUS: 'SUCCESS',
+      StatusCode: '0000',
+      payLoadJSON: {
+        TemplateReport: fallbackReport,
+      },
+      templateReport: fallbackReport,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Update full-page template data (API_UPDATE_TEMPLATE_DATA="UPDATETEMPLATEDATA")
+ * /APIServlet?api=UPDATETEMPLATEDATA&reportId=P14R3
+ * Sends resultJSON as body of request
+ */
+export const updateTemplateData = async (req, res, next) => {
+  try {
+    const reportId = req.query.reportId || req.body.reportId;
+    if (!reportId) {
+      return res.status(400).json({ STATUS: 'FAILED', Message: 'reportId is required' });
+    }
+
+    const cleanReportId = String(reportId).trim();
+    const resultJSON = req.body.resultJSON || req.body;
+
+    if (!resultJSON || typeof resultJSON !== 'object') {
+      return res.status(400).json({ STATUS: 'FAILED', Message: 'resultJSON object is required in request body' });
+    }
+
+    console.log(`[updateTemplateData] Updating template resultJSON for ${cleanReportId}...`);
+
+    // 1. Post to upstream UPDATETEMPLATEDATA with resultJSON in body
+    let upstreamRes = null;
+    try {
+      upstreamRes = await upstreamService.post(
+        'UPDATETEMPLATEDATA',
+        { reportId: cleanReportId },
+        resultJSON,
+        req.user?.upstreamSid
+      );
+    } catch (err) {
+      console.warn(`[updateTemplateData] Upstream UPDATETEMPLATEDATA warning for ${cleanReportId}:`, err.message);
+    }
+
+    // 2. Also ensure status is updated via UPDATETEMPLATE if needed
+    try {
+      await upstreamService.post(
+        'UPDATETEMPLATE',
+        {
+          reportId: cleanReportId,
+          status: 'SAVED',
+          TEMPLATE_NAME: resultJSON.TEMPLATE_NAME || '',
+        },
+        null,
+        req.user?.upstreamSid
+      );
+    } catch (tmplErr) {
+      // Non-fatal
+    }
+
+    // 3. Update local in-memory store
+    const existing = localTemplateReports.get(cleanReportId) || {};
+    const updatedReport = {
+      ...existing,
+      reportId: cleanReportId,
+      resultJSON,
+      TEMPLATE_NAME: resultJSON.TEMPLATE_NAME || existing.TEMPLATE_NAME || 'TEMPLATE REPORT',
+      status: 'SAVED',
+      templatesDate: new Date().toISOString().slice(0, 10),
+    };
+    localTemplateReports.set(cleanReportId, updatedReport);
+
+    // Invalidate report cache
+    reportCache.flushAll();
+
+    return res.json({
+      STATUS: upstreamRes?.STATUS || 'SUCCESS',
+      StatusCode: upstreamRes?.StatusCode || '0000',
+      Message: upstreamRes?.Message || 'Template Report Updated',
+      reportId: cleanReportId,
+      templateReport: updatedReport,
+      data: upstreamRes,
+    });
+  } catch (err) {
+    next(err);
+  }
+};

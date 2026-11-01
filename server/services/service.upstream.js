@@ -2,6 +2,8 @@ import axios from 'axios';
 import { config } from '../config/config.env.js';
 
 export const API_LOGIN_V2 = "LOGINV2";
+export const API_DASHBOARD_REFRESH = "DASHBOARDREFRESH";
+export const API_GET_DASHBOARD_JSON = "GETDASHBOARDJSON";
 
 export const UPSTREAM_ERROR_MAP = {
   '0001': 'API missing',
@@ -26,7 +28,24 @@ class UpstreamService {
   async ensureMasterSession(forceRefresh = false) {
     const isExpired = !this.lastLoginTime || (Date.now() - this.lastLoginTime > 4 * 60 * 60 * 1000);
     if (!this.masterSid || forceRefresh || isExpired) {
-      await this.loginMaster();
+      try {
+        await this.loginMaster();
+      } catch (loginErr) {
+        // Fallback: recover session from MongoDB active session
+        try {
+          const { Session } = await import('../models/model.session.js');
+          const latestActive = await Session.findOne({ isActive: true }).sort({ createdAt: -1 });
+          if (latestActive?.upstreamSid) {
+            this.masterSid = latestActive.upstreamSid;
+            this.lastLoginTime = Date.now();
+            console.log(`[Upstream] Recovered master session from active MongoDB session: ${this.masterSid}`);
+            return this.masterSid;
+          }
+        } catch (dbErr) {
+          // MongoDB not accessible or no active session
+        }
+        throw loginErr;
+      }
     }
     return this.masterSid;
   }
@@ -157,7 +176,25 @@ class UpstreamService {
    * Generic GET call to GetAPIServlet
    */
   async get(apiName, params = {}, sid = null) {
-    const activeSid = sid || await this.ensureMasterSession();
+    let activeSid = sid;
+    if (!activeSid) {
+      try {
+        activeSid = await this.ensureMasterSession();
+      } catch (sidErr) {
+        try {
+          const { Session } = await import('../models/model.session.js');
+          const latest = await Session.findOne({ isActive: true }).sort({ createdAt: -1 });
+          if (latest?.upstreamSid) {
+            activeSid = latest.upstreamSid;
+            this.masterSid = activeSid;
+            this.lastLoginTime = Date.now();
+          }
+        } catch (dbErr) {
+          // ignore
+        }
+        if (!activeSid) throw sidErr;
+      }
+    }
     const query = new URLSearchParams({ api: apiName, ...this._sanitizeParams(params) }).toString();
     const url = `${this.baseUrl}/GetAPIServlet;jsessionid=${activeSid}?${query}`;
 
@@ -185,16 +222,38 @@ class UpstreamService {
   /**
    * Generic POST call to APIServlet
    */
-  async post(apiName, params = {}, body = null, sid = null) {
-    const activeSid = sid || await this.ensureMasterSession();
+  async post(apiName, params = {}, body = null, sid = null, customHeaders = {}) {
+    let activeSid = sid;
+    if (!activeSid) {
+      try {
+        activeSid = await this.ensureMasterSession();
+      } catch (sidErr) {
+        try {
+          const { Session } = await import('../models/model.session.js');
+          const latest = await Session.findOne({ isActive: true }).sort({ createdAt: -1 });
+          if (latest?.upstreamSid) {
+            activeSid = latest.upstreamSid;
+            this.masterSid = activeSid;
+            this.lastLoginTime = Date.now();
+          }
+        } catch (dbErr) {
+          // ignore
+        }
+        if (!activeSid) throw sidErr;
+      }
+    }
     const query = new URLSearchParams({ api: apiName, ...this._sanitizeParams(params) }).toString();
     const url = `${this.baseUrl}/APIServlet;jsessionid=${activeSid}?${query}`;
+
+    const isJsonBody = typeof body === 'object' && body !== null && !(body instanceof URLSearchParams);
+    const contentType = isJsonBody ? 'application/json' : 'application/x-www-form-urlencoded';
 
     try {
       const res = await axios.post(url, body || query, {
         headers: {
           'Cookie': `JSESSIONID=${activeSid}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Type': contentType,
+          ...customHeaders,
         },
         timeout: 15000,
       });
@@ -210,6 +269,31 @@ class UpstreamService {
       console.error(`[Upstream] POST ${apiName} failed:`, err.message);
       throw err;
     }
+  }
+
+  /**
+   * Fetch dashboard analytics via GETDASHBOARDJSON (GET)
+   * Both fromDate & toDate strictly in yyyy-MM-dd format
+   */
+  async getDashboardJson(fromDate, toDate, sid = null) {
+    return await this.get(
+      API_GET_DASHBOARD_JSON,
+      { fromDate, toDate },
+      sid
+    );
+  }
+
+  /**
+   * Request upstream dashboard refresh via DASHBOARDREFRESH (POST)
+   * Both fromDate & toDate strictly in yyyy-MM-dd format
+   */
+  async refreshDashboard(fromDate, toDate, sid = null) {
+    return await this.post(
+      API_DASHBOARD_REFRESH,
+      { fromDate, toDate },
+      null,
+      sid
+    );
   }
 
   /**

@@ -105,10 +105,10 @@ export default function Sidebar({ onOpenNewPatient }) {
             {!collapsed && (
               <div className="leading-tight truncate">
                 <span className="font-extrabold text-sm tracking-tight text-slate-900 block truncate">
-                  Lab Expert LIS
+                  New Life Care
                 </span>
-                <span className="text-[10px] font-medium text-slate-400 block truncate">
-                  New Life Care Diagnostics
+                <span className="text-[10px] font-semibold text-blue-600 block truncate">
+                  Midnapore LIS Portal
                 </span>
               </div>
             )}

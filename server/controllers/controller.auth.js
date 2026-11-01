@@ -52,6 +52,15 @@ export const login = async (req, res, next) => {
 
     const sid = upstreamRes.sid;
 
+    // Immediately register active sid with upstreamService for downstream queries and cache sync
+    upstreamService.masterSid = sid;
+    upstreamService.lastLoginTime = Date.now();
+
+    // Trigger async cache check/warm in background with fresh sid
+    cacheService.warmAllCaches(sid).catch((err) => {
+      console.warn('[Auth] Background cache warm notice:', err.message);
+    });
+
     // Fetch user details from cached USER_LIST to identify role and permissions
     let matchedUser = null;
     try {

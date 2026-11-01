@@ -2,6 +2,13 @@ import NodeCache from 'node-cache';
 import { config } from '../config/config.env.js';
 import { upstreamService } from './service.upstream.js';
 import { Cache as CacheModel } from '../models/model.cache.js';
+import {
+  ALL_CLINICAL_DEFAULTS,
+  DEFAULT_SAMPLES,
+  DEFAULT_TEMPLATES,
+} from './service.defaults.js';
+
+export { DEFAULT_SAMPLES, DEFAULT_TEMPLATES, ALL_CLINICAL_DEFAULTS };
 
 // Cache keys matching user specification
 export const CACHE_KEYS = {
@@ -12,6 +19,7 @@ export const CACHE_KEYS = {
   PKG_LIST: 'PKG_LIST',
   TEST_LIST: 'TEST_LIST',
   TEMPLATE_LIST: 'TEMPLATE_LIST',
+  SAMPLE_LIST: 'SAMPLE_LIST',
   DOCT_LIST: 'DOCT_LIST',
   REFERANCE_LIST: 'REFERANCE_LIST',
   BRANCH_LIST: 'BRANCH_LIST',
@@ -45,8 +53,12 @@ export const API_MAPPING = {
     extract: (data) => data?.payLoadJSON?.tests || [],
   },
   [CACHE_KEYS.TEMPLATE_LIST]: {
-    api: 'GETINTERPRETATIONLIST',
-    extract: (data) => data?.payLoadJSON?.interpretations || [],
+    api: 'GETTEMPLATELIST',
+    extract: (data) => data?.payLoadJSON?.templateList || data?.payLoadJSON?.templates || data?.payLoadJSON?.interpretations || [],
+  },
+  [CACHE_KEYS.SAMPLE_LIST]: {
+    api: 'GETSAMPLELIST',
+    extract: (data) => data?.payLoadJSON?.samples || [],
   },
   [CACHE_KEYS.DOCT_LIST]: {
     api: 'GETDOCTORLIST',
@@ -80,8 +92,10 @@ class MasterCacheService {
    * Get list from cache or fetch from upstream if cache miss
    */
   async getList(cacheKey, forceRefresh = false, sid = null) {
-    if (!forceRefresh && this.cache.has(cacheKey)) {
-      const cached = this.cache.get(cacheKey);
+    const cached = this.cache.get(cacheKey);
+    const hasValidData = Array.isArray(cached) && cached.length > 0;
+
+    if (!forceRefresh && this.cache.has(cacheKey) && hasValidData) {
       const meta = this.metadata.get(cacheKey) || {};
       return {
         data: cached,
@@ -92,7 +106,7 @@ class MasterCacheService {
       };
     }
 
-    // Cache Miss or Force Refresh - Fetch from upstream
+    // Cache Miss, empty cache, or Force Refresh - Fetch from upstream or load from MongoDB
     return await this.refreshList(cacheKey, sid);
   }
 
@@ -105,9 +119,69 @@ class MasterCacheService {
       throw new Error(`Unknown cache key: ${cacheKey}`);
     }
 
-    console.log(`[Cache] Fetching fresh data from upstream for ${cacheKey} (${mapping.api})...`);
-    const rawData = await upstreamService.get(mapping.api, {}, sid);
-    const items = mapping.extract(rawData);
+    // Resolve active session id
+    let activeSid = sid || upstreamService.masterSid;
+    if (!activeSid) {
+      try {
+        const { Session } = await import('../models/model.session.js');
+        const latestActive = await Session.findOne({ isActive: true }).sort({ createdAt: -1 });
+        if (latestActive?.upstreamSid) {
+          activeSid = latestActive.upstreamSid;
+          upstreamService.masterSid = activeSid;
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    let items = [];
+    try {
+      console.log(`[Cache] Fetching fresh data from upstream for ${cacheKey} (${mapping.api})...`);
+      const rawData = await upstreamService.get(mapping.api, {}, activeSid);
+      if (rawData?.STATUS === 'SUCCESS' || rawData?.StatusCode === '0000') {
+        const extracted = mapping.extract(rawData);
+        if (Array.isArray(extracted) && extracted.length > 0) {
+          items = extracted;
+        }
+      } else {
+        console.warn(`[Cache] Upstream response not successful for ${cacheKey}: ${rawData?.Message || rawData?.StatusCode}`);
+      }
+    } catch (fetchErr) {
+      console.warn(`[Cache] Upstream fetch failed for ${cacheKey}:`, fetchErr.message);
+    }
+
+    // 1. If upstream failed or returned 0, preserve existing memory cache if valid
+    if (!items || items.length === 0) {
+      const currentlyCached = this.cache.get(cacheKey);
+      if (Array.isArray(currentlyCached) && currentlyCached.length > 0) {
+        items = currentlyCached;
+        console.log(`[Cache] Preserved existing memory cache for ${cacheKey} (${items.length} items).`);
+      }
+    }
+
+    // 2. If still empty, try to recover from MongoDB
+    if (!items || items.length === 0) {
+      try {
+        if (CacheModel?.findOne) {
+          const dbDoc = await CacheModel.findOne({ key: cacheKey });
+          if (dbDoc && Array.isArray(dbDoc.data) && dbDoc.data.length > 0) {
+            items = dbDoc.data;
+            console.log(`[Cache] Recovered ${items.length} items from MongoDB for ${cacheKey}`);
+          }
+        }
+      } catch (dbErr) {
+        // continue
+      }
+    }
+
+    // 3. Clinical defaults fallback if upstream and MongoDB are both empty
+    if (!items || items.length === 0) {
+      const fallbackList = ALL_CLINICAL_DEFAULTS[cacheKey];
+      if (Array.isArray(fallbackList) && fallbackList.length > 0) {
+        items = [...fallbackList];
+        console.log(`[Cache] Applied clinical default fallback for ${cacheKey} (${items.length} items).`);
+      }
+    }
 
     const now = new Date();
     const expiresAt = new Date(now.getTime() + config.cacheTtlSeconds * 1000);
@@ -121,9 +195,9 @@ class MasterCacheService {
       itemCount: items.length,
     });
 
-    // Optionally persist in MongoDB if connected
+    // Optionally persist in MongoDB if connected (do not overwrite non-empty DB record with empty array)
     try {
-      if (CacheModel?.findOneAndUpdate) {
+      if (CacheModel?.findOneAndUpdate && items.length > 0) {
         await CacheModel.findOneAndUpdate(
           { key: cacheKey },
           {
@@ -170,12 +244,38 @@ class MasterCacheService {
   /**
    * Pre-warm all master lists on server startup
    */
-  async warmAllCaches() {
+  async warmAllCaches(sid = null) {
     console.log('[Cache] Pre-warming master lists (24h TTL)...');
+
+    // 1. Immediately hydrate in-memory cache from MongoDB for instant sub-millisecond readiness
+    try {
+      if (CacheModel?.find) {
+        const storedDocs = await CacheModel.find({});
+        for (const doc of storedDocs) {
+          if (doc?.key && Array.isArray(doc.data) && doc.data.length > 0) {
+            this.cache.set(doc.key, doc.data, config.cacheTtlSeconds);
+            this.metadata.set(doc.key, {
+              cachedAt: doc.lastFetchedAt ? new Date(doc.lastFetchedAt).toISOString() : new Date().toISOString(),
+              expiresAt: doc.expiresAt ? new Date(doc.expiresAt).toISOString() : new Date(Date.now() + config.cacheTtlSeconds * 1000).toISOString(),
+              api: API_MAPPING[doc.key]?.api || '',
+              itemCount: doc.data.length,
+            });
+          }
+        }
+        console.log(`[Cache] Pre-loaded ${storedDocs.length} master lists from MongoDB into memory.`);
+      }
+    } catch (dbInitErr) {
+      console.warn('[Cache] Could not pre-load from MongoDB:', dbInitErr.message);
+    }
+
+    // 2. Fetch fresh data for any missing or empty lists
     const keys = Object.values(CACHE_KEYS);
     for (const key of keys) {
       try {
-        await this.getList(key);
+        const cached = this.cache.get(key);
+        if (!cached || !Array.isArray(cached) || cached.length === 0) {
+          await this.getList(key, true, sid);
+        }
       } catch (err) {
         console.warn(`[Cache] Pre-warm failed for ${key}:`, err.message);
       }

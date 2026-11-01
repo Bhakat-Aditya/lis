@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Copy, Check, FileCode, Server, Database, Sparkles } from 'lucide-react';
+import { X, Copy, Check, FileCode, Server, Database, Sparkles, RefreshCw } from 'lucide-react';
 
 export default function ApiJsonModal({ isOpen, onClose, currentData }) {
   const [copied, setCopied] = useState(false);
@@ -251,37 +251,43 @@ export default function ApiJsonModal({ isOpen, onClose, currentData }) {
               <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
                 <h4 className="font-bold text-sm text-blue-900 mb-1 flex items-center gap-2">
                   <Server className="w-4 h-4 text-blue-600" />
-                  <span>Target API Endpoint for Upstream Java / Medipath Server</span>
+                  <span>1. GET API_GET_DASHBOARD_JSON="GETDASHBOARDJSON"</span>
                 </h4>
                 <p className="text-slate-600 text-xs">
-                  The upstream LIS backend engineer should expose this servlet endpoint:
+                  Called constantly to render the dashboard analytics and daily statistics:
                 </p>
                 <div className="bg-white rounded-xl p-2.5 mt-2 border border-blue-200 font-mono text-xs text-blue-700 font-bold">
-                  GET /GetAPIServlet?api=GETDASHBOARDANALYTICS&date=2026-10-28&days=9&branch=ALL
+                  GET /GetAPIServlet?api=GETDASHBOARDJSON&fromDate=2026-10-20&toDate=2026-10-28
                 </div>
               </div>
 
-              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
-                <h4 className="font-bold text-sm text-emerald-900 mb-1 flex items-center gap-2">
-                  <Database className="w-4 h-4 text-emerald-600" />
-                  <span>Middleman Proxy Endpoint</span>
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+                <h4 className="font-bold text-sm text-amber-900 mb-1 flex items-center gap-2">
+                  <RefreshCw className="w-4 h-4 text-amber-600" />
+                  <span>2. POST API_DASHBOARD_REFRESH="DASHBOARDREFRESH"</span>
                 </h4>
                 <p className="text-slate-600 text-xs">
-                  Our Node/Express middleman server exposes this route to the client frontend:
+                  Triggered strictly when the user clicks the Refresh Analytics button:
                 </p>
-                <div className="bg-white rounded-xl p-2.5 mt-2 border border-emerald-200 font-mono text-xs text-emerald-700 font-bold">
-                  GET /api/analytics/dashboard?date=2026-10-28&days=9&branch=Central
+                <div className="bg-white rounded-xl p-2.5 mt-2 border border-amber-200 font-mono text-xs text-amber-700 font-bold">
+                  POST /APIServlet?api=DASHBOARDREFRESH&fromDate=2026-10-20&toDate=2026-10-28
+                </div>
+                <div className="mt-2 text-[11px] text-amber-800 bg-amber-100/60 p-2 rounded-lg">
+                  ⚡ <strong>Refresh Flow Protocol:</strong> Once this POST returns a success response, the client executes a <strong>2-minute default wait timer</strong> (with countdown progress) and then immediately invokes <code>GETDASHBOARDJSON</code>.
                 </div>
               </div>
 
               <div className="border border-slate-200 rounded-2xl p-4 space-y-2">
                 <h5 className="font-bold text-slate-900 text-xs uppercase tracking-wider">
-                  Request Parameters:
+                  Parameters for Both Endpoints (Strict Format):
                 </h5>
                 <ul className="list-disc list-inside space-y-1 text-slate-600">
-                  <li><code className="font-bold text-slate-900">date</code>: (String, YYYY-MM-DD) Filter day for the 6 pie charts & daily statistics.</li>
-                  <li><code className="font-bold text-slate-900">days</code>: (Number, default: 9) Number of past consecutive days for the stacked patient registration bar chart.</li>
-                  <li><code className="font-bold text-slate-900">branch</code>: (Optional String) Clinic branch name for multi-location isolation.</li>
+                  <li>
+                    <code className="font-bold text-slate-900">fromDate</code>: (String, <code className="text-indigo-600 font-bold">yyyy-MM-dd</code>) Start date of the range (e.g. <code>2026-10-20</code>).
+                  </li>
+                  <li>
+                    <code className="font-bold text-slate-900">toDate</code>: (String, <code className="text-indigo-600 font-bold">yyyy-MM-dd</code>) End date of the range (e.g. <code>2026-10-28</code>).
+                  </li>
                 </ul>
               </div>
             </div>

@@ -7,7 +7,6 @@ import { PatientProvider } from './context/context.patient.jsx';
 import SmoothScrollProvider from './components/common/SmoothScrollProvider.jsx';
 
 // Common UI
-import Navbar from './components/common/Navbar.jsx';
 import Sidebar from './components/common/Sidebar.jsx';
 import PatientRegistrationModal from './components/patient/PatientRegistrationModal.jsx';
 
@@ -42,14 +41,11 @@ const ProtectedLayout = () => {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-slate-50 text-slate-900 antialiased selection:bg-indigo-100 selection:text-indigo-900 overflow-hidden">
-      <Navbar onSearch={(term) => navigate(term ? `/patients?search=${encodeURIComponent(term)}` : '/patients')} />
-      <div className="flex flex-1 overflow-hidden min-h-0">
-        <Sidebar onOpenNewPatient={() => setIsRegisterOpen(true)} />
-        <main className="flex-1 p-3 md:p-5 overflow-y-auto max-w-7xl mx-auto w-full">
-          <Outlet context={{ openNewPatient: () => setIsRegisterOpen(true) }} />
-        </main>
-      </div>
+    <div className="h-screen flex bg-slate-50 text-slate-900 antialiased selection:bg-indigo-100 selection:text-indigo-900 overflow-hidden">
+      <Sidebar onOpenNewPatient={() => setIsRegisterOpen(true)} />
+      <main className="flex-1 p-3 md:p-5 overflow-y-auto max-w-7xl mx-auto w-full min-h-0">
+        <Outlet context={{ openNewPatient: () => setIsRegisterOpen(true) }} />
+      </main>
 
       {/* Global Patient Registration Modal */}
       <PatientRegistrationModal

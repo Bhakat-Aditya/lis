@@ -37,10 +37,15 @@ export default function TestSelectionView({
   onFillResults,
   onMakePayment,
 }) {
-  const { tests: catalogTests = [], profiles: catalogProfiles = [], packages: catalogPackages = [] } = useMaster();
+  const {
+    tests: catalogTests = [],
+    profiles: catalogProfiles = [],
+    packages: catalogPackages = [],
+    templates: catalogTemplates = [],
+  } = useMaster();
   const [searchTerm, setSearchTerm] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [dropdownCategoryFilter, setDropdownCategoryFilter] = useState('ALL'); // ALL, PKG, PROF, TEST
+  const [dropdownCategoryFilter, setDropdownCategoryFilter] = useState('ALL'); // ALL, PKG, PROF, TEST, TEMPLATE
   const [expandedSuggestions, setExpandedSuggestions] = useState({});
   const [expandedLots, setExpandedLots] = useState({});
 
@@ -156,8 +161,26 @@ export default function TestSelectionView({
       }
     });
 
+    // 4. Master Template Reports (Full-Page Report Structure)
+    (catalogTemplates || []).forEach((tmpl, idx) => {
+      const id = String(tmpl.templatesId || tmpl.id || tmpl.reportId || `T${idx + 1}`).trim();
+      if (id) {
+        items.push({
+          type: 'TEMPLATE',
+          id,
+          testId: id,
+          name: tmpl.TEMPLATE_NAME || tmpl.name || `Template Report ${id}`,
+          shortName: 'Template',
+          rate: Number(tmpl.price || tmpl.Rate || 0) || 0,
+          category: 'Template',
+          subTests: [],
+          subTestCount: 0,
+        });
+      }
+    });
+
     return items;
-  }, [catalogTests, catalogProfiles, catalogPackages, testMapById, profileSubTestsMap]);
+  }, [catalogTests, catalogProfiles, catalogPackages, catalogTemplates, testMapById, profileSubTestsMap]);
 
   // Group existing reports and patient testList into clean Package, Profile, and Test lots
   const existingLots = useMemo(() => {
@@ -784,6 +807,19 @@ export default function TestSelectionView({
                         <FlaskConical className="w-3 h-3" />
                         <span>Tests ({catalogTests.length})</span>
                       </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setDropdownCategoryFilter('TEMPLATE')}
+                        className={`px-2 py-0.5 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                          dropdownCategoryFilter === 'TEMPLATE'
+                            ? 'bg-rose-600 text-white shadow-2xs'
+                            : 'bg-rose-50 text-rose-900 border border-rose-200 hover:bg-rose-100'
+                        }`}
+                      >
+                        <FileEdit className="w-3 h-3" />
+                        <span>Templates ({catalogTemplates.length})</span>
+                      </button>
                     </div>
 
                     <span className="text-[10px] text-slate-400 font-normal hidden sm:inline">
@@ -813,6 +849,9 @@ export default function TestSelectionView({
                         } else if (category === 'Profile') {
                           badgeColor = 'bg-purple-50 text-purple-900 border-purple-300';
                           icon = <Layers className="w-3.5 h-3.5 text-purple-600" />;
+                        } else if (category === 'Template') {
+                          badgeColor = 'bg-rose-50 text-rose-900 border-rose-300';
+                          icon = <FileEdit className="w-3.5 h-3.5 text-rose-600" />;
                         }
 
                         const itemStatus = getCatalogItemStatus(t);
@@ -1072,6 +1111,9 @@ export default function TestSelectionView({
                       } else if (t.category === 'Profile') {
                         categoryBadge = 'bg-purple-50 text-purple-900 border-purple-300';
                         catIcon = <Layers className="w-3 h-3 text-purple-600" />;
+                      } else if (t.category === 'Template') {
+                        categoryBadge = 'bg-rose-50 text-rose-900 border-rose-300';
+                        catIcon = <FileEdit className="w-3 h-3 text-rose-600" />;
                       }
 
                       return (

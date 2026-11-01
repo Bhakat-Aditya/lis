@@ -59,6 +59,7 @@ export default function MasterEditModal({
     packages = [],
     tests = [],
     branches = [],
+    samples = [],
     updateMasterItem,
   } = useMaster();
 
@@ -182,6 +183,19 @@ export default function MasterEditModal({
         accessbranch: item?.accessBranch || item?.accessbranch || '',
         status: item?.status || item?.Status || 'Active',
       });
+    } else if (category === 'samples') {
+      setFormData({
+        id: item?.['Sample Id'] || item?.id || '',
+        name: item?.Name || item?.name || '',
+        status: item?.Status || item?.status || 'Active',
+      });
+    } else if (category === 'templates') {
+      setFormData({
+        reportId: item?.templatesId || item?.reportId || item?.id || '',
+        TEMPLATE_NAME: item?.TEMPLATE_NAME || item?.['Template Name'] || item?.name || '',
+        price: item?.price || item?.Rate || item?.rate || '0',
+        status: item?.status || item?.Status || 'Active',
+      });
     }
   }, [isOpen, category, item, departments, units, methods]);
 
@@ -237,6 +251,10 @@ export default function MasterEditModal({
         return isEditing ? `Edit Lab Branch (#${formData.id || ''})` : 'Add New Branch';
       case 'users':
         return isEditing ? `Edit Staff User (${formData.login || ''})` : 'Add New Staff User';
+      case 'samples':
+        return isEditing ? `Edit Sample Type (${formData.name || formData.id || ''})` : 'Add New Sample Type';
+      case 'templates':
+        return isEditing ? `Edit Master Template Report (${formData.reportId || ''})` : 'Add New Template Report';
       default:
         return 'Edit Master Catalog Item';
     }
@@ -259,6 +277,8 @@ export default function MasterEditModal({
         units: 'unit',
         branches: 'branch',
         users: 'user',
+        samples: 'sample',
+        templates: 'template',
       };
 
       const apiType = routeTypeMap[category];
@@ -385,7 +405,10 @@ export default function MasterEditModal({
                   onChange={(e) => handleChange('TEST_SAMPLE', e.target.value)}
                   className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg"
                 >
-                  {SAMPLE_TYPE_OPTIONS.map((s) => (
+                  {(samples && samples.length > 0
+                    ? Array.from(new Set([...samples.map((s) => s.Name || s.name).filter(Boolean), ...SAMPLE_TYPE_OPTIONS]))
+                    : SAMPLE_TYPE_OPTIONS
+                  ).map((s) => (
                     <option key={s} value={s}>
                       {s}
                     </option>
@@ -1311,6 +1334,139 @@ export default function MasterEditModal({
                 placeholder={isEditing ? '••••••••' : 'Enter login password'}
                 className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg"
               />
+            </div>
+          </div>
+        )}
+
+        {/* 9. SAMPLES FORM */}
+        {category === 'samples' && (
+          <div className="space-y-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Sample ID {isEditing ? '(Locked)' : ''}
+                </label>
+                <input
+                  type="text"
+                  disabled={isEditing}
+                  value={formData.id || ''}
+                  onChange={(e) => handleChange('id', e.target.value)}
+                  placeholder="e.g. 1 (auto-assigned if blank)"
+                  className={`w-full px-3 py-1.5 text-xs border rounded-lg font-mono ${
+                    isEditing ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-white border-slate-300'
+                  }`}
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Sample / Specimen Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.name || ''}
+                  onChange={(e) => handleChange('name', e.target.value)}
+                  placeholder="e.g. Serum, EDTA Whole Blood, Urine, Stool"
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-indigo-500 font-semibold"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                Status
+              </label>
+              <select
+                value={formData.status || 'Active'}
+                onChange={(e) => handleChange('status', e.target.value)}
+                className="w-full sm:w-1/3 px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-bold"
+              >
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </div>
+
+            <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900">
+              <p className="font-semibold mb-1">Specimen Master Integration</p>
+              <p className="text-[11px] text-amber-700 leading-relaxed">
+                This Sample type will be automatically made available in the "Sample Type" dropdown when editing tests in Master Catalog, as well as in the "Sample Type / Specimen" dropdown when filling patient test results.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* 10. TEMPLATES FORM */}
+        {category === 'templates' && (
+          <div className="space-y-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Template ID {isEditing ? '(Locked)' : '*'}
+                </label>
+                <input
+                  type="text"
+                  required
+                  disabled={isEditing}
+                  value={formData.reportId || ''}
+                  onChange={(e) => handleChange('reportId', e.target.value)}
+                  placeholder="e.g. T1, T2, ... T15"
+                  className={`w-full px-3 py-1.5 text-xs border rounded-lg font-mono ${
+                    isEditing ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-white border-slate-300'
+                  }`}
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Template Report Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.TEMPLATE_NAME || ''}
+                  onChange={(e) => handleChange('TEMPLATE_NAME', e.target.value)}
+                  placeholder="e.g. URINE EXAMINATION, STOOL EXAMINATION, SEMEN ANALYSIS"
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-indigo-500 font-semibold"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Price / Standard Rate (₹)
+                </label>
+                <input
+                  type="number"
+                  value={formData.price || '0'}
+                  onChange={(e) => handleChange('price', e.target.value)}
+                  placeholder="0"
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Status
+                </label>
+                <select
+                  value={formData.status || 'Active'}
+                  onChange={(e) => handleChange('status', e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-bold"
+                >
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                  <option value="SAVED">SAVED</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="p-3 bg-purple-50 rounded-xl border border-purple-200 text-xs text-purple-900">
+              <p className="font-semibold mb-1">Full-Page Report Structure (15 Templates)</p>
+              <p className="text-[11px] text-purple-700 leading-relaxed">
+                Template reports are full-page reports selectable during Patient Test Ordering. Results are edited through the dedicated full-page template dialog with dynamic section rows in Patient Result Entry.
+              </p>
             </div>
           </div>
         )}

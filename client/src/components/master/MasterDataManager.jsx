@@ -17,6 +17,8 @@ import {
   Ruler,
   Edit3,
   Plus,
+  FileText,
+  TestTube,
 } from 'lucide-react';
 
 export default function MasterDataManager() {
@@ -27,6 +29,8 @@ export default function MasterDataManager() {
     profiles,
     packages,
     tests,
+    templates = [],
+    samples = [],
     doctors,
     references,
     branches,
@@ -132,6 +136,8 @@ export default function MasterDataManager() {
 
   const tabs = [
     { id: 'tests', label: 'Tests', count: tests.length, icon: FlaskConical },
+    { id: 'templates', label: 'Templates', count: templates.length, icon: FileText },
+    { id: 'samples', label: 'Sample Types', count: samples.length, icon: TestTube },
     { id: 'profiles', label: 'Profiles', count: profiles.length, icon: Layers },
     { id: 'packages', label: 'Packages', count: packages.length, icon: FileSpreadsheet },
     { id: 'doctors', label: 'Doctors', count: doctors.length, icon: Stethoscope },
@@ -317,6 +323,270 @@ export default function MasterDataManager() {
             </table>
           )}
 
+          {/* 1b. TEMPLATES TAB (Total 15 types of master templates) */}
+          {activeTab === 'templates' && (
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                <tr>
+                  <th className="py-2.5 px-4 w-24">Template ID</th>
+                  <th className="py-2.5 px-4">Template Report Name</th>
+                  <th className="py-2.5 px-4">Report Structure</th>
+                  <th className="py-2.5 px-4">Sync Date</th>
+                  <th className="py-2.5 px-4">Status</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {templates.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-6 text-center text-slate-400">
+                      No master template reports loaded.
+                    </td>
+                  </tr>
+                ) : (
+                  templates
+                    .filter((tmpl) => {
+                      if (!searchTerm) return true;
+                      const q = searchTerm.toLowerCase().trim();
+                      const name = String(tmpl.TEMPLATE_NAME || tmpl.name || '').toLowerCase();
+                      const id = String(tmpl.templatesId || tmpl.id || tmpl.reportId || '').toLowerCase();
+                      return name.includes(q) || id.includes(q);
+                    })
+                    .map((tmpl, idx) => (
+                      <tr key={tmpl.templatesId || tmpl.reportId || idx} className="hover:bg-slate-50">
+                        <td className="py-2 px-4 font-mono font-bold text-purple-700">
+                          {tmpl.templatesId || `T${idx + 1}`}
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className="font-bold text-slate-900">{tmpl.TEMPLATE_NAME || tmpl.name}</span>
+                        </td>
+                        <td className="py-2 px-4 text-slate-600">
+                          <span className="bg-purple-50 text-purple-800 border border-purple-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                            Full-Page Report Structure
+                          </span>
+                        </td>
+                        <td className="py-2 px-4 font-mono text-slate-500 text-[11px]">
+                          {tmpl.templatesDate || '2026-11-01'}
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            String(tmpl.status || '').toUpperCase() === 'SAVED'
+                              ? 'bg-blue-50 text-blue-700'
+                              : 'bg-emerald-50 text-emerald-700'
+                          }`}>
+                            {tmpl.status || 'Active'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleEditItem(tmpl)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 rounded-md border border-purple-200 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                )}
+              </tbody>
+            </table>
+          )}
+
+          {/* 1c. SAMPLE TYPES TAB (API_GET_SAMPLE_LIST="GETSAMPLELIST") */}
+          {activeTab === 'samples' && (
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                <tr>
+                  <th className="py-2.5 px-4 w-24">Sample ID</th>
+                  <th className="py-2.5 px-4">Sample / Specimen Name</th>
+                  <th className="py-2.5 px-4">Target Application</th>
+                  <th className="py-2.5 px-4">Status</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {samples.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-6 text-center text-slate-400">
+                      No sample types found in master catalog.
+                    </td>
+                  </tr>
+                ) : (
+                  samples
+                    .filter((s) => {
+                      if (!searchTerm) return true;
+                      const q = searchTerm.toLowerCase().trim();
+                      const name = String(s.Name || s.name || '').toLowerCase();
+                      const id = String(s['Sample Id'] || s.id || '').toLowerCase();
+                      return name.includes(q) || id.includes(q);
+                    })
+                    .map((s, idx) => (
+                      <tr key={s['Sample Id'] || s.id || idx} className="hover:bg-slate-50">
+                        <td className="py-2 px-4 font-mono font-bold text-amber-700">
+                          #{s['Sample Id'] || s.id || idx + 1}
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className="font-bold text-slate-900">{s.Name || s.name}</span>
+                        </td>
+                        <td className="py-2 px-4 text-slate-500 text-[11px]">
+                          Master Test & Patient Specimen Accessioning
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                            {s.Status || s.status || 'Active'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleEditItem(s)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                )}
+              </tbody>
+            </table>
+          )}
+
+          {/* 1b. TEMPLATES TAB (Total 15 types of master templates) */}
+          {activeTab === 'templates' && (
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                <tr>
+                  <th className="py-2.5 px-4 w-24">Template ID</th>
+                  <th className="py-2.5 px-4">Template Report Name</th>
+                  <th className="py-2.5 px-4">Report Structure</th>
+                  <th className="py-2.5 px-4">Sync Date</th>
+                  <th className="py-2.5 px-4">Status</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {templates.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-6 text-center text-slate-400">
+                      No master template reports loaded.
+                    </td>
+                  </tr>
+                ) : (
+                  templates
+                    .filter((tmpl) => {
+                      if (!searchTerm) return true;
+                      const q = searchTerm.toLowerCase().trim();
+                      const name = String(tmpl.TEMPLATE_NAME || tmpl.name || '').toLowerCase();
+                      const id = String(tmpl.templatesId || tmpl.id || tmpl.reportId || '').toLowerCase();
+                      return name.includes(q) || id.includes(q);
+                    })
+                    .map((tmpl, idx) => (
+                      <tr key={tmpl.templatesId || tmpl.reportId || idx} className="hover:bg-slate-50">
+                        <td className="py-2 px-4 font-mono font-bold text-purple-700">
+                          {tmpl.templatesId || `T${idx + 1}`}
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className="font-bold text-slate-900">{tmpl.TEMPLATE_NAME || tmpl.name}</span>
+                        </td>
+                        <td className="py-2 px-4 text-slate-600">
+                          <span className="bg-purple-50 text-purple-800 border border-purple-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                            Full-Page Report Structure
+                          </span>
+                        </td>
+                        <td className="py-2 px-4 font-mono text-slate-500 text-[11px]">
+                          {tmpl.templatesDate || '2026-11-01'}
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            String(tmpl.status || '').toUpperCase() === 'SAVED'
+                              ? 'bg-blue-50 text-blue-700'
+                              : 'bg-emerald-50 text-emerald-700'
+                          }`}>
+                            {tmpl.status || 'Active'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleEditItem(tmpl)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 rounded-md border border-purple-200 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                )}
+              </tbody>
+            </table>
+          )}
+
+          {/* 1c. SAMPLE TYPES TAB (API_GET_SAMPLE_LIST="GETSAMPLELIST") */}
+          {activeTab === 'samples' && (
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                <tr>
+                  <th className="py-2.5 px-4 w-24">Sample ID</th>
+                  <th className="py-2.5 px-4">Sample / Specimen Name</th>
+                  <th className="py-2.5 px-4">Target Application</th>
+                  <th className="py-2.5 px-4">Status</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {samples.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-6 text-center text-slate-400">
+                      No sample types found in master catalog.
+                    </td>
+                  </tr>
+                ) : (
+                  samples
+                    .filter((s) => {
+                      if (!searchTerm) return true;
+                      const q = searchTerm.toLowerCase().trim();
+                      const name = String(s.Name || s.name || '').toLowerCase();
+                      const id = String(s['Sample Id'] || s.id || '').toLowerCase();
+                      return name.includes(q) || id.includes(q);
+                    })
+                    .map((s, idx) => (
+                      <tr key={s['Sample Id'] || s.id || idx} className="hover:bg-slate-50">
+                        <td className="py-2 px-4 font-mono font-bold text-amber-700">
+                          #{s['Sample Id'] || s.id || idx + 1}
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className="font-bold text-slate-900">{s.Name || s.name}</span>
+                        </td>
+                        <td className="py-2 px-4 text-slate-500 text-[11px]">
+                          Master Test & Patient Specimen Accessioning
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                            {s.Status || s.status || 'Active'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleEditItem(s)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                )}
+              </tbody>
+            </table>
+          )}
+
           {/* 2. PROFILES TAB */}
           {activeTab === 'profiles' && (
             <table className="w-full text-left text-xs">
@@ -393,6 +663,138 @@ export default function MasterDataManager() {
                       </tr>
                     );
                   })}
+              </tbody>
+            </table>
+          )}
+
+          {/* 1b. TEMPLATES TAB (Total 15 types of master templates) */}
+          {activeTab === 'templates' && (
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                <tr>
+                  <th className="py-2.5 px-4 w-24">Template ID</th>
+                  <th className="py-2.5 px-4">Template Report Name</th>
+                  <th className="py-2.5 px-4">Report Structure</th>
+                  <th className="py-2.5 px-4">Sync Date</th>
+                  <th className="py-2.5 px-4">Status</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {templates.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-6 text-center text-slate-400">
+                      No master template reports loaded.
+                    </td>
+                  </tr>
+                ) : (
+                  templates
+                    .filter((tmpl) => {
+                      if (!searchTerm) return true;
+                      const q = searchTerm.toLowerCase().trim();
+                      const name = String(tmpl.TEMPLATE_NAME || tmpl.name || '').toLowerCase();
+                      const id = String(tmpl.templatesId || tmpl.id || tmpl.reportId || '').toLowerCase();
+                      return name.includes(q) || id.includes(q);
+                    })
+                    .map((tmpl, idx) => (
+                      <tr key={tmpl.templatesId || tmpl.reportId || idx} className="hover:bg-slate-50">
+                        <td className="py-2 px-4 font-mono font-bold text-purple-700">
+                          {tmpl.templatesId || `T${idx + 1}`}
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className="font-bold text-slate-900">{tmpl.TEMPLATE_NAME || tmpl.name}</span>
+                        </td>
+                        <td className="py-2 px-4 text-slate-600">
+                          <span className="bg-purple-50 text-purple-800 border border-purple-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                            Full-Page Report Structure
+                          </span>
+                        </td>
+                        <td className="py-2 px-4 font-mono text-slate-500 text-[11px]">
+                          {tmpl.templatesDate || '2026-11-01'}
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            String(tmpl.status || '').toUpperCase() === 'SAVED'
+                              ? 'bg-blue-50 text-blue-700'
+                              : 'bg-emerald-50 text-emerald-700'
+                          }`}>
+                            {tmpl.status || 'Active'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleEditItem(tmpl)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 rounded-md border border-purple-200 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                )}
+              </tbody>
+            </table>
+          )}
+
+          {/* 1c. SAMPLE TYPES TAB (API_GET_SAMPLE_LIST="GETSAMPLELIST") */}
+          {activeTab === 'samples' && (
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                <tr>
+                  <th className="py-2.5 px-4 w-24">Sample ID</th>
+                  <th className="py-2.5 px-4">Sample / Specimen Name</th>
+                  <th className="py-2.5 px-4">Target Application</th>
+                  <th className="py-2.5 px-4">Status</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {samples.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-6 text-center text-slate-400">
+                      No sample types found in master catalog.
+                    </td>
+                  </tr>
+                ) : (
+                  samples
+                    .filter((s) => {
+                      if (!searchTerm) return true;
+                      const q = searchTerm.toLowerCase().trim();
+                      const name = String(s.Name || s.name || '').toLowerCase();
+                      const id = String(s['Sample Id'] || s.id || '').toLowerCase();
+                      return name.includes(q) || id.includes(q);
+                    })
+                    .map((s, idx) => (
+                      <tr key={s['Sample Id'] || s.id || idx} className="hover:bg-slate-50">
+                        <td className="py-2 px-4 font-mono font-bold text-amber-700">
+                          #{s['Sample Id'] || s.id || idx + 1}
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className="font-bold text-slate-900">{s.Name || s.name}</span>
+                        </td>
+                        <td className="py-2 px-4 text-slate-500 text-[11px]">
+                          Master Test & Patient Specimen Accessioning
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                            {s.Status || s.status || 'Active'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleEditItem(s)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                )}
               </tbody>
             </table>
           )}
@@ -509,6 +911,138 @@ export default function MasterDataManager() {
             </table>
           )}
 
+          {/* 1b. TEMPLATES TAB (Total 15 types of master templates) */}
+          {activeTab === 'templates' && (
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                <tr>
+                  <th className="py-2.5 px-4 w-24">Template ID</th>
+                  <th className="py-2.5 px-4">Template Report Name</th>
+                  <th className="py-2.5 px-4">Report Structure</th>
+                  <th className="py-2.5 px-4">Sync Date</th>
+                  <th className="py-2.5 px-4">Status</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {templates.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-6 text-center text-slate-400">
+                      No master template reports loaded.
+                    </td>
+                  </tr>
+                ) : (
+                  templates
+                    .filter((tmpl) => {
+                      if (!searchTerm) return true;
+                      const q = searchTerm.toLowerCase().trim();
+                      const name = String(tmpl.TEMPLATE_NAME || tmpl.name || '').toLowerCase();
+                      const id = String(tmpl.templatesId || tmpl.id || tmpl.reportId || '').toLowerCase();
+                      return name.includes(q) || id.includes(q);
+                    })
+                    .map((tmpl, idx) => (
+                      <tr key={tmpl.templatesId || tmpl.reportId || idx} className="hover:bg-slate-50">
+                        <td className="py-2 px-4 font-mono font-bold text-purple-700">
+                          {tmpl.templatesId || `T${idx + 1}`}
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className="font-bold text-slate-900">{tmpl.TEMPLATE_NAME || tmpl.name}</span>
+                        </td>
+                        <td className="py-2 px-4 text-slate-600">
+                          <span className="bg-purple-50 text-purple-800 border border-purple-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                            Full-Page Report Structure
+                          </span>
+                        </td>
+                        <td className="py-2 px-4 font-mono text-slate-500 text-[11px]">
+                          {tmpl.templatesDate || '2026-11-01'}
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            String(tmpl.status || '').toUpperCase() === 'SAVED'
+                              ? 'bg-blue-50 text-blue-700'
+                              : 'bg-emerald-50 text-emerald-700'
+                          }`}>
+                            {tmpl.status || 'Active'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleEditItem(tmpl)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 rounded-md border border-purple-200 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                )}
+              </tbody>
+            </table>
+          )}
+
+          {/* 1c. SAMPLE TYPES TAB (API_GET_SAMPLE_LIST="GETSAMPLELIST") */}
+          {activeTab === 'samples' && (
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                <tr>
+                  <th className="py-2.5 px-4 w-24">Sample ID</th>
+                  <th className="py-2.5 px-4">Sample / Specimen Name</th>
+                  <th className="py-2.5 px-4">Target Application</th>
+                  <th className="py-2.5 px-4">Status</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {samples.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-6 text-center text-slate-400">
+                      No sample types found in master catalog.
+                    </td>
+                  </tr>
+                ) : (
+                  samples
+                    .filter((s) => {
+                      if (!searchTerm) return true;
+                      const q = searchTerm.toLowerCase().trim();
+                      const name = String(s.Name || s.name || '').toLowerCase();
+                      const id = String(s['Sample Id'] || s.id || '').toLowerCase();
+                      return name.includes(q) || id.includes(q);
+                    })
+                    .map((s, idx) => (
+                      <tr key={s['Sample Id'] || s.id || idx} className="hover:bg-slate-50">
+                        <td className="py-2 px-4 font-mono font-bold text-amber-700">
+                          #{s['Sample Id'] || s.id || idx + 1}
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className="font-bold text-slate-900">{s.Name || s.name}</span>
+                        </td>
+                        <td className="py-2 px-4 text-slate-500 text-[11px]">
+                          Master Test & Patient Specimen Accessioning
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                            {s.Status || s.status || 'Active'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleEditItem(s)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                )}
+              </tbody>
+            </table>
+          )}
+
           {/* 4. DOCTORS TAB */}
           {activeTab === 'doctors' && (
             <table className="w-full text-left text-xs">
@@ -556,6 +1090,138 @@ export default function MasterDataManager() {
                       </td>
                     </tr>
                   ))}
+              </tbody>
+            </table>
+          )}
+
+          {/* 1b. TEMPLATES TAB (Total 15 types of master templates) */}
+          {activeTab === 'templates' && (
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                <tr>
+                  <th className="py-2.5 px-4 w-24">Template ID</th>
+                  <th className="py-2.5 px-4">Template Report Name</th>
+                  <th className="py-2.5 px-4">Report Structure</th>
+                  <th className="py-2.5 px-4">Sync Date</th>
+                  <th className="py-2.5 px-4">Status</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {templates.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-6 text-center text-slate-400">
+                      No master template reports loaded.
+                    </td>
+                  </tr>
+                ) : (
+                  templates
+                    .filter((tmpl) => {
+                      if (!searchTerm) return true;
+                      const q = searchTerm.toLowerCase().trim();
+                      const name = String(tmpl.TEMPLATE_NAME || tmpl.name || '').toLowerCase();
+                      const id = String(tmpl.templatesId || tmpl.id || tmpl.reportId || '').toLowerCase();
+                      return name.includes(q) || id.includes(q);
+                    })
+                    .map((tmpl, idx) => (
+                      <tr key={tmpl.templatesId || tmpl.reportId || idx} className="hover:bg-slate-50">
+                        <td className="py-2 px-4 font-mono font-bold text-purple-700">
+                          {tmpl.templatesId || `T${idx + 1}`}
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className="font-bold text-slate-900">{tmpl.TEMPLATE_NAME || tmpl.name}</span>
+                        </td>
+                        <td className="py-2 px-4 text-slate-600">
+                          <span className="bg-purple-50 text-purple-800 border border-purple-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                            Full-Page Report Structure
+                          </span>
+                        </td>
+                        <td className="py-2 px-4 font-mono text-slate-500 text-[11px]">
+                          {tmpl.templatesDate || '2026-11-01'}
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            String(tmpl.status || '').toUpperCase() === 'SAVED'
+                              ? 'bg-blue-50 text-blue-700'
+                              : 'bg-emerald-50 text-emerald-700'
+                          }`}>
+                            {tmpl.status || 'Active'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleEditItem(tmpl)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 rounded-md border border-purple-200 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                )}
+              </tbody>
+            </table>
+          )}
+
+          {/* 1c. SAMPLE TYPES TAB (API_GET_SAMPLE_LIST="GETSAMPLELIST") */}
+          {activeTab === 'samples' && (
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                <tr>
+                  <th className="py-2.5 px-4 w-24">Sample ID</th>
+                  <th className="py-2.5 px-4">Sample / Specimen Name</th>
+                  <th className="py-2.5 px-4">Target Application</th>
+                  <th className="py-2.5 px-4">Status</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {samples.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-6 text-center text-slate-400">
+                      No sample types found in master catalog.
+                    </td>
+                  </tr>
+                ) : (
+                  samples
+                    .filter((s) => {
+                      if (!searchTerm) return true;
+                      const q = searchTerm.toLowerCase().trim();
+                      const name = String(s.Name || s.name || '').toLowerCase();
+                      const id = String(s['Sample Id'] || s.id || '').toLowerCase();
+                      return name.includes(q) || id.includes(q);
+                    })
+                    .map((s, idx) => (
+                      <tr key={s['Sample Id'] || s.id || idx} className="hover:bg-slate-50">
+                        <td className="py-2 px-4 font-mono font-bold text-amber-700">
+                          #{s['Sample Id'] || s.id || idx + 1}
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className="font-bold text-slate-900">{s.Name || s.name}</span>
+                        </td>
+                        <td className="py-2 px-4 text-slate-500 text-[11px]">
+                          Master Test & Patient Specimen Accessioning
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                            {s.Status || s.status || 'Active'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleEditItem(s)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                )}
               </tbody>
             </table>
           )}
@@ -608,6 +1274,138 @@ export default function MasterDataManager() {
             </table>
           )}
 
+          {/* 1b. TEMPLATES TAB (Total 15 types of master templates) */}
+          {activeTab === 'templates' && (
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                <tr>
+                  <th className="py-2.5 px-4 w-24">Template ID</th>
+                  <th className="py-2.5 px-4">Template Report Name</th>
+                  <th className="py-2.5 px-4">Report Structure</th>
+                  <th className="py-2.5 px-4">Sync Date</th>
+                  <th className="py-2.5 px-4">Status</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {templates.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-6 text-center text-slate-400">
+                      No master template reports loaded.
+                    </td>
+                  </tr>
+                ) : (
+                  templates
+                    .filter((tmpl) => {
+                      if (!searchTerm) return true;
+                      const q = searchTerm.toLowerCase().trim();
+                      const name = String(tmpl.TEMPLATE_NAME || tmpl.name || '').toLowerCase();
+                      const id = String(tmpl.templatesId || tmpl.id || tmpl.reportId || '').toLowerCase();
+                      return name.includes(q) || id.includes(q);
+                    })
+                    .map((tmpl, idx) => (
+                      <tr key={tmpl.templatesId || tmpl.reportId || idx} className="hover:bg-slate-50">
+                        <td className="py-2 px-4 font-mono font-bold text-purple-700">
+                          {tmpl.templatesId || `T${idx + 1}`}
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className="font-bold text-slate-900">{tmpl.TEMPLATE_NAME || tmpl.name}</span>
+                        </td>
+                        <td className="py-2 px-4 text-slate-600">
+                          <span className="bg-purple-50 text-purple-800 border border-purple-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                            Full-Page Report Structure
+                          </span>
+                        </td>
+                        <td className="py-2 px-4 font-mono text-slate-500 text-[11px]">
+                          {tmpl.templatesDate || '2026-11-01'}
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            String(tmpl.status || '').toUpperCase() === 'SAVED'
+                              ? 'bg-blue-50 text-blue-700'
+                              : 'bg-emerald-50 text-emerald-700'
+                          }`}>
+                            {tmpl.status || 'Active'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleEditItem(tmpl)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 rounded-md border border-purple-200 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                )}
+              </tbody>
+            </table>
+          )}
+
+          {/* 1c. SAMPLE TYPES TAB (API_GET_SAMPLE_LIST="GETSAMPLELIST") */}
+          {activeTab === 'samples' && (
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                <tr>
+                  <th className="py-2.5 px-4 w-24">Sample ID</th>
+                  <th className="py-2.5 px-4">Sample / Specimen Name</th>
+                  <th className="py-2.5 px-4">Target Application</th>
+                  <th className="py-2.5 px-4">Status</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {samples.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-6 text-center text-slate-400">
+                      No sample types found in master catalog.
+                    </td>
+                  </tr>
+                ) : (
+                  samples
+                    .filter((s) => {
+                      if (!searchTerm) return true;
+                      const q = searchTerm.toLowerCase().trim();
+                      const name = String(s.Name || s.name || '').toLowerCase();
+                      const id = String(s['Sample Id'] || s.id || '').toLowerCase();
+                      return name.includes(q) || id.includes(q);
+                    })
+                    .map((s, idx) => (
+                      <tr key={s['Sample Id'] || s.id || idx} className="hover:bg-slate-50">
+                        <td className="py-2 px-4 font-mono font-bold text-amber-700">
+                          #{s['Sample Id'] || s.id || idx + 1}
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className="font-bold text-slate-900">{s.Name || s.name}</span>
+                        </td>
+                        <td className="py-2 px-4 text-slate-500 text-[11px]">
+                          Master Test & Patient Specimen Accessioning
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                            {s.Status || s.status || 'Active'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleEditItem(s)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                )}
+              </tbody>
+            </table>
+          )}
+
           {/* 6. UNITS TAB */}
           {activeTab === 'units' && (
             <table className="w-full text-left text-xs">
@@ -648,6 +1446,138 @@ export default function MasterDataManager() {
                           <button
                             type="button"
                             onClick={() => handleEditItem(u)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                )}
+              </tbody>
+            </table>
+          )}
+
+          {/* 1b. TEMPLATES TAB (Total 15 types of master templates) */}
+          {activeTab === 'templates' && (
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                <tr>
+                  <th className="py-2.5 px-4 w-24">Template ID</th>
+                  <th className="py-2.5 px-4">Template Report Name</th>
+                  <th className="py-2.5 px-4">Report Structure</th>
+                  <th className="py-2.5 px-4">Sync Date</th>
+                  <th className="py-2.5 px-4">Status</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {templates.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-6 text-center text-slate-400">
+                      No master template reports loaded.
+                    </td>
+                  </tr>
+                ) : (
+                  templates
+                    .filter((tmpl) => {
+                      if (!searchTerm) return true;
+                      const q = searchTerm.toLowerCase().trim();
+                      const name = String(tmpl.TEMPLATE_NAME || tmpl.name || '').toLowerCase();
+                      const id = String(tmpl.templatesId || tmpl.id || tmpl.reportId || '').toLowerCase();
+                      return name.includes(q) || id.includes(q);
+                    })
+                    .map((tmpl, idx) => (
+                      <tr key={tmpl.templatesId || tmpl.reportId || idx} className="hover:bg-slate-50">
+                        <td className="py-2 px-4 font-mono font-bold text-purple-700">
+                          {tmpl.templatesId || `T${idx + 1}`}
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className="font-bold text-slate-900">{tmpl.TEMPLATE_NAME || tmpl.name}</span>
+                        </td>
+                        <td className="py-2 px-4 text-slate-600">
+                          <span className="bg-purple-50 text-purple-800 border border-purple-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                            Full-Page Report Structure
+                          </span>
+                        </td>
+                        <td className="py-2 px-4 font-mono text-slate-500 text-[11px]">
+                          {tmpl.templatesDate || '2026-11-01'}
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            String(tmpl.status || '').toUpperCase() === 'SAVED'
+                              ? 'bg-blue-50 text-blue-700'
+                              : 'bg-emerald-50 text-emerald-700'
+                          }`}>
+                            {tmpl.status || 'Active'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleEditItem(tmpl)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 rounded-md border border-purple-200 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                )}
+              </tbody>
+            </table>
+          )}
+
+          {/* 1c. SAMPLE TYPES TAB (API_GET_SAMPLE_LIST="GETSAMPLELIST") */}
+          {activeTab === 'samples' && (
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                <tr>
+                  <th className="py-2.5 px-4 w-24">Sample ID</th>
+                  <th className="py-2.5 px-4">Sample / Specimen Name</th>
+                  <th className="py-2.5 px-4">Target Application</th>
+                  <th className="py-2.5 px-4">Status</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {samples.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-6 text-center text-slate-400">
+                      No sample types found in master catalog.
+                    </td>
+                  </tr>
+                ) : (
+                  samples
+                    .filter((s) => {
+                      if (!searchTerm) return true;
+                      const q = searchTerm.toLowerCase().trim();
+                      const name = String(s.Name || s.name || '').toLowerCase();
+                      const id = String(s['Sample Id'] || s.id || '').toLowerCase();
+                      return name.includes(q) || id.includes(q);
+                    })
+                    .map((s, idx) => (
+                      <tr key={s['Sample Id'] || s.id || idx} className="hover:bg-slate-50">
+                        <td className="py-2 px-4 font-mono font-bold text-amber-700">
+                          #{s['Sample Id'] || s.id || idx + 1}
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className="font-bold text-slate-900">{s.Name || s.name}</span>
+                        </td>
+                        <td className="py-2 px-4 text-slate-500 text-[11px]">
+                          Master Test & Patient Specimen Accessioning
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                            {s.Status || s.status || 'Active'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleEditItem(s)}
                             className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
                           >
                             <Edit3 className="w-3 h-3" />
@@ -709,6 +1639,138 @@ export default function MasterDataManager() {
                           <button
                             type="button"
                             onClick={() => handleEditItem(b)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                )}
+              </tbody>
+            </table>
+          )}
+
+          {/* 1b. TEMPLATES TAB (Total 15 types of master templates) */}
+          {activeTab === 'templates' && (
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                <tr>
+                  <th className="py-2.5 px-4 w-24">Template ID</th>
+                  <th className="py-2.5 px-4">Template Report Name</th>
+                  <th className="py-2.5 px-4">Report Structure</th>
+                  <th className="py-2.5 px-4">Sync Date</th>
+                  <th className="py-2.5 px-4">Status</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {templates.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-6 text-center text-slate-400">
+                      No master template reports loaded.
+                    </td>
+                  </tr>
+                ) : (
+                  templates
+                    .filter((tmpl) => {
+                      if (!searchTerm) return true;
+                      const q = searchTerm.toLowerCase().trim();
+                      const name = String(tmpl.TEMPLATE_NAME || tmpl.name || '').toLowerCase();
+                      const id = String(tmpl.templatesId || tmpl.id || tmpl.reportId || '').toLowerCase();
+                      return name.includes(q) || id.includes(q);
+                    })
+                    .map((tmpl, idx) => (
+                      <tr key={tmpl.templatesId || tmpl.reportId || idx} className="hover:bg-slate-50">
+                        <td className="py-2 px-4 font-mono font-bold text-purple-700">
+                          {tmpl.templatesId || `T${idx + 1}`}
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className="font-bold text-slate-900">{tmpl.TEMPLATE_NAME || tmpl.name}</span>
+                        </td>
+                        <td className="py-2 px-4 text-slate-600">
+                          <span className="bg-purple-50 text-purple-800 border border-purple-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                            Full-Page Report Structure
+                          </span>
+                        </td>
+                        <td className="py-2 px-4 font-mono text-slate-500 text-[11px]">
+                          {tmpl.templatesDate || '2026-11-01'}
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            String(tmpl.status || '').toUpperCase() === 'SAVED'
+                              ? 'bg-blue-50 text-blue-700'
+                              : 'bg-emerald-50 text-emerald-700'
+                          }`}>
+                            {tmpl.status || 'Active'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleEditItem(tmpl)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 rounded-md border border-purple-200 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                )}
+              </tbody>
+            </table>
+          )}
+
+          {/* 1c. SAMPLE TYPES TAB (API_GET_SAMPLE_LIST="GETSAMPLELIST") */}
+          {activeTab === 'samples' && (
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                <tr>
+                  <th className="py-2.5 px-4 w-24">Sample ID</th>
+                  <th className="py-2.5 px-4">Sample / Specimen Name</th>
+                  <th className="py-2.5 px-4">Target Application</th>
+                  <th className="py-2.5 px-4">Status</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {samples.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-6 text-center text-slate-400">
+                      No sample types found in master catalog.
+                    </td>
+                  </tr>
+                ) : (
+                  samples
+                    .filter((s) => {
+                      if (!searchTerm) return true;
+                      const q = searchTerm.toLowerCase().trim();
+                      const name = String(s.Name || s.name || '').toLowerCase();
+                      const id = String(s['Sample Id'] || s.id || '').toLowerCase();
+                      return name.includes(q) || id.includes(q);
+                    })
+                    .map((s, idx) => (
+                      <tr key={s['Sample Id'] || s.id || idx} className="hover:bg-slate-50">
+                        <td className="py-2 px-4 font-mono font-bold text-amber-700">
+                          #{s['Sample Id'] || s.id || idx + 1}
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className="font-bold text-slate-900">{s.Name || s.name}</span>
+                        </td>
+                        <td className="py-2 px-4 text-slate-500 text-[11px]">
+                          Master Test & Patient Specimen Accessioning
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                            {s.Status || s.status || 'Active'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleEditItem(s)}
                             className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
                           >
                             <Edit3 className="w-3 h-3" />
@@ -793,6 +1855,138 @@ export default function MasterDataManager() {
                       </tr>
                     );
                   })}
+              </tbody>
+            </table>
+          )}
+
+          {/* 1b. TEMPLATES TAB (Total 15 types of master templates) */}
+          {activeTab === 'templates' && (
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                <tr>
+                  <th className="py-2.5 px-4 w-24">Template ID</th>
+                  <th className="py-2.5 px-4">Template Report Name</th>
+                  <th className="py-2.5 px-4">Report Structure</th>
+                  <th className="py-2.5 px-4">Sync Date</th>
+                  <th className="py-2.5 px-4">Status</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {templates.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-6 text-center text-slate-400">
+                      No master template reports loaded.
+                    </td>
+                  </tr>
+                ) : (
+                  templates
+                    .filter((tmpl) => {
+                      if (!searchTerm) return true;
+                      const q = searchTerm.toLowerCase().trim();
+                      const name = String(tmpl.TEMPLATE_NAME || tmpl.name || '').toLowerCase();
+                      const id = String(tmpl.templatesId || tmpl.id || tmpl.reportId || '').toLowerCase();
+                      return name.includes(q) || id.includes(q);
+                    })
+                    .map((tmpl, idx) => (
+                      <tr key={tmpl.templatesId || tmpl.reportId || idx} className="hover:bg-slate-50">
+                        <td className="py-2 px-4 font-mono font-bold text-purple-700">
+                          {tmpl.templatesId || `T${idx + 1}`}
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className="font-bold text-slate-900">{tmpl.TEMPLATE_NAME || tmpl.name}</span>
+                        </td>
+                        <td className="py-2 px-4 text-slate-600">
+                          <span className="bg-purple-50 text-purple-800 border border-purple-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                            Full-Page Report Structure
+                          </span>
+                        </td>
+                        <td className="py-2 px-4 font-mono text-slate-500 text-[11px]">
+                          {tmpl.templatesDate || '2026-11-01'}
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            String(tmpl.status || '').toUpperCase() === 'SAVED'
+                              ? 'bg-blue-50 text-blue-700'
+                              : 'bg-emerald-50 text-emerald-700'
+                          }`}>
+                            {tmpl.status || 'Active'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleEditItem(tmpl)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 rounded-md border border-purple-200 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                )}
+              </tbody>
+            </table>
+          )}
+
+          {/* 1c. SAMPLE TYPES TAB (API_GET_SAMPLE_LIST="GETSAMPLELIST") */}
+          {activeTab === 'samples' && (
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                <tr>
+                  <th className="py-2.5 px-4 w-24">Sample ID</th>
+                  <th className="py-2.5 px-4">Sample / Specimen Name</th>
+                  <th className="py-2.5 px-4">Target Application</th>
+                  <th className="py-2.5 px-4">Status</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {samples.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-6 text-center text-slate-400">
+                      No sample types found in master catalog.
+                    </td>
+                  </tr>
+                ) : (
+                  samples
+                    .filter((s) => {
+                      if (!searchTerm) return true;
+                      const q = searchTerm.toLowerCase().trim();
+                      const name = String(s.Name || s.name || '').toLowerCase();
+                      const id = String(s['Sample Id'] || s.id || '').toLowerCase();
+                      return name.includes(q) || id.includes(q);
+                    })
+                    .map((s, idx) => (
+                      <tr key={s['Sample Id'] || s.id || idx} className="hover:bg-slate-50">
+                        <td className="py-2 px-4 font-mono font-bold text-amber-700">
+                          #{s['Sample Id'] || s.id || idx + 1}
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className="font-bold text-slate-900">{s.Name || s.name}</span>
+                        </td>
+                        <td className="py-2 px-4 text-slate-500 text-[11px]">
+                          Master Test & Patient Specimen Accessioning
+                        </td>
+                        <td className="py-2 px-4">
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                            {s.Status || s.status || 'Active'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleEditItem(s)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                )}
               </tbody>
             </table>
           )}
