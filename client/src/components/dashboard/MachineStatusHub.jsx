@@ -32,109 +32,153 @@ import {
 
 const INITIAL_MACHINES = [
   {
-    id: 'hem',
-    name: 'Hematology Analyzer',
-    model: 'Sysmex XN-350 / Mindray BC-5000',
+    id: 'meril',
+    name: 'AutoQuant 200',
+    fullName: 'AutoQuant 200 Excelus',
+    manufacturer: 'Meril Life Sciences',
+    model: 'Fully Automated Biochemistry Analyzer',
     type: 'ANALYZER',
-    protocol: 'ASTM E1381 / E1394 (COM1)',
-    status: 'CONNECTED',
-    dataRate: '1.4 KB/s',
-    throughput: '42 samples/hr',
-    lastPing: 'Just now',
-    icon: Microscope,
-    activeColor: '#3B82F6', // Blue
-    description: '5-part differential blood analyzer with optical laser flow cytometry and automated worklist sync',
-    position: { angle: 260, distance: 160 },
-  },
-  {
-    id: 'chem',
-    name: 'Biochemistry Analyzer',
-    model: 'Erba Chem-7 / Cobas c311',
-    type: 'ANALYZER',
-    protocol: 'HL7 v2.5 TCP Socket (Port 5000)',
+    department: 'Biochemistry',
+    protocol: 'HL7 v2.5 / RS-232 TCP COM1',
     status: 'CONNECTED',
     dataRate: '2.8 KB/s',
-    throughput: '65 tests/hr',
+    throughput: '200 photometric tests/hr',
     lastPing: 'Just now',
     icon: Activity,
+    image: '/images/machines/autoquant-200.jpg?v=2',
     activeColor: '#10B981', // Emerald
-    description: 'High-speed photometric clinical chemistry analyzer with continuous sample loading and live mapping',
-    position: { angle: 200, distance: 165 },
+    description: 'Fully automated random-access biochemistry analyzer for liver, renal, lipid profiles & cardiac enzymes with onboard cooling.',
+    angle: 220, // Top-Left
   },
   {
-    id: 'clia',
-    name: 'Immunoassay Analyzer',
-    model: 'Mindray CL-900i Chemiluminescence',
+    id: 'vidas',
+    name: 'VIDAS® KUBE™',
+    fullName: 'bioMérieux VIDAS® KUBE™',
+    manufacturer: 'bioMérieux',
+    model: 'Automated Immunoassay Analyzer',
     type: 'ANALYZER',
-    protocol: 'Bidirectional ASTM Query (COM2)',
+    department: 'Immunoassay',
+    protocol: 'Bidirectional ASTM E1394 (COM2)',
     status: 'CONNECTED',
-    dataRate: '0.9 KB/s',
-    throughput: '28 tests/hr',
-    lastPing: '1s ago',
+    dataRate: '1.4 KB/s',
+    throughput: 'Continuous Random Access',
+    lastPing: 'Just now',
     icon: Radio,
+    image: '/images/machines/vidas-kube.jpg?v=2',
     activeColor: '#8B5CF6', // Purple
-    description: 'Thyroid, fertility, cardiac & hormonal chemiluminescence reader with automatic calibration check',
-    position: { angle: 140, distance: 155 },
+    description: 'Advanced benchtop automated immunoassay analyzer with ELFA technology for thyroid, fertility, cardiac markers & infectious serology.',
+    angle: 175, // Mid-Left
   },
   {
-    id: 'urine',
-    name: 'Automated Urine Strip Analyzer',
-    model: 'Dirui H-100 / UriScan Optima',
+    id: 'ld560',
+    name: 'LD-560 HPLC',
+    fullName: 'Labnovation LD-560 HPLC',
+    manufacturer: 'Labnovation',
+    model: 'Automated HbA1c HPLC Analyzer',
     type: 'ANALYZER',
-    protocol: 'RS-232 Serial COM3 (9600 baud)',
+    department: 'HbA1c Diabetes',
+    protocol: 'HPLC Stream (Port 4001)',
     status: 'CONNECTED',
-    dataRate: '0.8 KB/s',
-    throughput: '34 strips/hr',
+    dataRate: '1.1 KB/s',
+    throughput: 'CV < 2% HPLC Precision',
     lastPing: 'Just now',
     icon: FlaskConical,
-    activeColor: '#0EA5E9', // Sky Blue
-    description: 'Reflectance photometer for dry chemistry urine test strips with automated patient result indexing',
-    position: { angle: 320, distance: 160 },
+    image: '/images/machines/labnovation-ld560.jpg?v=2',
+    activeColor: '#3B82F6', // Blue
+    description: 'Gold-standard High-Performance Liquid Chromatography (HPLC) glycated hemoglobin analyzer with automatic sample barcode scanner.',
+    angle: 130, // Bottom-Left
   },
   {
-    id: 'his',
-    name: 'Hospital Information System',
-    model: 'HIS / EMR HL7 Interface',
-    type: 'INTEGRATION',
-    protocol: 'HL7 MLLP (Port 2575)',
+    id: 'hdc',
+    name: 'HDC Lyte',
+    fullName: 'HDC Lyte Electrolyte Analyzer',
+    manufacturer: 'HDC Diagnostics',
+    model: 'Automated Electrolyte Analyzer',
+    type: 'ANALYZER',
+    department: 'Electrolytes',
+    protocol: 'ISE Serial Bus (COM3)',
     status: 'CONNECTED',
-    dataRate: '4.2 KB/s',
-    throughput: 'Sync active',
+    dataRate: '0.9 KB/s',
+    throughput: '60 samples/hr',
     lastPing: 'Just now',
-    icon: Building,
-    activeColor: '#06B6D4', // Cyan
-    description: 'Bidirectional patient admission, discharge & OPD requisition sync directly with billing ledger',
-    position: { angle: 90, distance: 165 },
+    icon: Zap,
+    image: '/images/machines/hdc-lyte.jpg?v=2',
+    activeColor: '#0EA5E9', // Sky Blue
+    description: 'Direct ion-selective electrode analyzer for serum & urine Na+, Cl-, K+, ionized calcium & lithium with automatic calibration.',
+    angle: 270, // Direct Top
+  },
+  {
+    id: 'erba',
+    name: 'Erba ECL 105',
+    fullName: 'Erba Mannheim ECL 105',
+    manufacturer: 'Erba Mannheim',
+    model: 'Coagulation Analyzer',
+    type: 'ANALYZER',
+    department: 'Coagulation',
+    protocol: 'Optical Sensor Bus (COM4)',
+    status: 'CONNECTED',
+    dataRate: '0.8 KB/s',
+    throughput: 'PT/INR, APTT, Fibrinogen',
+    lastPing: 'Just now',
+    icon: Microscope,
+    image: '/images/machines/erba-ecl105.jpg?v=2',
+    activeColor: '#F59E0B', // Amber
+    description: 'Precision optical coagulometer for prothrombin time (PT/INR), activated partial thromboplastin time (APTT) and coagulation factors.',
+    angle: 90, // Direct Bottom
+  },
+  {
+    id: 'lis_engine',
+    name: 'LIS Core Engine',
+    fullName: 'New Life Care LIS Integration Engine',
+    manufacturer: 'New Life Care Platform',
+    model: 'Central Multiplex Data Router',
+    type: 'CORE',
+    department: 'Core Infrastructure',
+    protocol: 'ASTM E1394 / HL7 v2.5 Multiplex',
+    status: 'CONNECTED',
+    dataRate: '12.1 KB/s',
+    throughput: 'Real-time multi-channel router',
+    lastPing: 'Just now',
+    icon: Server,
+    activeColor: '#2563EB', // Blue
+    description: 'Central LIS multiplexing and parser engine mapping raw analyzer telemetry into patient profiles with zero transcription errors.',
+    isCenter: true,
   },
   {
     id: 'doc',
-    name: 'Doctor & Pathologist Portal',
-    model: 'Tele-Pathology Verification Gateway',
+    name: 'Doctor Portal',
+    fullName: 'Doctor & Pathologist Portal',
+    manufacturer: 'Tele-Pathology Network',
+    model: 'Digital Verification Gateway',
     type: 'PORTAL',
+    department: 'Medical Sign-Off',
     protocol: 'Secure WSS WebSocket',
     status: 'CONNECTED',
-    dataRate: '1.1 KB/s',
-    throughput: '2 doctors online',
+    dataRate: '1.2 KB/s',
+    throughput: 'Pathologist Online',
     lastPing: 'Just now',
     icon: Stethoscope,
     activeColor: '#EC4899', // Pink
-    description: 'Pathologist digital verification, signature & panic alert sign-off connected in real time',
-    position: { angle: 30, distance: 170 },
+    description: 'Pathologist digital verification, signature & panic alert sign-off connected in real time.',
+    angle: 325, // Top-Right
   },
   {
     id: 'wa',
-    name: 'WhatsApp Delivery Service',
-    model: 'Cloud Dispatch API v20.0',
+    name: 'WhatsApp Dispatch',
+    fullName: 'WhatsApp Delivery Service',
+    manufacturer: 'Meta Cloud API v20.0',
+    model: 'Instant Patient Dispatch Gateway',
     type: 'DELIVERY',
+    department: 'Patient Communication',
     protocol: 'HTTPS REST Webhook',
     status: 'CONNECTED',
-    dataRate: '0.5 KB/s',
-    throughput: '98% delivery rate',
+    dataRate: '1.8 KB/s',
+    throughput: 'Instant PDF Dispatch',
     lastPing: 'Just now',
     icon: MessageSquare,
     activeColor: '#22C55E', // Green
-    description: 'Automated PDF report dispatch & patient receipt confirmation with instant delivery status',
-    position: { angle: 350, distance: 175 },
+    description: 'Automated QR-verified PDF report dispatch & patient receipt confirmation with instant delivery confirmation.',
+    angle: 35, // Bottom-Right
   },
 ];
 
@@ -235,78 +279,91 @@ export default function MachineStatusHub({ className = '' }) {
             }}
           />
 
-          {/* VIEW MODE 1: RADIAL NETWORK TOPOLOGY (Matching User Reference with Animated Data Streams) */}
+          {/* VIEW MODE 1: RADIAL NETWORK TOPOLOGY (Faithfully Matching User ABHOI Reference) */}
           {viewMode === 'radial' && (
-            <div className="relative w-full max-w-[580px] h-[400px] flex items-center justify-center">
-              {/* SVG Canvas for Connection Lines & Data Flow Particles */}
-              <svg className="absolute inset-0 w-full h-full overflow-visible pointer-events-none">
+            <div className="relative w-full max-w-[620px] h-[480px] flex items-center justify-center select-none">
+              {/* SVG Canvas for Radiating Connection Lines & Animated Flow Particles */}
+              <svg className="absolute inset-0 w-full h-full pointer-events-none">
                 <defs>
                   {/* Glowing Particle Filter */}
-                  <filter id="glow-particle" x="-20%" y="-20%" width="140%" height="140%">
-                    <feGaussianBlur stdDeviation="2" result="blur" />
+                  <filter id="glow-particle" x="-30%" y="-30%" width="160%" height="160%">
+                    <feGaussianBlur stdDeviation="2.5" result="blur" />
                     <feComposite in="SourceGraphic" in2="blur" operator="over" />
                   </filter>
-
-                  {/* Gradient for Connected Data Flow */}
-                  <linearGradient id="connectedFlowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.8" />
-                    <stop offset="100%" stopColor="#10B981" stopOpacity="0.8" />
-                  </linearGradient>
                 </defs>
 
-                {/* Draw connection lines from center (290, 200) to each satellite node */}
-                {machines.map((m) => {
-                  const rad = (m.position.angle * Math.PI) / 180;
-                  const centerX = 290;
-                  const centerY = 200;
-                  const targetX = centerX + m.position.distance * Math.cos(rad);
-                  const targetY = centerY + m.position.distance * Math.sin(rad);
+                {/* Central Engine Concentric Radar Waves */}
+                <circle cx={310} cy={240} r={72} fill="none" stroke="#3B82F6" strokeWidth={1} strokeDasharray="4 4" opacity={0.35} />
+                <circle cx={310} cy={240} r={92} fill="none" stroke="#60A5FA" strokeWidth={1} opacity={0.18} />
 
-                  const isSelected = selectedMachine.id === m.id;
+                {/* Draw radiating connection lines & traveling data packets to each node */}
+                {machines
+                  .filter((m) => !m.isCenter)
+                  .map((m) => {
+                    const rad = (m.angle * Math.PI) / 180;
+                    const centerX = 310;
+                    const centerY = 240;
+                    const targetX = centerX + 158 * Math.cos(rad);
+                    const targetY = centerY + 158 * Math.sin(rad);
 
-                  // Animated particle position along line streaming to center (0 to 1)
-                  const t = ((packetTick * 2 + m.position.angle) % 100) / 100;
-                  const particleX = targetX + (centerX - targetX) * t;
-                  const particleY = targetY + (centerY - targetY) * t;
+                    const isSelected = selectedMachine.id === m.id;
 
-                  return (
-                    <g key={`wire-${m.id}`}>
-                      {/* Connection Wire */}
-                      <line
-                        x1={centerX}
-                        y1={centerY}
-                        x2={targetX}
-                        y2={targetY}
-                        stroke={isSelected ? '#3B82F6' : '#94A3B8'}
-                        strokeWidth={isSelected ? 2.5 : 1.5}
-                        strokeDasharray={isSelected ? 'none' : '4,4'}
-                        strokeOpacity={isSelected ? 0.9 : 0.45}
-                        className="transition-all duration-300"
-                      />
+                    // Animated particle position along line streaming to center (0 to 1)
+                    const t = ((packetTick * 2 + m.angle) % 100) / 100;
+                    const particleX = targetX + (centerX - targetX) * t;
+                    const particleY = targetY + (centerY - targetY) * t;
 
-                      {/* Animated Data Stream Pulse Packet (Streaming towards Central Hub) */}
-                      <circle
-                        cx={particleX}
-                        cy={particleY}
-                        r={isSelected ? 4.5 : 3.5}
-                        fill={m.activeColor || '#3B82F6'}
-                        filter="url(#glow-particle)"
-                        opacity="0.95"
-                      />
-                    </g>
-                  );
-                })}
+                    return (
+                      <g key={`wire-${m.id}`}>
+                        {/* Connection Wire */}
+                        <line
+                          x1={centerX}
+                          y1={centerY}
+                          x2={targetX}
+                          y2={targetY}
+                          stroke={isSelected ? '#2563EB' : '#94A3B8'}
+                          strokeWidth={isSelected ? 2.5 : 1.5}
+                          strokeDasharray="4 4"
+                          strokeOpacity={isSelected ? 1 : 0.45}
+                          className="transition-all duration-300"
+                        />
+
+                        {/* Animated Data Stream Pulse Packet (Streaming towards Central Hub) */}
+                        <circle
+                          cx={particleX}
+                          cy={particleY}
+                          r={isSelected ? 4.5 : 3.5}
+                          fill={m.activeColor || '#3B82F6'}
+                          filter="url(#glow-particle)"
+                          opacity="0.95"
+                        />
+                      </g>
+                    );
+                  })}
               </svg>
 
-              {/* Central Core: LIS Platform Engine Hub */}
-              <div className="z-10 flex flex-col items-center justify-center">
-                <div className="relative group">
+              {/* Central Core: LIS Platform Engine Hub (Matching Reference Circle) */}
+              <div
+                onClick={() =>
+                  setSelectedMachine(
+                    machines.find((m) => m.id === 'lis_engine') || INITIAL_MACHINES[5]
+                  )
+                }
+                className="z-10 flex flex-col items-center justify-center cursor-pointer group"
+              >
+                <div className="relative">
                   {/* Outer Pulsing Waves */}
-                  <div className="absolute -inset-3 rounded-full bg-blue-500/15 animate-ping opacity-75 pointer-events-none" />
+                  <div className="absolute -inset-3.5 rounded-full bg-blue-500/15 animate-ping opacity-60 pointer-events-none" />
                   <div className="absolute -inset-1.5 rounded-full bg-blue-600/20 blur-xs pointer-events-none" />
 
                   {/* Main Circle Hub */}
-                  <div className="relative w-28 h-28 rounded-full bg-white border-3 border-blue-600 shadow-xl flex flex-col items-center justify-center p-2 text-center select-none transition-transform hover:scale-105 duration-200">
+                  <div
+                    className={`relative w-28 h-28 rounded-full bg-white border-3 shadow-xl flex flex-col items-center justify-center p-2 text-center select-none transition-transform hover:scale-105 duration-200 ${
+                      selectedMachine.id === 'lis_engine'
+                        ? 'border-blue-600 ring-4 ring-blue-100 shadow-blue-500/30'
+                        : 'border-blue-500'
+                    }`}
+                  >
                     <Server className="w-6 h-6 text-blue-600 mb-1 animate-pulse" />
                     <span className="text-[10px] font-black uppercase tracking-wider text-slate-800 leading-tight">
                       NEW LIFE CARE
@@ -321,64 +378,71 @@ export default function MachineStatusHub({ className = '' }) {
                 </div>
               </div>
 
-              {/* Radial Satellite Nodes around Center */}
-              {machines.map((m) => {
-                const rad = (m.position.angle * Math.PI) / 180;
-                const x = 290 + m.position.distance * Math.cos(rad);
-                const y = 200 + m.position.distance * Math.sin(rad);
+              {/* Radial Satellite Nodes around Center (Matching Reference with Bottom Pills) */}
+              {machines
+                .filter((m) => !m.isCenter)
+                .map((m) => {
+                  const rad = (m.angle * Math.PI) / 180;
+                  const x = 310 + 158 * Math.cos(rad);
+                  const y = 240 + 158 * Math.sin(rad);
 
-                const isSelected = selectedMachine.id === m.id;
-                const Icon = m.icon;
+                  const isSelected = selectedMachine.id === m.id;
+                  const Icon = m.icon;
 
-                return (
-                  <div
-                    key={`node-${m.id}`}
-                    onClick={() => setSelectedMachine(m)}
-                    className="absolute cursor-pointer transition-all duration-200 group"
-                    style={{
-                      left: `${x}px`,
-                      top: `${y}px`,
-                      transform: 'translate(-50%, -50%)',
-                    }}
-                  >
+                  return (
                     <div
-                      className={`relative flex items-center gap-2 p-1.5 pr-2.5 rounded-2xl shadow-xs transition-all duration-200 ${
-                        isSelected
-                          ? 'ring-2 ring-blue-500 ring-offset-2 scale-105 bg-white shadow-md'
-                          : 'bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300'
-                      }`}
+                      key={`node-${m.id}`}
+                      onClick={() => setSelectedMachine(m)}
+                      className="absolute cursor-pointer flex flex-col items-center transition-all duration-200 group z-10"
+                      style={{
+                        left: `${x}px`,
+                        top: `${y}px`,
+                        transform: 'translate(-50%, -50%)',
+                      }}
                     >
-                      {/* Icon Container with Connected Indicator */}
+                      {/* Node Image / Icon Box */}
                       <div
-                        className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors bg-blue-50 text-blue-600 border border-blue-200/80"
+                        className={`w-13 h-13 rounded-2xl bg-white flex items-center justify-center p-1.5 shadow-md transition-all duration-200 group-hover:scale-110 relative ${
+                          isSelected
+                            ? 'ring-3 ring-blue-500 border-2 border-blue-500 shadow-blue-500/30 scale-105'
+                            : 'border border-slate-200 hover:border-slate-300'
+                        }`}
                       >
-                        <Icon className="w-4.5 h-4.5" />
+                        {m.image ? (
+                          <img
+                            src={m.image}
+                            alt={m.name}
+                            className="w-full h-full object-contain"
+                          />
+                        ) : (
+                          <Icon className="w-6 h-6 text-slate-700" />
+                        )}
 
-                        {/* Top-Right Connected Pulse Badge */}
+                        {/* Top-Right Connected Indicator */}
                         <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white shadow-2xs" />
                       </div>
 
-                      {/* Node Text */}
-                      <div className="text-left hidden sm:block max-w-[110px]">
-                        <span className="text-[11px] font-bold text-slate-800 block truncate leading-tight">
-                          {m.name}
-                        </span>
-                        <span className="text-[9.5px] font-bold font-mono tracking-tight block text-emerald-600">
-                          • CONNECTED
-                        </span>
+                      {/* Pill Label Beneath (Matching Reference Screenshot) */}
+                      <div
+                        className={`mt-1.5 px-2.5 py-0.5 rounded-full border shadow-2xs text-[10px] font-bold whitespace-nowrap transition-colors ${
+                          isSelected
+                            ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                            : 'bg-white/95 text-slate-800 border-slate-200 group-hover:border-slate-300'
+                        }`}
+                      >
+                        {m.name}
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
             </div>
           )}
 
-          {/* VIEW MODE 2: VERTICAL PIPELINE WORKFLOW (Matching User Reference) */}
+          {/* VIEW MODE 2: VERTICAL PIPELINE WORKFLOW (With Machine Clean Studio Photos) */}
           {viewMode === 'pipeline' && (
-            <div className="w-full max-w-md py-4 space-y-3 relative">
+            <div className="w-full max-w-lg py-4 space-y-3.5 relative">
               {/* Continuous Blue Connecting Spine Line */}
-              <div className="absolute left-[34px] top-6 bottom-6 w-0.5 bg-blue-500/80 -z-0" />
+              <div className="absolute left-[36px] top-6 bottom-6 w-0.5 bg-blue-500/80 -z-0" />
 
               {machines.map((m) => {
                 const isSelected = selectedMachine.id === m.id;
@@ -390,45 +454,74 @@ export default function MachineStatusHub({ className = '' }) {
                     onClick={() => setSelectedMachine(m)}
                     className="relative flex items-center gap-3.5 z-10 cursor-pointer group"
                   >
-                    {/* Left Circular Icon (connected by vertical spine) */}
+                    {/* Left Machine Image / Node Thumbnail */}
                     <div
-                      className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border-2 transition-all duration-200 ${
+                      className={`w-16 h-16 rounded-2xl flex items-center justify-center shrink-0 border-2 transition-all duration-200 overflow-hidden p-1.5 ${
                         isSelected
-                          ? 'bg-blue-600 text-white border-blue-600 shadow-md scale-105'
-                          : 'bg-white text-blue-600 border-slate-200 group-hover:border-blue-400 shadow-xs'
+                          ? 'bg-white border-blue-600 shadow-md ring-2 ring-blue-100 scale-105'
+                          : 'bg-white border-slate-200 group-hover:border-blue-400 shadow-xs'
                       }`}
                     >
-                      <Icon className="w-5 h-5" />
+                      {m.image ? (
+                        <img
+                          src={m.image}
+                          alt={m.name}
+                          className="w-full h-full object-contain"
+                        />
+                      ) : (
+                        <div
+                          className={`w-full h-full rounded-xl flex items-center justify-center ${
+                            isSelected ? 'bg-blue-600 text-white' : 'bg-slate-50 text-blue-600'
+                          }`}
+                        >
+                          <Icon className="w-6 h-6" />
+                        </div>
+                      )}
                     </div>
 
                     {/* Right Card */}
                     <div
-                      className={`flex-1 p-3 rounded-2xl border transition-all duration-200 flex items-center justify-between ${
+                      className={`flex-1 p-3.5 rounded-2xl border transition-all duration-200 flex items-center justify-between ${
                         isSelected
-                          ? 'bg-blue-50/70 border-blue-400 text-blue-900 shadow-xs'
+                          ? 'bg-blue-50/70 border-blue-400 text-blue-900 shadow-xs ring-1 ring-blue-300/40'
                           : 'bg-white hover:bg-slate-50/80 border-slate-200/90 text-slate-800'
                       }`}
                     >
-                      <div>
-                        <div className="text-xs font-bold tracking-tight text-slate-900 flex items-center gap-2">
-                          <span>{m.name}</span>
-                          <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">
-                            {m.protocol.split(' ')[0]}
+                      <div className="min-w-0 pr-2">
+                        <div className="text-xs font-bold tracking-tight text-slate-900 flex items-center gap-2 flex-wrap">
+                          <span className="truncate">{m.fullName || m.name}</span>
+                          <span className="text-[10px] text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded font-semibold">
+                            {m.manufacturer}
                           </span>
                         </div>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                          <span className="text-[10px] font-bold font-mono tracking-wider uppercase text-emerald-700">
-                            CONNECTED • TRANSMITTING
+                        <div className="text-[11px] text-slate-500 font-medium truncate mt-0.5">
+                          {m.model}
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="flex items-center gap-1 text-[10px] font-bold font-mono tracking-wider uppercase text-emerald-700">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            CONNECTED • STREAMING
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-mono hidden md:inline">
+                            • {m.protocol.split(' ')[0]}
                           </span>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-mono font-bold text-blue-600 bg-blue-100/60 px-2 py-0.5 rounded-md hidden sm:inline">
-                          {m.dataRate}
-                        </span>
-                        <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600" />
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="text-right hidden sm:block">
+                          <span className="text-[10px] font-mono font-bold text-blue-600 bg-blue-100/70 px-2 py-0.5 rounded-md block">
+                            {m.dataRate}
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-mono block mt-0.5">
+                            {m.department.split(' ')[0]}
+                          </span>
+                        </div>
+                        <ChevronRight
+                          className={`w-4 h-4 transition-colors ${
+                            isSelected ? 'text-blue-600' : 'text-slate-400 group-hover:text-blue-600'
+                          }`}
+                        />
                       </div>
                     </div>
                   </div>
@@ -440,31 +533,57 @@ export default function MachineStatusHub({ className = '' }) {
 
         {/* Right Area (4 cols): Selected Machine Diagnostic Control & Live Telemetry */}
         <div className="lg:col-span-4 p-5 bg-slate-50/50 flex flex-col justify-between">
-          <div className="space-y-4">
-            {/* Header of selected unit */}
-            <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-200">
-              <div className="flex items-center gap-2.5">
-                <div
-                  className="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-xs shrink-0 bg-blue-600"
-                >
-                  <selectedMachine.icon className="w-5 h-5" />
+          <div className="space-y-3.5">
+            {/* High-Resolution Device Photo Preview Card (if machine has an image) */}
+            {selectedMachine.image ? (
+              <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-white p-3 shadow-2xs group">
+                <div className="h-40 w-full rounded-xl bg-gradient-to-b from-slate-50 via-white to-slate-50 flex items-center justify-center p-2 relative overflow-hidden border border-slate-100">
+                  <img
+                    src={selectedMachine.image}
+                    alt={selectedMachine.name}
+                    className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300"
+                  />
+                  <span className="absolute top-2 right-2 text-[9px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1 shadow-2xs">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    LIVE LINKED
+                  </span>
                 </div>
-                <div>
-                  <h3 className="font-extrabold text-xs text-slate-900 leading-tight">
-                    {selectedMachine.name}
-                  </h3>
-                  <span className="text-[10px] text-slate-500 font-mono block">
-                    {selectedMachine.model}
+                <div className="mt-2.5 flex items-center justify-between text-[11px] px-0.5">
+                  <div>
+                    <span className="font-extrabold text-slate-900 block leading-tight">
+                      {selectedMachine.name}
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-medium">
+                      {selectedMachine.manufacturer}
+                    </span>
+                  </div>
+                  <span className="bg-blue-50 text-blue-700 border border-blue-200/80 px-2 py-0.5 rounded-lg font-bold text-[10px]">
+                    {selectedMachine.department}
                   </span>
                 </div>
               </div>
-
-              {/* Status Badge: Connected */}
-              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border font-mono bg-emerald-50 text-emerald-700 border-emerald-200 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span>CONNECTED</span>
-              </span>
-            </div>
+            ) : (
+              /* Fallback Header for Integration Nodes */
+              <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-200">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-xs shrink-0 bg-blue-600">
+                    <selectedMachine.icon className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-xs text-slate-900 leading-tight">
+                      {selectedMachine.name}
+                    </h3>
+                    <span className="text-[10px] text-slate-500 font-mono block">
+                      {selectedMachine.model}
+                    </span>
+                  </div>
+                </div>
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border font-mono bg-emerald-50 text-emerald-700 border-emerald-200 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>CONNECTED</span>
+                </span>
+              </div>
+            )}
 
             {/* Description */}
             <p className="text-xs text-slate-600 leading-relaxed">

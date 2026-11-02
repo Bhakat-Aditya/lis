@@ -37,6 +37,44 @@ import { formatDisplayDate } from '../../utils/dateUtils.js';
  * 10. Customer Feedback
  */
 
+const CLINICAL_ANALYZERS = [
+  {
+    name: 'AutoQuant 200 Excelus',
+    shortName: 'AutoQuant 200',
+    brand: 'Meril Life Sciences',
+    dept: 'Biochemistry',
+    image: '/images/machines/autoquant-200.jpg?v=2',
+  },
+  {
+    name: 'VIDAS® KUBE™',
+    shortName: 'VIDAS® KUBE™',
+    brand: 'bioMérieux',
+    dept: 'Immunoassay',
+    image: '/images/machines/vidas-kube.jpg?v=2',
+  },
+  {
+    name: 'Labnovation LD-560',
+    shortName: 'LD-560 HPLC',
+    brand: 'Labnovation',
+    dept: 'HbA1c Diabetes',
+    image: '/images/machines/labnovation-ld560.jpg?v=2',
+  },
+  {
+    name: 'HDC Lyte Electrolyte',
+    shortName: 'HDC Lyte',
+    brand: 'HDC Diagnostics',
+    dept: 'Electrolytes',
+    image: '/images/machines/hdc-lyte.jpg?v=2',
+  },
+  {
+    name: 'Erba ECL 105',
+    shortName: 'Erba ECL 105',
+    brand: 'Erba Mannheim',
+    dept: 'Coagulation',
+    image: '/images/machines/erba-ecl105.jpg?v=2',
+  },
+];
+
 export default function PatientJourneyTimeline({
   patient = {},
   reports = [],
@@ -100,8 +138,8 @@ export default function PatientJourneyTimeline({
       icon: Cpu,
       color: 'blue',
       timestamp: `${regDateFormatted} • 10:48 AM`,
-      operator: 'Sysmex XN-350 & Erba Chem-7 (COM1/COM2)',
-      details: 'Bidirectional query protocol initiated. Analyzer scanned tube barcode and automatically downloaded ordered test profiles.',
+      operator: 'AutoQuant 200, VIDAS KUBE, LD-560 HPLC, HDC Lyte, ECL 105',
+      details: 'Bidirectional query protocol initiated across all 5 physical analyzers: Meril AutoQuant 200, bioMérieux VIDAS® KUBE™, Labnovation LD-560 HPLC, HDC Lyte, and Erba ECL 105. Barcodes synchronized with LIS.',
       actionLabel: null,
     },
     {
@@ -364,6 +402,46 @@ export default function PatientJourneyTimeline({
                           </button>
                         )}
                       </div>
+
+                      {/* Physical Laboratory Analyzers Hardware Gallery for Stage 2 */}
+                      {stage.id === 2 && (
+                        <div className="mt-3 pt-3 border-t border-slate-200/80">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 font-mono flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              Connected Laboratory Analyzers ({CLINICAL_ANALYZERS.length})
+                            </span>
+                            <span className="text-[9px] font-bold font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                              All 5 Online
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                            {CLINICAL_ANALYZERS.map((analyzer) => (
+                              <div
+                                key={analyzer.name}
+                                className="bg-white hover:bg-slate-50 border border-slate-200/90 rounded-xl p-2 flex flex-col items-center text-center transition-all duration-200 shadow-2xs hover:shadow-xs group"
+                              >
+                                <div className="w-12 h-12 bg-slate-50 rounded-lg p-1 border border-slate-200/70 mb-1.5 flex items-center justify-center overflow-hidden">
+                                  <img
+                                    src={analyzer.image}
+                                    alt={analyzer.name}
+                                    className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-200"
+                                  />
+                                </div>
+                                <span className="text-[10px] font-bold text-slate-900 leading-tight block truncate w-full">
+                                  {analyzer.shortName}
+                                </span>
+                                <span className="text-[8.5px] text-slate-500 truncate w-full block mt-0.5">
+                                  {analyzer.dept}
+                                </span>
+                                <span className="mt-1 text-[8px] font-mono font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded-full">
+                                  LINKED
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                       {/* Interactive Customer Feedback form on Stage 10 */}
                       {stage.id === 9 && (

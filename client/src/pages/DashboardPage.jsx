@@ -318,7 +318,6 @@ export default function DashboardPage({ onOpenNewPatient }) {
         onToDateChange={setToDate}
         onSubmitDates={handleDatesSubmit}
         onOpenNewPatient={onOpenNewPatient}
-        onOpenJsonModal={() => setIsJsonModalOpen(true)}
         onRefreshUpstream={handleRefreshUpstream}
         isRefreshing={isRefreshing}
         refreshSecondsLeft={refreshSecondsLeft}
@@ -643,10 +642,10 @@ export default function DashboardPage({ onOpenNewPatient }) {
             highlights={[
               { label: 'Turnaround Time', value: '48 Minutes', color: 'text-emerald-700' },
               { label: 'Digital Dispatch', value: '75.0% Ready', color: 'text-blue-700' },
-              { label: 'Server API Sync', value: 'VERIFIED', color: 'text-purple-700' },
+              { label: 'Verification SLA', value: '96.5% Pass', color: 'text-purple-700' },
             ]}
-            onViewDetails={() => setIsJsonModalOpen(true)}
-            detailButtonLabel="Server API Contract"
+            onViewDetails={() => setSelectedDetailChart('department')}
+            detailButtonLabel="View Benchmark Details"
           />
         </div>
       )}
