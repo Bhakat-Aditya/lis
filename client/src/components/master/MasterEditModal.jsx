@@ -139,6 +139,17 @@ export default function MasterEditModal({
         status: item?.Status || item?.status || 'Active',
         sampleId: item?.sampleId || '101.3',
       });
+    } else if (category === 'references') {
+      setFormData({
+        id: item?.['Refer Id'] || item?.id || '',
+        name: item?.Name || item?.name || '',
+        address: item?.Address || item?.address || '',
+        contact: item?.Contact || item?.contact || '',
+        rate: item?.Rate || item?.rate || '0',
+        type: item?.Type || item?.type || 'P',
+        status: item?.Status || item?.status || 'Active',
+        sampleId: item?.sampleId || '101.3',
+      });
     } else if (category === 'departments') {
       setFormData({
         id: item?.['Dept Id'] || item?.id || '',
@@ -243,6 +254,8 @@ export default function MasterEditModal({
         return isEditing ? `Edit Investigation Package (${formData.PKG_ID || ''})` : 'Add New Package';
       case 'doctors':
         return isEditing ? `Edit Referral Doctor (${formData.id || ''})` : 'Add New Referral Doctor';
+      case 'references':
+        return isEditing ? `Edit Referring Agent (${formData.name || formData.id || ''})` : 'Add New Referring Agent';
       case 'departments':
         return isEditing ? `Edit Lab Department (${formData.id || ''})` : 'Add New Department';
       case 'units':
@@ -273,6 +286,7 @@ export default function MasterEditModal({
         profiles: 'profile',
         packages: 'package',
         doctors: 'doctor',
+        references: 'reference',
         departments: 'department',
         units: 'unit',
         branches: 'branch',
@@ -930,6 +944,115 @@ export default function MasterEditModal({
                   value={formData.deg || ''}
                   onChange={(e) => handleChange('deg', e.target.value)}
                   placeholder="e.g. MBBS, MD, MS GASTRO"
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Contact Phone
+                </label>
+                <input
+                  type="text"
+                  value={formData.contact || ''}
+                  onChange={(e) => handleChange('contact', e.target.value)}
+                  placeholder="e.g. 9876543210"
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Commission / Rate
+                </label>
+                <input
+                  type="text"
+                  value={formData.rate || ''}
+                  onChange={(e) => handleChange('rate', e.target.value)}
+                  placeholder="e.g. 10 or 0"
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Commission Type
+                </label>
+                <select
+                  value={formData.type || 'P'}
+                  onChange={(e) => handleChange('type', e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-bold"
+                >
+                  <option value="P">Percentage (%)</option>
+                  <option value="F">Fixed (₹)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Status
+                </label>
+                <select
+                  value={formData.status || 'Active'}
+                  onChange={(e) => handleChange('status', e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-bold"
+                >
+                  <option value="Active">Active</option>
+                  <option value="Deactive">Deactive</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 4b. REFERRING AGENTS FORM (REFERANCE_LIST) */}
+        {category === 'references' && (
+          <div className="space-y-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Refer ID {isEditing ? '(Locked)' : '*'}
+                </label>
+                <input
+                  type="text"
+                  required
+                  disabled={isEditing}
+                  value={formData.id || ''}
+                  onChange={(e) => handleChange('id', e.target.value)}
+                  placeholder="e.g. 1, 2, or R10"
+                  className={`w-full px-3 py-1.5 text-xs border rounded-lg font-mono ${
+                    isEditing ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-white border-slate-300'
+                  }`}
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Referring Agent / Source Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.name || ''}
+                  onChange={(e) => handleChange('name', e.target.value)}
+                  placeholder="e.g. Health Camp / Dr. Referrer / Direct Walk-in"
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-semibold"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Address / Location
+                </label>
+                <input
+                  type="text"
+                  value={formData.address || ''}
+                  onChange={(e) => handleChange('address', e.target.value)}
+                  placeholder="e.g. Midnapore Rural / Station Road"
                   className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg"
                 />
               </div>

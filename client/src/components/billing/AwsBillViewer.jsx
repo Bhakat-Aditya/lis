@@ -92,14 +92,14 @@ export default function AwsBillViewer({ patientId, onBack, title }) {
     <div className="flex flex-col h-[calc(100vh-130px)] min-h-[680px] w-full bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
       {/* Top Action Bar */}
       <div className="flex items-center justify-between px-4 py-3 bg-slate-900 text-white shrink-0 border-b border-slate-800">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {onBack && (
             <button
               onClick={onBack}
-              className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-700 transition-colors cursor-pointer"
+              className="p-1.5 text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors cursor-pointer"
+              title="Back"
             >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back</span>
+              <ArrowLeft className="w-4 h-4" />
             </button>
           )}
           <div className="flex items-center gap-2">
@@ -110,45 +110,41 @@ export default function AwsBillViewer({ patientId, onBack, title }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <button
             onClick={loadBill}
             disabled={loading}
-            className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-700 transition-colors cursor-pointer disabled:opacity-50"
+            className="p-2 text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors cursor-pointer disabled:opacity-50"
             title="Reload authentic bill from AWS server"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-amber-400' : ''}`} />
-            <span className="hidden sm:inline">Refresh</span>
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-amber-400' : ''}`} />
           </button>
 
           <button
             onClick={handleOpenExternal}
             disabled={!blobUrl}
-            className="flex items-center gap-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 active:scale-95 px-3 py-1.5 rounded-lg transition-all cursor-pointer shadow-xs disabled:opacity-50"
+            className="p-2 text-white bg-blue-600 hover:bg-blue-700 active:scale-95 rounded-lg transition-all cursor-pointer shadow-xs disabled:opacity-50"
             title="Open official AWS Bill in a new tab"
           >
-            <ExternalLink className="w-3.5 h-3.5" />
-            <span>Open in Tab</span>
+            <ExternalLink className="w-4 h-4" />
           </button>
 
           <button
             onClick={handleDownload}
             disabled={!blobUrl}
-            className="flex items-center gap-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 px-3 py-1.5 rounded-lg transition-all cursor-pointer shadow-xs disabled:opacity-50"
-            title="Download official PDF as Bill_{cleanPid}.pdf"
+            className="p-2 text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 rounded-lg transition-all cursor-pointer shadow-xs disabled:opacity-50"
+            title={`Download official PDF as Bill_${cleanPid}.pdf`}
           >
-            <Download className="w-3.5 h-3.5" />
-            <span>Download PDF</span>
+            <Download className="w-4 h-4" />
           </button>
 
           <button
             onClick={handlePrint}
             disabled={!blobUrl}
-            className="flex items-center gap-1.5 text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 active:scale-95 px-3.5 py-1.5 rounded-lg transition-all cursor-pointer shadow-xs disabled:opacity-50"
+            className="p-2 text-white bg-amber-500 hover:bg-amber-600 active:scale-95 rounded-lg transition-all cursor-pointer shadow-xs disabled:opacity-50"
             title="Print official AWS Bill"
           >
-            <Printer className="w-3.5 h-3.5" />
-            <span>Print Bill</span>
+            <Printer className="w-4 h-4" />
           </button>
         </div>
       </div>

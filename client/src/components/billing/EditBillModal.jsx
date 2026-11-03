@@ -318,7 +318,7 @@ export default function EditBillModal({
           </div>
 
           {/* Quick Header Actions: Collect Payment & Receipt Print */}
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 flex-wrap">
             {onOpenDeposit && (
               <button
                 type="button"
@@ -326,11 +326,11 @@ export default function EditBillModal({
                   onClose();
                   onOpenDeposit(patient);
                 }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs shadow-xs transition-all cursor-pointer"
-                title="Record payment deposit"
+                className="p-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white transition-all cursor-pointer shadow-xs flex items-center justify-center"
+                title="Record payment deposit (Collect Payment)"
+                aria-label="Collect Payment"
               >
-                <PlusCircle className="w-3.5 h-3.5" />
-                <span>+ Collect Payment</span>
+                <PlusCircle className="w-4 h-4" />
               </button>
             )}
 
@@ -338,11 +338,11 @@ export default function EditBillModal({
               <button
                 type="button"
                 onClick={() => onOpenPrint(patient)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs shadow-xs transition-all cursor-pointer"
+                className="p-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white transition-all cursor-pointer shadow-xs flex items-center justify-center"
                 title="Print official diagnostic receipt"
+                aria-label="Receipt Print"
               >
-                <Printer className="w-3.5 h-3.5" />
-                <span>Receipt Print</span>
+                <Printer className="w-4 h-4" />
               </button>
             )}
 
@@ -351,6 +351,7 @@ export default function EditBillModal({
               onClick={onClose}
               className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
               title="Close (Esc)"
+              aria-label="Close"
             >
               <X className="w-4 h-4" />
             </button>

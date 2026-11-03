@@ -16,6 +16,7 @@ import {
   Clock,
   FlaskConical,
   RotateCcw,
+  Undo2,
   AlertTriangle,
   X,
   Printer,
@@ -42,6 +43,7 @@ import ClinicalGuideModal from '../common/ClinicalGuideModal.jsx';
 import DoctorApprovalModal from './DoctorApprovalModal.jsx';
 import EditIndividualReportModal from './EditIndividualReportModal.jsx';
 import TemplateReportModal from './TemplateReportModal.jsx';
+import TemplateReportsEditor from './TemplateReportsEditor.jsx';
 import ConfirmationModal from '../common/ConfirmationModal.jsx';
 import {
   getTestPhaseInfo,
@@ -1073,6 +1075,40 @@ export default function ResultsEntry({
     });
   };
 
+  // Report Recall Handler (RECALLPORT)
+  const handleRecallReport = () => {
+    const rawPid = patient?.patientId || patient?.slNo;
+    const cleanPid = rawPid
+      ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
+      : '';
+
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Recall Diagnostic Report (RECALLPORT)',
+      message: `Are you sure you want to recall the diagnostic report for ${patient?.name || 'Patient'} (${cleanPid || rawPid})?`,
+      description: 'Recalling resets the report from approved or released status back to active testing/draft so modifications can be made.',
+      confirmText: 'Recall Report',
+      variant: 'rose',
+      icon: Undo2,
+      onConfirm: async () => {
+        setErrorMsg('');
+        setSuccessMsg('');
+        try {
+          const res = await api.post('/reports/recall', { patientId: cleanPid || rawPid });
+          if (res.data?.STATUS === 'FAILED' || res.data?.StatusCode === '1211') {
+            throw new Error(res.data?.Message || 'Failed to recall report');
+          }
+          setSuccessMsg(res.data?.Message || 'Diagnostic report recalled successfully to draft state!');
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+          if (onRefresh) await onRefresh(true);
+        } catch (err) {
+          setErrorMsg(err.response?.data?.Message || err.message || 'Failed to recall report');
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
+  };
+
   // WhatsApp Send / Resend Handler (SENDWHATSAPP)
   const handleSendWhatsApp = () => {
     const rawPid = patient?.patientId || patient?.slNo;
@@ -1332,6 +1368,17 @@ export default function ResultsEntry({
           >
             <Send className="w-3.5 h-3.5" />
             <span>Release Report</span>
+          </button>
+
+          {/* Recall Report Button with Confirmation (RECALLPORT) */}
+          <button
+            type="button"
+            onClick={handleRecallReport}
+            className="flex items-center gap-1.5 px-3 py-1 bg-rose-700 hover:bg-rose-800 active:scale-95 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer"
+            title="Recall report back to draft status for correction (RECALLPORT)"
+          >
+            <Undo2 className="w-3.5 h-3.5" />
+            <span>Recall Report</span>
           </button>
 
           {/* WhatsApp Resend Button with Confirmation */}
@@ -1641,126 +1688,16 @@ export default function ResultsEntry({
         </div>
       )}
 
-      {/* 4c. Dedicated Template Reports Section (Full-Page Report Structure) */}
+      {/* 4c. Dedicated Template Reports Section (Full-Page One-Page Whole Edit Workspace) */}
       {templateReports.length > 0 && (
-        <div className="bg-white rounded-xl border border-purple-200 shadow-2xs overflow-hidden mt-4">
-          <div
-            onClick={() => setShowTemplatesSection((prev) => !prev)}
-            className="px-4 py-3 bg-purple-50/70 border-b border-purple-200/70 flex items-center justify-between cursor-pointer hover:bg-purple-100/60 transition-colors select-none"
-          >
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-xs shadow-2xs">
-                <FileText className="w-3.5 h-3.5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-xs font-bold text-purple-950">
-                    Template Reports (Full-Page Reports) ({templateReports.length})
-                  </h3>
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-200 text-purple-800">
-                    Structured Clinical Formats
-                  </span>
-                </div>
-                <p className="text-[11px] text-purple-700/80">
-                  Full-page examinations (Stool, Urine, Semen, CSF, Histopathology). Use "Edit" to modify examination findings or "Delete" to remove.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-bold text-purple-700">
-                {showTemplatesSection ? 'Hide' : 'Show Reports'}
-              </span>
-              {showTemplatesSection ? (
-                <ChevronUp className="w-4 h-4 text-purple-600" />
-              ) : (
-                <ChevronDown className="w-4 h-4 text-purple-600" />
-              )}
-            </div>
-          </div>
-
-          {showTemplatesSection && (
-            <div className="p-2 sm:p-3 overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200 text-slate-500 text-[11px] font-bold">
-                    <th className="py-2 px-3 w-12">#</th>
-                    <th className="py-2 px-3">Template Report Name</th>
-                    <th className="py-2 px-3">Report ID</th>
-                    <th className="py-2 px-3 hidden sm:table-cell">Report Date</th>
-                    <th className="py-2 px-3">Status</th>
-                    <th className="py-2 px-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {templateReports.map((tmpl, idx) => {
-                    const isDeleting = deletingId === tmpl.reportId;
-
-                    return (
-                      <tr key={tmpl.reportId || idx} className="hover:bg-purple-50/40 transition-colors">
-                        <td className="py-2.5 px-3 font-mono text-slate-400 text-xs">
-                          {idx + 1}
-                        </td>
-                        <td className="py-2.5 px-3">
-                          <div className="font-bold text-slate-800">
-                            {tmpl.testName}
-                          </div>
-                          <div className="text-[10px] text-purple-600 font-medium">
-                            Full-Page Dynamic Result Format
-                          </div>
-                        </td>
-                        <td className="py-2.5 px-3 font-mono text-xs font-bold text-purple-700">
-                          {tmpl.reportId}
-                        </td>
-                        <td className="py-2.5 px-3 hidden sm:table-cell text-slate-500 font-mono text-[11px]">
-                          {tmpl.date || 'Today'}
-                        </td>
-                        <td className="py-2.5 px-3">
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                              String(tmpl.status || '').toUpperCase() === 'SAVED'
-                                ? 'bg-blue-100 text-blue-800'
-                                : 'bg-emerald-100 text-emerald-800'
-                            }`}
-                          >
-                            {tmpl.status || 'SAVED'}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 text-right">
-                          <div className="inline-flex items-center gap-1.5 justify-end">
-                            <button
-                              type="button"
-                              onClick={() => setEditingTemplate(tmpl)}
-                              className="inline-flex items-center gap-1 px-3 py-1 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer"
-                              title="Open full-page dynamic result editor"
-                            >
-                              <Edit3 className="w-3.5 h-3.5" />
-                              <span>Edit</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteTemplateReport(tmpl)}
-                              disabled={isDeleting}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-50 hover:bg-rose-100 active:scale-95 text-rose-700 rounded-lg text-xs font-bold border border-rose-200 transition-all cursor-pointer disabled:opacity-50"
-                              title="Delete this template report"
-                            >
-                              {isDeleting ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                              )}
-                              <span>Delete</span>
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        <TemplateReportsEditor
+          templateReports={templateReports}
+          patient={patient}
+          onRefresh={onRefresh}
+          onDeleteReport={handleDeleteTemplateReport}
+          deletingId={deletingId}
+          onOpenModal={(tmpl) => setEditingTemplate(tmpl)}
+        />
       )}
 
       {/* 5. Floating Sticky Unsaved Changes Action Bar */}

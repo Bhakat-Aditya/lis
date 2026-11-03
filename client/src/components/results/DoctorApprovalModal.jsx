@@ -10,6 +10,7 @@ import {
   BookOpen,
   Clock,
   Loader2,
+  Undo2,
 } from 'lucide-react';
 import api from '../../services/api';
 import Modal from '../common/Modal.jsx';
@@ -36,6 +37,7 @@ export default function DoctorApprovalModal({
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
   const [showReleaseConfirm, setShowReleaseConfirm] = useState(false);
+  const [showRecallConfirm, setShowRecallConfirm] = useState(false);
   const [activeAction, setActiveAction] = useState(null);
   const [error, setError] = useState('');
   const [guideModalOpen, setGuideModalOpen] = useState(false);
@@ -82,6 +84,8 @@ export default function DoctorApprovalModal({
         await api.post('/reports/approve', { patientId: cleanPatientId, reportId: reportIdList });
       } else if (actionType === 'release') {
         await api.post('/reports/release', { patientId: cleanPatientId });
+      } else if (actionType === 'recall') {
+        await api.post('/reports/recall', { patientId: cleanPatientId });
       } else if (actionType === 'reject') {
         await api.post('/reports/reject', {
           patientId: cleanPatientId,
@@ -356,6 +360,21 @@ export default function DoctorApprovalModal({
                 )}
                 <span>Release (Stage 3)</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setShowRecallConfirm(true)}
+                disabled={loading}
+                className="flex items-center gap-1 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-lg font-bold text-xs shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                title="Recall report back to draft status for correction (RECALLPORT)"
+              >
+                {activeAction === 'recall' ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Undo2 className="w-3.5 h-3.5" />
+                )}
+                <span>Recall Report</span>
+              </button>
             </div>
           </div>
         </div>
@@ -375,6 +394,22 @@ export default function DoctorApprovalModal({
         confirmText="Release Report"
         variant="teal"
         icon={Send}
+      />
+
+      {/* Confirmation Modal before Recall */}
+      <ConfirmationModal
+        isOpen={showRecallConfirm}
+        onClose={() => setShowRecallConfirm(false)}
+        onConfirm={async () => {
+          setShowRecallConfirm(false);
+          await handleAction('recall');
+        }}
+        title="Recall Diagnostic Report"
+        message={`Are you sure you want to recall the diagnostic report for ${patient.name} (Barcode: ${patient.slNo || '-'})?`}
+        description="Recalling pulls the report back to draft/active state for edits, corrections, or re-testing (RECALLPORT)."
+        confirmText="Recall Report"
+        variant="rose"
+        icon={Undo2}
       />
 
       <ClinicalGuideModal

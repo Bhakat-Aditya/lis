@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import { config } from '../config/config.env.js';
 import { sessionService } from '../services/service.session.js';
 
-export const requireAuth = (req, res, next) => {
+export const requireAuth = async (req, res, next) => {
   try {
     let token = null;
     const authHeader = req.headers.authorization;
@@ -25,7 +25,7 @@ export const requireAuth = (req, res, next) => {
     // Validate single active session concurrency:
     // If the same user logged in from another browser/IP, this token's sessionId is superseded
     if (decoded.loginId && decoded.sessionId) {
-      const validation = sessionService.validateSession(decoded.loginId, decoded.sessionId);
+      const validation = await sessionService.validateSession(decoded.loginId, decoded.sessionId);
       if (!validation.valid) {
         return res.status(401).json({
           STATUS: 'FAILED',

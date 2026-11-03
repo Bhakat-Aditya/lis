@@ -9,7 +9,6 @@ import AnalyticsStackedBarChart from '../components/dashboard/AnalyticsStackedBa
 import AnalyticsPieChart from '../components/dashboard/AnalyticsPieChart.jsx';
 import AnalyticsGridCard from '../components/dashboard/AnalyticsGridCard.jsx';
 import AnalyticsDetailModal from '../components/dashboard/AnalyticsDetailModal.jsx';
-import ApiJsonModal from '../components/dashboard/ApiJsonModal.jsx';
 import MachineStatusHub from '../components/dashboard/MachineStatusHub.jsx';
 import {
   CheckCircle2,
@@ -62,10 +61,33 @@ export default function DashboardPage({ onOpenNewPatient }) {
   const [fromDate, setFromDate] = useState(() => calculatePastDate(todayStr, 8));
   const [analyticsData, setAnalyticsData] = useState(null);
   const [loadingAnalytics, setLoadingAnalytics] = useState(true);
-  const [isJsonModalOpen, setIsJsonModalOpen] = useState(false);
   const [selectedDetailChart, setSelectedDetailChart] = useState(null);
   const [patients, setPatients] = useState([]);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  // Live BetterStack Heartbeats Telemetry
+  const [heartbeatData, setHeartbeatData] = useState(null);
+  const [loadingHeartbeats, setLoadingHeartbeats] = useState(false);
+
+  const fetchHeartbeats = useCallback(async () => {
+    try {
+      setLoadingHeartbeats(true);
+      const res = await api.get('/heartbeats');
+      if (res.data && res.data.STATUS === 'SUCCESS') {
+        setHeartbeatData(res.data);
+      }
+    } catch (err) {
+      console.warn('[Dashboard] BetterStack heartbeats error:', err.message);
+    } finally {
+      setLoadingHeartbeats(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchHeartbeats();
+    const interval = setInterval(fetchHeartbeats, 30000); // 30s auto-refresh
+    return () => clearInterval(interval);
+  }, [fetchHeartbeats]);
 
   // Refresh flow states: POST API_DASHBOARD_REFRESH="DASHBOARDREFRESH" -> 2-min wait -> GET API_GET_DASHBOARD_JSON="GETDASHBOARDJSON"
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -310,7 +332,7 @@ export default function DashboardPage({ onOpenNewPatient }) {
         />
       </Helmet>
 
-      {/* Top Banner with Date Selector, Clock, Refresh & API JSON Contract Shortcut */}
+      {/* Top Banner with Date Selector, Clock, Refresh & Patient Entry */}
       <AnalyticsBanner
         fromDate={fromDate}
         toDate={toDate}
@@ -567,50 +589,76 @@ export default function DashboardPage({ onOpenNewPatient }) {
             detailButtonLabel="Delivery Funnel"
           />
 
-          {/* Card 8: Automated Laboratory Interfacing & Machine Telemetry */}
+          {/* Card 8: Automated Laboratory Interfacing & Machine Telemetry (BetterStack Live) */}
           <AnalyticsGridCard
             title="Analyzer Hardware Telemetry"
             category="Instrument Interfacing"
             icon={<Cpu className="w-4 h-4 text-blue-600" />}
             iconBg="bg-blue-50 text-blue-600 border-blue-200"
-            badge="3 Connected"
-            badgeType="emerald"
+            badge={
+              heartbeatData
+                ? `${heartbeatData.onlineCount} / ${heartbeatData.count} Online`
+                : 'BetterStack Sync'
+            }
+            badgeType={heartbeatData && heartbeatData.onlineCount > 0 ? 'emerald' : 'amber'}
             description="Live bidirectional ASTM E1381 / E1394 interface telemetry connecting automated clinical analyzers directly to worklist queues."
             chart={
-              <div className="w-full flex flex-col gap-2.5 p-2 justify-center">
-                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/90 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                    <span className="text-xs font-bold text-slate-800">Hematology Cell Counter</span>
+              <div className="w-full flex flex-col gap-2 p-1 justify-center">
+                {heartbeatData?.heartbeats && heartbeatData.heartbeats.length > 0 ? (
+                  heartbeatData.heartbeats.slice(0, 3).map((hb) => (
+                    <div
+                      key={hb.id}
+                      className="p-2 rounded-xl bg-slate-50 border border-slate-200/90 flex items-center justify-between transition-colors hover:bg-slate-100/70"
+                    >
+                      <div className="flex items-center gap-2 min-w-0 pr-2">
+                        <span
+                          className={`w-2 h-2 rounded-full shrink-0 ${
+                            hb.isUp ? 'bg-emerald-500 animate-ping' : 'bg-rose-400'
+                          }`}
+                        />
+                        <span className="text-xs font-bold text-slate-800 truncate" title={hb.name}>
+                          {hb.name}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">
+                          {hb.lastPingAgo || hb.timeInState}
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                            hb.isUp
+                              ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                              : 'text-rose-700 bg-rose-50 border-rose-200'
+                          }`}
+                        >
+                          {hb.isUp ? 'ONLINE' : 'DOWN'}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-4 text-center text-xs text-slate-500">
+                    {loadingHeartbeats ? 'Connecting to BetterStack API...' : 'No telemetry data available'}
                   </div>
-                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                    ONLINE
-                  </span>
-                </div>
-                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/90 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                    <span className="text-xs font-bold text-slate-800">ASTM Protocol Stream</span>
-                  </div>
-                  <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
-                    TRANSMITTING
-                  </span>
-                </div>
-                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/90 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-purple-500" />
-                    <span className="text-xs font-bold text-slate-800">ABHOI LIS Engine</span>
-                  </div>
-                  <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
-                    PROCESSING
-                  </span>
-                </div>
+                )}
               </div>
             }
             highlights={[
-              { label: 'Analyzer State', value: 'CONNECTED', color: 'text-emerald-700' },
-              { label: 'Protocol', value: 'ASTM / HL7', color: 'text-blue-700' },
-              { label: 'Packet Flow', value: '100% OK', color: 'text-slate-900' },
+              {
+                label: 'Telemetry Source',
+                value: 'BetterStack v2',
+                color: 'text-blue-700',
+              },
+              {
+                label: 'Active Devices',
+                value: heartbeatData ? `${heartbeatData.onlineCount} / ${heartbeatData.count}` : 'Live Ping',
+                color: heartbeatData && heartbeatData.onlineCount > 0 ? 'text-emerald-700' : 'text-rose-700',
+              },
+              {
+                label: 'Packet Flow',
+                value: '100% OK',
+                color: 'text-slate-900',
+              },
             ]}
             onViewDetails={() => setActiveView('machines')}
             detailButtonLabel="Open Topology Hub"
@@ -667,13 +715,6 @@ export default function DashboardPage({ onOpenNewPatient }) {
           />
         </div>
       )}
-
-      {/* Server Developer API JSON Modal */}
-      <ApiJsonModal
-        isOpen={isJsonModalOpen}
-        onClose={() => setIsJsonModalOpen(false)}
-        currentData={analyticsData}
-      />
 
       {/* Comprehensive Analytical Deep-Dive Modal */}
       <AnalyticsDetailModal

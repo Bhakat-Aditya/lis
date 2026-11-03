@@ -344,8 +344,9 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
         const statusNum = Number(p.billPayStatus);
         if (statusNum === PAYMENT_STATUS_CODE_PAID) return false;
         const billTotal = Number(p.totalBill || 0);
+        const billDiscount = Number(p.discount || 0);
         const billPaid = Number(p.paidBill || 0);
-        const due = Number(p.balance ?? Math.max(0, billTotal - billPaid));
+        const due = Math.max(0, billTotal - billDiscount - billPaid);
         if (due <= 0 && statusNum !== PAYMENT_STATUS_CODE_UNPAID) return false;
       }
       if (searchTerm) {
@@ -579,8 +580,9 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                   const isTrans = rawGender.toLowerCase().startsWith('t') || rawGender.toLowerCase().startsWith('o');
                   const displayGender = isMale ? 'Male' : isFemale ? 'Female' : isTrans ? 'Transgender' : 'Male';
                   const billTotal = Number(p.totalBill || 0);
+                  const billDiscount = Number(p.discount || 0);
                   const billPaid = Number(p.paidBill || 0);
-                  const billBalance = Number(p.balance ?? Math.max(0, billTotal - billPaid));
+                  const billBalance = Math.max(0, billTotal - billDiscount - billPaid);
                   const billPayStatusNum = Number(p.billPayStatus);
                   const isPaid = billPayStatusNum === PAYMENT_STATUS_CODE_PAID;
                   const isUnpaid = billPayStatusNum === PAYMENT_STATUS_CODE_UNPAID || (!isPaid && billPayStatusNum !== PAYMENT_STATUS_CODE_NOBILL && billTotal > 0);
@@ -1010,19 +1012,18 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                                   ? lotsRateTotal
                                   : (Number(effectivePatient.totalBill) > 0 ? Number(effectivePatient.totalBill) : billTotal);
 
+                                const discountAmount = Number(effectivePatient.discount || 0);
                                 const effectivePaid = effectivePatient.paidBill !== undefined && effectivePatient.paidBill !== null
                                   ? Number(effectivePatient.paidBill)
-                                  : (effectivePatient.billPayStatus === PAYMENT_STATUS_CODE_PAID ? effectiveTotal : billPaid);
+                                  : (effectivePatient.billPayStatus === PAYMENT_STATUS_CODE_PAID ? Math.max(0, effectiveTotal - discountAmount) : billPaid);
 
-                                const syncedBal = effectivePatient.balance !== undefined && effectivePatient.balance !== null
-                                  ? Number(effectivePatient.balance)
-                                  : (effectivePatient.dueAmount !== undefined ? Number(effectivePatient.dueAmount) : null);
-
+                                const netDue = Math.max(0, effectiveTotal - discountAmount);
+                                // Strict mathematical consistency: Balance Due = Total Amount - Discount - Deposits
                                 const effectiveBalance = effectivePatient.billPayStatus === PAYMENT_STATUS_CODE_PAID
                                   ? 0
-                                  : (syncedBal !== null && !isNaN(syncedBal) ? Math.max(0, syncedBal) : Math.max(0, effectiveTotal - effectivePaid));
+                                  : Math.max(0, netDue - effectivePaid);
 
-                                const effectiveIsPaid = effectivePatient.billPayStatus === PAYMENT_STATUS_CODE_PAID || (effectiveTotal > 0 && effectiveBalance <= 0 && effectivePaid >= effectiveTotal);
+                                const effectiveIsPaid = effectivePatient.billPayStatus === PAYMENT_STATUS_CODE_PAID || (effectiveTotal > 0 && effectiveBalance <= 0 && effectivePaid >= netDue);
                                 const effectiveIsBilled = effectiveTotal > 0;
 
                                 return (

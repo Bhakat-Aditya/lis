@@ -39,6 +39,7 @@ import {
   TestTube,
   Send,
   MessageSquare,
+  Undo2,
 } from 'lucide-react';
 import { formatDisplayDate, getLocalDateString } from '../utils/dateUtils.js';
 
@@ -104,17 +105,6 @@ export default function PatientDetailPage() {
     if (!pt) return 0;
     if (Number(pt.billPayStatus) === 2) return 0;
 
-    const explicitDue =
-      pt.balance !== undefined && pt.balance !== null && pt.balance !== ''
-        ? Number(pt.balance)
-        : pt.dueAmount !== undefined && pt.dueAmount !== null && pt.dueAmount !== ''
-        ? Number(pt.dueAmount)
-        : null;
-
-    if (explicitDue !== null && !isNaN(explicitDue)) {
-      return Math.max(0, explicitDue);
-    }
-
     const discount = Number(pt.discount || 0);
     const paid = Number(pt.paidBill || 0);
 
@@ -129,11 +119,22 @@ export default function PatientDetailPage() {
       baseTotal = Number(pt.totalBill);
     }
 
+    if (baseTotal === 0 && Number(pt.grossTotal || 0) > 0) {
+      baseTotal = Number(pt.grossTotal);
+    }
+
     if (baseTotal > 0) {
       return Math.max(0, baseTotal - discount - paid);
     }
 
-    return 0;
+    const explicitDue =
+      pt.balance !== undefined && pt.balance !== null && pt.balance !== ''
+        ? Number(pt.balance)
+        : pt.dueAmount !== undefined && pt.dueAmount !== null && pt.dueAmount !== ''
+        ? Number(pt.dueAmount)
+        : 0;
+
+    return Math.max(0, explicitDue);
   };
 
   // Listen to sidebar trigger
@@ -376,6 +377,42 @@ export default function PatientDetailPage() {
           await fetchPatientData();
         } catch (err) {
           const msg = err.response?.data?.Message || err.message || 'Failed to release report';
+          setErrorMessage(msg);
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
+  };
+
+  // Task - 10 : Report Recall (RECALLPORT)
+  const handleRecallReport = () => {
+    const rawPid = patient?.patientId || id;
+    const cleanPid = rawPid
+      ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
+      : '';
+
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Recall Diagnostic Report (RECALLPORT)',
+      message: `Are you sure you want to recall the diagnostic report for ${patient?.name || 'Patient'} (${cleanPid || rawPid})?`,
+      description: 'Recalling resets the report from approved or released status back to active testing/draft so modifications or re-tests can be performed.',
+      confirmText: 'Recall Report',
+      cancelText: 'Cancel',
+      variant: 'rose',
+      icon: Undo2,
+      onConfirm: async () => {
+        setErrorMessage('');
+        setNotification('');
+        try {
+          const res = await api.post('/reports/recall', { patientId: cleanPid || rawPid });
+          if (res.data?.STATUS === 'FAILED' || res.data?.StatusCode === '1211') {
+            throw new Error(res.data?.Message || 'Failed to recall report');
+          }
+          setNotification(res.data?.Message || 'Diagnostic report recalled successfully to draft state!');
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+          await fetchPatientData();
+        } catch (err) {
+          const msg = err.response?.data?.Message || err.message || 'Failed to recall report';
           setErrorMessage(msg);
           setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
         }
@@ -653,6 +690,7 @@ export default function PatientDetailPage() {
           onPrintReport={() => handleOpenReportPdf(true)}
           onReceiveSample={handleReceiveSample}
           onReleaseReport={handleReleaseReport}
+          onRecallReport={handleRecallReport}
           onSendWhatsApp={handleSendWhatsApp}
           onOpenWhatsAppModal={(defaultType) => {
             setWhatsAppDefaultType(defaultType || 'patientReportMsg');
@@ -672,6 +710,7 @@ export default function PatientDetailPage() {
           reports={reports}
           onReceiveSample={handleReceiveSample}
           onReleaseReport={handleReleaseReport}
+          onRecallReport={handleRecallReport}
           onSendWhatsApp={handleSendWhatsApp}
           onOpenWhatsAppModal={(defaultType) => {
             setWhatsAppDefaultType(defaultType || 'patientReportMsg');
@@ -710,10 +749,10 @@ export default function PatientDetailPage() {
             </div>
             <button
               onClick={() => setShowEditBillModal(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+              className="p-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl shadow-xs transition-all cursor-pointer"
+              title="Edit Bill Particulars & Rates (BILLUPDATE)"
             >
-              <Edit className="w-3.5 h-3.5" />
-              <span>Edit Bill Particulars (BILLUPDATE)</span>
+              <Edit className="w-4 h-4" />
             </button>
           </div>
           <AwsBillViewer

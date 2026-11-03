@@ -845,17 +845,16 @@ export default function BillingPage() {
                         </span>
                       </td>
 
-                      {/* 13. Actions */}
+                      {/* 13. Actions (Icons only) */}
                       <td className="py-3 px-3 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             type="button"
                             onClick={() => setEditingBillPatient(p)}
-                            className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs py-1 px-2.5 rounded-lg shadow-2xs cursor-pointer transition-all"
-                            title="Edit Invoice Particulars & Rates (BILLUPDATE)"
+                            className="p-1.5 bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white border border-blue-200 hover:border-blue-600 rounded-lg shadow-2xs cursor-pointer transition-all active:scale-95"
+                            title="Edit Bill Particulars & Rates (BILLUPDATE)"
                           >
-                            <Edit className="w-3 h-3" />
-                            <span>Edit Bill</span>
+                            <Edit className="w-3.5 h-3.5" />
                           </button>
                           <button
                             type="button"
@@ -864,19 +863,18 @@ export default function BillingPage() {
                               const dueVal = Number(p.totalOutstanding || 0);
                               setAmount(dueVal > 0 ? String(dueVal) : (p.totalBill ? String(p.totalBill) : '500'));
                             }}
-                            className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs py-1 px-2.5 rounded-lg shadow-2xs cursor-pointer transition-all"
-                            title="Record deposit receipt"
+                            className="p-1.5 bg-emerald-50 hover:bg-emerald-600 text-emerald-600 hover:text-white border border-emerald-200 hover:border-emerald-600 rounded-lg shadow-2xs cursor-pointer transition-all active:scale-95"
+                            title="Record Deposit Receipt"
                           >
-                            <PlusCircle className="w-3 h-3" />
-                            <span>Deposit</span>
+                            <PlusCircle className="w-3.5 h-3.5" />
                           </button>
                           <button
                             type="button"
                             onClick={() => setPreviewPatient(p)}
-                            className="flex items-center gap-1 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold text-xs py-1 px-2 rounded-lg shadow-2xs cursor-pointer transition-all"
-                            title="Preview official AWS bill"
+                            className="p-1.5 bg-amber-50 hover:bg-amber-500 text-amber-600 hover:text-white border border-amber-200 hover:border-amber-500 rounded-lg shadow-2xs cursor-pointer transition-all active:scale-95"
+                            title="Preview Official AWS Bill"
                           >
-                            <Printer className="w-3 h-3" />
+                            <Printer className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </td>

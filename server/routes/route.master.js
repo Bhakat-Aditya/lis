@@ -31,12 +31,11 @@ router.get('/status', getCacheStatus);
 router.get('/list/:key', getMasterList);
 router.post('/refresh', forceRefresh);
 
-// 2. Update Master Static Data - Rule 5: Master Control - Setting ONLY
-// Rule 6: Super has all access EXCEPT Update Master Data static settings
-const requireMasterUpdate = requireRoles([ROLES.SETTING], {
-  allowSuper: false,
+// 2. Update Master Static Data - Lab Administrators (Super) & Setting managers
+const requireMasterUpdate = requireRoles([ROLES.SETTING, ROLES.SUPER], {
+  allowSuper: true,
   deniedMessage:
-    "Access denied. Updating Master static settings is strictly restricted to 'Master Control - Setting'. Super has all access EXCEPT updating Master Data static settings.",
+    "Access denied. Updating Master static settings is restricted to Lab Administrators and Setting managers.",
 });
 
 router.post('/department', requireMasterUpdate, updateDepartment);

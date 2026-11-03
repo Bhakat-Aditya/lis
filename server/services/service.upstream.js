@@ -4,6 +4,7 @@ import { config } from '../config/config.env.js';
 export const API_LOGIN_V2 = "LOGINV2";
 export const API_DASHBOARD_REFRESH = "DASHBOARDREFRESH";
 export const API_GET_DASHBOARD_JSON = "GETDASHBOARDJSON";
+export const API_RECALL_REPORT = "RECALLPORT";
 
 export const UPSTREAM_ERROR_MAP = {
   '0001': 'API missing',
@@ -318,6 +319,23 @@ class UpstreamService {
       console.error(`[Upstream] BillingServlet failed:`, err.message);
       throw err;
     }
+  }
+
+  /**
+   * Recall approved or released report back to testing/draft (Task - 10: RECALLPORT)
+   * /APIServlet?api=RECALLPORT&patientId=P47
+   */
+  async recallReport(patientId, sid = null) {
+    const rawPid = String(patientId || '').trim();
+    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+      ? `P${rawPid.replace(/^P+/i, '')}`
+      : `P${rawPid}`;
+    return await this.post(
+      API_RECALL_REPORT,
+      { patientId: cleanPatientId },
+      null,
+      sid
+    );
   }
 
   /**

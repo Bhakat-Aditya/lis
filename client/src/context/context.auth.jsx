@@ -177,6 +177,9 @@ export const AuthProvider = ({ children }) => {
       case 'release_report':
         return ['Super', 'Technician', 'Doctor'].includes(r);
 
+      case 'recall_report':
+        return ['Super', 'Technician', 'Doctor'].includes(r);
+
       case 'report_update':
       case 'update_report':
         return ['Super', 'Technician', 'Doctor', 'Microbiology'].includes(r);
@@ -189,9 +192,9 @@ export const AuthProvider = ({ children }) => {
       case 'view_master':
         return true; // All roles can view
 
-      // 6. Super: All Access EXCEPT Update Master Data static settings
+      // 6. Super & Setting: Update Master Data static settings & templates
       case 'update_master':
-        return r === 'Setting'; // ONLY Master Control - Setting
+        return ['Setting', 'Super'].includes(r);
 
       default:
         return r === 'Super';

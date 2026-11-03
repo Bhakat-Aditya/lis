@@ -109,14 +109,48 @@ class SessionService {
 
   /**
    * Validate whether a session is the currently active one for this loginId.
+   * Checks in-memory cache first, falling back to MongoDB if server restarted.
    */
-  validateSession(loginId, sessionId) {
+  async validateSession(loginId, sessionId) {
     if (!loginId || !sessionId) {
       return { valid: false, reason: 'MISSING_PARAMS', message: 'Authentication required' };
     }
 
     const normalizedLogin = loginId.toLowerCase().trim();
-    const activeSession = this.activeSessionsByLogin.get(normalizedLogin);
+    let activeSession = this.activeSessionsByLogin.get(normalizedLogin);
+
+    // If not in-memory (e.g. server restarted or cold process), hydrate from MongoDB
+    if (!activeSession && mongoose.connection.readyState === 1) {
+      try {
+        const dbSession = await Session.findOne({
+          loginId: normalizedLogin,
+          isActive: true,
+        }).sort({ createdAt: -1 });
+
+        if (dbSession) {
+          activeSession = {
+            sessionId: dbSession.sessionId,
+            userId: dbSession.userId,
+            loginId: dbSession.loginId,
+            upstreamSid: dbSession.upstreamSid,
+            ip: dbSession.ip,
+            userAgent: dbSession.userAgent,
+            role: dbSession.role,
+            branchId: dbSession.branchId,
+            expiresAt: dbSession.expiresAt,
+            isActive: dbSession.isActive,
+            terminatedReason: dbSession.terminatedReason,
+          };
+          this.activeSessionsByLogin.set(normalizedLogin, activeSession);
+          this.sessionsById.set(dbSession.sessionId, activeSession);
+          if (activeSession.upstreamSid) {
+            upstreamService.masterSid = activeSession.upstreamSid;
+          }
+        }
+      } catch (dbErr) {
+        console.warn('[Session] Hydration error from DB:', dbErr.message);
+      }
+    }
 
     // If no active session found or sessionId mismatch (logged in elsewhere)
     if (!activeSession) {

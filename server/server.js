@@ -13,6 +13,7 @@ import reportRoutes from './routes/route.report.js';
 import billingRoutes from './routes/route.billing.js';
 import masterRoutes from './routes/route.master.js';
 import analyticsRoutes from './routes/route.analytics.js';
+import heartbeatRoutes from './routes/route.heartbeat.js';
 
 const app = express();
 
@@ -53,6 +54,7 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/billing', billingRoutes);
 app.use('/api/master', masterRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/heartbeats', heartbeatRoutes);
 
 // Global Error Handler
 app.use(errorHandler);

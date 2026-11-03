@@ -31,6 +31,7 @@ import {
   UserCheck,
   Stethoscope,
   Building2,
+  Undo2,
 } from 'lucide-react';
 import { formatDisplayDate } from '../../utils/dateUtils.js';
 import { useMaster } from '../../context/context.master.jsx';
@@ -57,6 +58,7 @@ export default function PatientProfileView({
   onPrintReport,
   onReceiveSample,
   onReleaseReport,
+  onRecallReport,
   onSendWhatsApp,
   onOpenWhatsAppModal,
   onAddDeposit,
@@ -104,30 +106,85 @@ export default function PatientProfileView({
 
   const isBilled = testsTotal > 0 || syncedTotal > 0;
   const discountAmount = Number(patient.discount || 0);
-  const netDue = Math.max(0, (syncedTotal > 0 ? syncedTotal : testsTotal - discountAmount));
   const isStatusPaid = patient.billPayStatus === 2 || patient.billPayStatus === '2';
-  const depositsAmount = Number(patient.paidBill || 0) > 0
-    ? Number(patient.paidBill)
-    : (isStatusPaid && testsTotal > 0 ? testsTotal : Number(patient.paidBill || 0));
+  const rawPaid = Number(patient.paidBill || 0);
+  const depositsAmount = rawPaid > 0
+    ? rawPaid
+    : (isStatusPaid && testsTotal > 0 ? Math.max(0, testsTotal - discountAmount) : 0);
 
-  const syncedBalance = (patient.balance !== undefined && patient.balance !== null && !isNaN(Number(patient.balance)))
-    ? Number(patient.balance)
-    : (patient.dueAmount !== undefined && patient.dueAmount !== null && !isNaN(Number(patient.dueAmount)) ? Number(patient.dueAmount) : null);
-
+  const netDue = Math.max(0, testsTotal - discountAmount);
+  // Strict financial consistency: Balance Due = Total Amount - Discount - Deposits
   const balanceDue = isBilled
-    ? (isStatusPaid
-        ? 0
-        : (syncedBalance !== null ? Math.max(0, syncedBalance) : Math.max(0, netDue - depositsAmount)))
+    ? (isStatusPaid ? 0 : Math.max(0, netDue - depositsAmount))
     : 0;
 
   const isPaid = isBilled && (isStatusPaid || (balanceDue <= 0 && depositsAmount >= netDue));
   const advanceAmount = Number(patient.advance || 0);
   const paymentLines = patient.paymentLines || patient.payments || [];
 
-  // Status percentage
+  // Status percentage and normalization
   const statusStr = String(patient.status || '').toUpperCase();
-  const isReady = ['APPROVED', 'PRINTING', 'RELEASED', 'READY', 'REPORT READY'].includes(statusStr);
-  const progressPercent = isReady ? 100 : statusStr.includes('TEST') ? 70 : statusStr.includes('SAMPLE') ? 50 : 25;
+  const isReady = ['APPROVED', 'PRINTING', 'RELEASED', 'READY', 'REPORT READY', 'VERIFIED'].includes(statusStr);
+  const progressPercent = isReady
+    ? 100
+    : statusStr.includes('PRINT')
+    ? 85
+    : statusStr.includes('FULL') || statusStr.includes('TEST')
+    ? 70
+    : statusStr.includes('PART')
+    ? 60
+    : statusStr.includes('SAMPLE')
+    ? 50
+    : 25;
+
+  const renderStatusBadge = () => {
+    if (statusStr.includes('SAMPLE')) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-bold shadow-2xs whitespace-nowrap">
+          <FlaskConical className="w-3 h-3" />
+          <span>SAMPLE</span>
+        </span>
+      );
+    }
+    if (statusStr.includes('PART')) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-sky-500 text-white text-[10px] font-bold shadow-2xs whitespace-nowrap">
+          <FileText className="w-3 h-3" />
+          <span>RESULT PARTLY</span>
+        </span>
+      );
+    }
+    if (statusStr.includes('FULL') || statusStr.includes('TEST')) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-purple-600 text-white text-[10px] font-bold shadow-2xs whitespace-nowrap">
+          <FileCheck className="w-3 h-3" />
+          <span>RESULT FULLY</span>
+        </span>
+      );
+    }
+    if (statusStr.includes('PRINT')) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-teal-600 text-white text-[10px] font-bold shadow-2xs whitespace-nowrap">
+          <Printer className="w-3 h-3" />
+          <span>PRINTING</span>
+        </span>
+      );
+    }
+    if (isReady) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#10b981] text-white text-[10px] font-bold shadow-2xs whitespace-nowrap">
+          <CheckCircle className="w-3 h-3" />
+          <span>RELEASED</span>
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-bold shadow-2xs whitespace-nowrap">
+        <User className="w-3 h-3" />
+        <span>{patient.status || 'ENTRY'}</span>
+      </span>
+    );
+  };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
@@ -260,17 +317,7 @@ export default function PatientProfileView({
             </div>
 
             <div className="pt-1 flex items-center justify-between">
-              {isReady ? (
-                <span className="inline-flex items-center gap-1 px-3 py-1 rounded bg-[#10b981] text-white text-[11px] font-bold">
-                  <CheckCircle className="w-3.5 h-3.5" />
-                  <span>Report Ready</span>
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 px-3 py-1 rounded bg-[#3b82f6] text-white text-[11px] font-bold">
-                  <User className="w-3.5 h-3.5" />
-                  <span>Registered</span>
-                </span>
-              )}
+              {renderStatusBadge()}
               <button
                 type="button"
                 onClick={() => setActiveTab('timeline')}
@@ -382,6 +429,18 @@ export default function PatientProfileView({
               <Send className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate">Release Report</span>
             </button>
+
+            {/* 6b. Recall Report (Task 10: RECALLPORT) */}
+            {onRecallReport && (
+              <button
+                onClick={onRecallReport}
+                className="flex items-center justify-center gap-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer"
+                title="Recall report back to testing/draft status (RECALLPORT)"
+              >
+                <Undo2 className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">Recall Report</span>
+              </button>
+            )}
 
             {/* 7. WhatsApp Resend with Message Type Dropdown (Task 11) */}
             <div className="relative">
@@ -606,11 +665,10 @@ export default function PatientProfileView({
             {onEditBill && (
               <button
                 onClick={onEditBill}
-                className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-bold text-xs rounded-lg transition-colors cursor-pointer"
+                className="p-1.5 bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white border border-blue-200 hover:border-blue-600 rounded-lg shadow-2xs transition-all cursor-pointer active:scale-95"
                 title="Edit bill particulars and rates (BILLUPDATE)"
               >
-                <Edit className="w-3.5 h-3.5" />
-                <span>Edit Bill</span>
+                <Edit className="w-4 h-4" />
               </button>
             )}
           </div>

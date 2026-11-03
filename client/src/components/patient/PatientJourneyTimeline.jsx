@@ -19,6 +19,7 @@ import {
   ExternalLink,
   Barcode,
   Radio,
+  Undo2,
 } from 'lucide-react';
 import { formatDisplayDate } from '../../utils/dateUtils.js';
 
@@ -43,35 +44,42 @@ const CLINICAL_ANALYZERS = [
     shortName: 'AutoQuant 200',
     brand: 'Meril Life Sciences',
     dept: 'Biochemistry',
-    image: '/images/machines/autoquant-200.jpg?v=2',
+    image: '/images/machines/autoquant-200.jpg',
+  },
+  {
+    name: 'Hematology Cell Counter 3-Part',
+    shortName: 'CBC 3-Part',
+    brand: 'Mindray Diagnostics',
+    dept: 'Hematology',
+    image: '/images/machines/cbc-3part.jpg',
   },
   {
     name: 'VIDAS® KUBE™',
     shortName: 'VIDAS® KUBE™',
     brand: 'bioMérieux',
     dept: 'Immunoassay',
-    image: '/images/machines/vidas-kube.jpg?v=2',
+    image: '/images/machines/vidas-kube.jpg',
   },
   {
     name: 'Labnovation LD-560',
     shortName: 'LD-560 HPLC',
     brand: 'Labnovation',
     dept: 'HbA1c Diabetes',
-    image: '/images/machines/labnovation-ld560.jpg?v=2',
+    image: '/images/machines/labnovation-ld560.jpg',
   },
   {
     name: 'HDC Lyte Electrolyte',
     shortName: 'HDC Lyte',
     brand: 'HDC Diagnostics',
     dept: 'Electrolytes',
-    image: '/images/machines/hdc-lyte.jpg?v=2',
+    image: '/images/machines/hdc-lyte.jpg',
   },
   {
     name: 'Erba ECL 105',
     shortName: 'Erba ECL 105',
     brand: 'Erba Mannheim',
     dept: 'Coagulation',
-    image: '/images/machines/erba-ecl105.jpg?v=2',
+    image: '/images/machines/erba-ecl105.jpg',
   },
 ];
 
@@ -80,6 +88,7 @@ export default function PatientJourneyTimeline({
   reports = [],
   onReceiveSample,
   onReleaseReport,
+  onRecallReport,
   onSendWhatsApp,
   onOpenWhatsAppModal,
   onOpenApproval,
@@ -198,6 +207,8 @@ export default function PatientJourneyTimeline({
       details: 'Diagnostic PDF report compiled with cryptographically signed digital signature and instant verification QR code.',
       actionLabel: onReleaseReport ? 'Release Report' : null,
       onAction: onReleaseReport,
+      secondaryActionLabel: onRecallReport ? 'Recall Report' : null,
+      onSecondaryAction: onRecallReport,
     },
     {
       id: 8,
@@ -389,18 +400,34 @@ export default function PatientJourneyTimeline({
                         </div>
 
                         {/* Interactive Action Button for this stage */}
-                        {stage.actionLabel && stage.onAction && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              stage.onAction();
-                            }}
-                            className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs shadow-xs transition-all cursor-pointer"
-                          >
-                            <span>{stage.actionLabel}</span>
-                          </button>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {stage.actionLabel && stage.onAction && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                stage.onAction();
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs shadow-xs transition-all cursor-pointer"
+                            >
+                              <span>{stage.actionLabel}</span>
+                            </button>
+                          )}
+
+                          {stage.secondaryActionLabel && stage.onSecondaryAction && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                stage.onSecondaryAction();
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-xs shadow-xs transition-all cursor-pointer"
+                            >
+                              <Undo2 className="w-3 h-3" />
+                              <span>{stage.secondaryActionLabel}</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       {/* Physical Laboratory Analyzers Hardware Gallery for Stage 2 */}

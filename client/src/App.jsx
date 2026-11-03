@@ -20,6 +20,7 @@ import ApprovalsPage from './pages/ApprovalsPage.jsx';
 import BillingPage from './pages/BillingPage.jsx';
 import MasterPage from './pages/MasterPage.jsx';
 import InvoicePrintPage from './pages/InvoicePrintPage.jsx';
+import TemplateReportEditPage from './pages/TemplateReportEditPage.jsx';
 
 // Protected Route Layout
 const ProtectedLayout = () => {
@@ -84,6 +85,7 @@ export default function App() {
                     <Route path="/" element={<DashboardWrapper />} />
                     <Route path="/patients" element={<PatientsWrapper />} />
                     <Route path="/patients/:id" element={<PatientDetailPage />} />
+                    <Route path="/patients/:id/template/:reportId" element={<TemplateReportEditPage />} />
                     <Route path="/results" element={<ResultsPage />} />
                     <Route path="/approvals" element={<ApprovalsPage />} />
                     <Route path="/billing" element={<BillingPage />} />

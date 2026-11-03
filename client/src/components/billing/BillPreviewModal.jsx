@@ -152,61 +152,61 @@ export default function BillPreviewModal({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             {onOpenEditBill && (
               <button
                 onClick={() => {
                   onClose();
                   onOpenEditBill(cleanPid);
                 }}
-                className="px-2.5 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 active:scale-95 rounded-lg transition-all cursor-pointer shadow-xs flex items-center gap-1.5"
+                className="p-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 active:scale-95 rounded-lg transition-all cursor-pointer shadow-xs flex items-center justify-center"
                 title="Edit invoice particulars and pricing (BILLUPDATE)"
+                aria-label="Edit Bill"
               >
-                <Edit className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Edit Bill</span>
+                <Edit className="w-4 h-4" />
               </button>
             )}
 
             <button
               onClick={loadBillPdf}
               disabled={loading}
-              className="p-1.5 sm:px-2.5 sm:py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              className="p-2 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center"
               title="Reload Bill"
+              aria-label="Refresh"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-amber-400' : ''}`} />
-              <span className="hidden md:inline">Refresh</span>
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-amber-400' : ''}`} />
             </button>
 
             <button
               onClick={handleOpenExternal}
               disabled={!blobUrl}
-              className="px-2.5 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 active:scale-95 rounded-lg transition-all cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
+              className="p-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 active:scale-95 rounded-lg transition-all cursor-pointer shadow-xs disabled:opacity-50 flex items-center justify-center"
               title="Open full page in browser tab"
+              aria-label="Open in Tab"
             >
-              <ExternalLink className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Open in Tab</span>
+              <ExternalLink className="w-4 h-4" />
             </button>
 
-            {/* DOWNLOAD BUTTON - user can download if they want */}
+            {/* DOWNLOAD BUTTON */}
             <button
               onClick={handleDownload}
               disabled={!blobUrl}
-              className="px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 rounded-lg transition-all cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
+              className="p-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 rounded-lg transition-all cursor-pointer shadow-xs disabled:opacity-50 flex items-center justify-center"
               title="Download PDF file"
+              aria-label="Download PDF"
             >
-              <Download className="w-3.5 h-3.5" />
-              <span>Download PDF</span>
+              <Download className="w-4 h-4" />
             </button>
 
             {/* PRINT BUTTON */}
             <button
               onClick={handlePrint}
               disabled={!blobUrl}
-              className="px-3 py-1.5 text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 active:scale-95 rounded-lg transition-all cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
+              className="p-2 text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 active:scale-95 rounded-lg transition-all cursor-pointer shadow-xs disabled:opacity-50 flex items-center justify-center"
               title="Print Bill"
+              aria-label="Print"
             >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Print</span>
+              <Printer className="w-4 h-4" />
             </button>
 
             {/* CLOSE BUTTON */}
@@ -214,6 +214,7 @@ export default function BillPreviewModal({
               onClick={onClose}
               className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer ml-1"
               title="Close Preview (Esc)"
+              aria-label="Close"
             >
               <X className="w-5 h-5" />
             </button>

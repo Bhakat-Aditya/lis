@@ -7,6 +7,7 @@ import {
   approveReport,
   rejectReport,
   releaseReport,
+  recallReport,
   calculateResult,
   setDefaultResult,
   downloadResult,
@@ -17,6 +18,7 @@ import {
   restoreReport,
   getTemplateJson,
   updateTemplateData,
+  updateTemplateBatchData,
 } from '../controllers/controller.report.js';
 import { requireAuth } from '../middleware/middleware.auth.js';
 import { requireRoles, ROLES } from '../middleware/middleware.role.js';
@@ -35,6 +37,13 @@ router.post(
   '/template-data',
   requireRoles([ROLES.SUPER, ROLES.TECHNICIAN, ROLES.MICROBIOLOGY, ROLES.DOCTOR, ROLES.RECEPTIONIST, ROLES.OFFICE]),
   updateTemplateData
+);
+
+// Batch Update Multiple Template Reports (UPDATETEMPLATEDATA Batch)
+router.post(
+  '/template-batch-data',
+  requireRoles([ROLES.SUPER, ROLES.TECHNICIAN, ROLES.MICROBIOLOGY, ROLES.DOCTOR, ROLES.RECEPTIONIST, ROLES.OFFICE]),
+  updateTemplateBatchData
 );
 
 // Rule 3 & 4: Technician, Doctor, Microbiology User (scoped to Micro dept in controller)
@@ -69,11 +78,18 @@ router.post('/verify', requireRoles([ROLES.SUPER, ROLES.DOCTOR, ROLES.TECHNICIAN
 router.post('/approve', requireRoles([ROLES.SUPER, ROLES.DOCTOR, ROLES.TECHNICIAN]), approveReport);
 router.post('/reject', requireRoles([ROLES.SUPER, ROLES.DOCTOR, ROLES.TECHNICIAN]), rejectReport);
 
-// Rule 3: Technician => Release Report
+// Rule 3: Technician / Doctor / Super => Release Report
 router.post(
   '/release',
   requireRoles([ROLES.SUPER, ROLES.TECHNICIAN, ROLES.DOCTOR]),
   releaseReport
+);
+
+// Task - 10 : Technician / Doctor / Super => Recall Report (RECALLPORT)
+router.post(
+  '/recall',
+  requireRoles([ROLES.SUPER, ROLES.TECHNICIAN, ROLES.DOCTOR]),
+  recallReport
 );
 
 // Rule 3: Technician => Calculate Result

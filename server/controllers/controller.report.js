@@ -780,6 +780,36 @@ export const releaseReport = async (req, res, next) => {
   }
 };
 
+/**
+ * Task - 10 : Report Recall
+ * API_RECALL_REPORT="RECALLPORT"; api=RECALLPORT&patientId=P47
+ * Recalls an approved/released report back to editable/draft state.
+ */
+export const recallReport = async (req, res, next) => {
+  try {
+    const { patientId } = req.body;
+    if (!patientId) {
+      return res.status(400).json({ STATUS: 'FAILED', Message: 'patientId is required' });
+    }
+
+    const rawPid = String(patientId).trim();
+    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+      ? `P${rawPid.replace(/^P+/i, '')}`
+      : `P${rawPid}`;
+
+    const upstreamData = await upstreamService.recallReport(cleanPatientId, req.user?.upstreamSid);
+    invalidateReportCache(cleanPatientId);
+    return res.json({
+      STATUS: upstreamData?.STATUS || 'SUCCESS',
+      StatusCode: upstreamData?.StatusCode || '0000',
+      Message: upstreamData?.Message || 'Report recalled back to active/draft state successfully',
+      data: upstreamData,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const calculateResult = async (req, res, next) => {
   try {
     const { patientId, reportId } = req.body;
@@ -1255,6 +1285,58 @@ export const restoreReport = async (req, res, next) => {
  */
 export const getDefaultTemplateResultJson = (templateName = 'STOOL EXAMINATION') => {
   const norm = String(templateName || '').toUpperCase().trim();
+
+  // 1. HbA1C Report (Matching Image 1 Structure)
+  if (norm.includes('HBA1C') || norm.includes('GLYCATED') || norm.includes('A1C')) {
+    return {
+      TEMPLATE_NAME: 'HbA1C Report',
+      headingName: 'HbA1C Report',
+      templateType: 'HBA1C',
+      hba1cResult: [
+        { name: 'Glycated Haemoglobin (HbA1c)', operator: '-', value: '', unit: '% ofTotal Hb', refRange: '<6%' },
+        { name: 'Estimated Average Glucose', operator: '-', value: '', unit: 'mg/dL', refRange: '' },
+      ],
+      peakDataTable: [
+        { peak: 'HbA1a', time: '', abs: '', area: '', result: '', refRange: '' },
+        { peak: 'HbA1b', time: '', abs: '', area: '', result: '', refRange: '' },
+        { peak: 'HbF', time: '', abs: '', area: '', result: '', refRange: '' },
+        { peak: 'LA1c', time: '', abs: '', area: '', result: '', refRange: '' },
+        { peak: 'HbA1c', time: '', abs: '', area: '', result: '', refRange: '' },
+        { peak: 'HbA0', time: '', abs: '', area: '', result: '', refRange: '' },
+        { peak: 'V_Win', time: '', abs: '', area: '', result: '', refRange: '' },
+      ],
+      summaryResult: [
+        { name: 'TotalArea', val1: '', val2: '' },
+        { name: 'HbA1C(NGSP)', val1: '', val2: '' },
+        { name: 'eAG(ADA)', val1: '', val2: '' },
+        { name: 'HbA1C(IFCC)', val1: '', val2: '' },
+        { name: 'eAG[ADA]', val1: '', val2: '' },
+      ],
+      others: [
+        { name: 'Others 1', value: '' },
+        { name: 'Others 2', value: '' },
+        { name: 'Others 3', value: '' },
+      ],
+      drawingData: [
+        { name: 'Peak Data', value: '' },
+        { name: 'Graph Data', value: '' },
+      ],
+      Exam: {
+        'HbA1C Result': [
+          { Name: 'Glycated Haemoglobin (HbA1c)', Value: '', Unit: '% ofTotal Hb', RefRange: '<6%' },
+          { Name: 'Estimated Average Glucose', Value: '', Unit: 'mg/dL', RefRange: '' },
+        ],
+        'Summary Result': [
+          { Name: 'TotalArea', Value: '' },
+          { Name: 'HbA1C(NGSP)', Value: '' },
+          { Name: 'eAG(ADA)', Value: '' },
+          { Name: 'HbA1C(IFCC)', Value: '' },
+          { Name: 'eAG[ADA]', Value: '' },
+        ],
+      },
+    };
+  }
+
   if (norm.includes('STOOL')) {
     return {
       TEMPLATE_NAME: 'STOOL EXAMINATION',
@@ -1587,6 +1669,92 @@ export const updateTemplateData = async (req, res, next) => {
       reportId: cleanReportId,
       templateReport: updatedReport,
       data: upstreamRes,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Update multiple template reports in a single batch (UPDATETEMPLATEDATA in batch)
+ * POST /api/reports/template-batch-data
+ * Body: { reports: [ { reportId: 'P87R13', resultJSON: { ... } }, ... ] }
+ */
+export const updateTemplateBatchData = async (req, res, next) => {
+  try {
+    const reportsList = Array.isArray(req.body.reports)
+      ? req.body.reports
+      : (Array.isArray(req.body) ? req.body : []);
+
+    if (reportsList.length === 0) {
+      return res.status(400).json({
+        STATUS: 'FAILED',
+        StatusCode: '400',
+        Message: 'No template reports provided in batch payload',
+      });
+    }
+
+    console.log(`[updateTemplateBatchData] Processing batch update for ${reportsList.length} template reports...`);
+
+    const results = [];
+    for (const item of reportsList) {
+      const cleanReportId = String(item.reportId || item.id || '').trim();
+      const resultJSON = item.resultJSON || item.resultJson;
+
+      if (!cleanReportId || !resultJSON || typeof resultJSON !== 'object') {
+        continue;
+      }
+
+      // 1. Post to upstream UPDATETEMPLATEDATA
+      try {
+        await upstreamService.post(
+          'UPDATETEMPLATEDATA',
+          { reportId: cleanReportId },
+          resultJSON,
+          req.user?.upstreamSid
+        );
+      } catch (err) {
+        console.warn(`[updateTemplateBatchData] Upstream warning for ${cleanReportId}:`, err.message);
+      }
+
+      // 2. Upstream UPDATETEMPLATE status
+      try {
+        await upstreamService.post(
+          'UPDATETEMPLATE',
+          {
+            reportId: cleanReportId,
+            status: 'SAVED',
+            TEMPLATE_NAME: resultJSON.TEMPLATE_NAME || '',
+          },
+          null,
+          req.user?.upstreamSid
+        );
+      } catch (tmplErr) {
+        // Non-fatal
+      }
+
+      // 3. Update local in-memory store
+      const existing = localTemplateReports.get(cleanReportId) || {};
+      const updatedReport = {
+        ...existing,
+        reportId: cleanReportId,
+        resultJSON,
+        TEMPLATE_NAME: resultJSON.TEMPLATE_NAME || existing.TEMPLATE_NAME || 'TEMPLATE REPORT',
+        status: 'SAVED',
+        templatesDate: new Date().toISOString().slice(0, 10),
+      };
+      localTemplateReports.set(cleanReportId, updatedReport);
+      results.push({ reportId: cleanReportId, status: 'SUCCESS' });
+    }
+
+    reportCache.flushAll();
+
+    return res.json({
+      STATUS: 'SUCCESS',
+      StatusCode: '0000',
+      Message: `Successfully updated ${results.length} template reports`,
+      updatedCount: results.length,
+      results,
     });
   } catch (err) {
     next(err);
