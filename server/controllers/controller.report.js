@@ -3,6 +3,7 @@ import { upstreamService } from '../services/service.upstream.js';
 import { reportOverrideService } from '../services/service.reportOverride.js';
 import { invalidatePatientListCache } from './controller.patient.js';
 import { cacheService, CACHE_KEYS } from '../services/service.cache.js';
+import { orderExamObject } from '../services/service.templateSequence.js';
 
 // Deduplication and short-lived cache (5s) to eliminate duplicate calls
 const reportCache = new Map();
@@ -1559,12 +1560,18 @@ export const getTemplateJson = async (req, res, next) => {
         req.user?.upstreamSid
       );
       if (upstreamRes?.payLoadJSON?.TemplateReport) {
-        const report = upstreamRes.payLoadJSON.TemplateReport;
+        const report = { ...upstreamRes.payLoadJSON.TemplateReport };
+        if (report.resultJSON && typeof report.resultJSON === 'object' && report.resultJSON.Exam) {
+          report.resultJSON = {
+            ...report.resultJSON,
+            Exam: orderExamObject(report.resultJSON.Exam, report.TEMPLATE_NAME || templateName),
+          };
+        }
         localTemplateReports.set(cleanReportId, report);
         return res.json({
           STATUS: 'SUCCESS',
           StatusCode: '0000',
-          payLoadJSON: upstreamRes.payLoadJSON,
+          payLoadJSON: { ...upstreamRes.payLoadJSON, TemplateReport: report },
           templateReport: report,
         });
       }
@@ -1610,11 +1617,17 @@ export const updateTemplateData = async (req, res, next) => {
     }
 
     const cleanReportId = String(reportId).trim();
-    const resultJSON = req.body.resultJSON || req.body;
+    const rawResultJSON = req.body.resultJSON || req.body;
 
-    if (!resultJSON || typeof resultJSON !== 'object') {
+    if (!rawResultJSON || typeof rawResultJSON !== 'object') {
       return res.status(400).json({ STATUS: 'FAILED', Message: 'resultJSON object is required in request body' });
     }
+
+    const templateName = rawResultJSON.TEMPLATE_NAME || rawResultJSON.headingName || '';
+    const resultJSON = {
+      ...rawResultJSON,
+      Exam: rawResultJSON.Exam ? orderExamObject(rawResultJSON.Exam, templateName) : rawResultJSON.Exam,
+    };
 
     console.log(`[updateTemplateData] Updating template resultJSON for ${cleanReportId}...`);
 

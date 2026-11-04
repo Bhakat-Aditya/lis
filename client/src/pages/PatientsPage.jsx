@@ -1008,9 +1008,11 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                                   ? patientLots.reduce((acc, lot) => acc + Number(lot.amount || 0), 0)
                                   : (details?.reports && details.reports.length > 0 ? details.reports.reduce((acc, rep) => acc + Number(rep.rate || 0), 0) : 0);
 
-                                const effectiveTotal = lotsRateTotal > 0
-                                  ? lotsRateTotal
-                                  : (Number(effectivePatient.totalBill) > 0 ? Number(effectivePatient.totalBill) : billTotal);
+                                const effectiveTotal = Number(effectivePatient.totalBill) > 0
+                                  ? Number(effectivePatient.totalBill)
+                                  : (Number(effectivePatient.grossTotal) > 0
+                                      ? Number(effectivePatient.grossTotal)
+                                      : (lotsRateTotal > 0 ? lotsRateTotal : billTotal));
 
                                 const discountAmount = Number(effectivePatient.discount || 0);
                                 const effectivePaid = effectivePatient.paidBill !== undefined && effectivePatient.paidBill !== null

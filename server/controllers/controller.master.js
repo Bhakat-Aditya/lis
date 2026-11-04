@@ -35,12 +35,20 @@ export const getAllMasterData = async (req, res, next) => {
     const forceRefresh = req.query.refresh === 'true';
     const keys = Object.values(CACHE_KEYS);
     const results = {};
+    const nextIds = {};
+    let globalSignList = [];
 
     await Promise.all(
       keys.map(async (key) => {
         try {
-          const res = await cacheService.getList(key, forceRefresh, req.user?.upstreamSid);
-          results[key] = res.data;
+          const result = await cacheService.getList(key, forceRefresh, req.user?.upstreamSid);
+          results[key] = result.data;
+          if (result.nextId) {
+            nextIds[key] = result.nextId;
+          }
+          if (Array.isArray(result.signList) && result.signList.length > 0) {
+            globalSignList = result.signList;
+          }
         } catch (e) {
           results[key] = [];
         }
@@ -51,6 +59,8 @@ export const getAllMasterData = async (req, res, next) => {
       STATUS: 'SUCCESS',
       StatusCode: '0000',
       data: results,
+      signList: globalSignList,
+      nextIds,
       stats: cacheService.getCacheStats(),
     });
   } catch (err) {
@@ -105,6 +115,7 @@ export const updateDepartment = async (req, res, next) => {
       name: req.body.name ?? req.body.Name ?? '',
       shortname: req.body.shortname ?? req.body['Short Name'] ?? req.body.shortName ?? '',
       status: req.body.status ?? req.body.Status ?? 'Active',
+      sign: req.body.sign !== undefined ? String(req.body.sign) : '',
       ...req.body,
     };
     const upstreamRes = await upstreamService.post('UPDATEDEPARTMENT', params, null, req.user?.upstreamSid);
@@ -467,6 +478,8 @@ export const updateTemplate = async (req, res, next) => {
       price4: req.body.price4 ?? '',
       price5: req.body.price5 ?? '',
       TEMPLATE_NAME: req.body.TEMPLATE_NAME ?? req.body.name ?? req.body.templateName ?? '',
+      deptId: req.body.deptId ?? req.body.department ?? '',
+      sign: req.body.sign !== undefined ? String(req.body.sign) : '',
       ...req.body,
     };
     const upstreamRes = await upstreamService.post('UPDATETEMPLATE', params, null, req.user?.upstreamSid);

@@ -698,8 +698,10 @@ export function groupInvestigationsIntoLots(
       const rawName = item['Bill Particulars'] || item.name || `Item ${idx + 1}`;
       const name = String(rawName).replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim();
       const rawAmt = item.Amount !== undefined ? item.Amount : item.amount;
-      const hasBillAmount = rawAmt !== undefined && rawAmt !== null && rawAmt !== '' && !isNaN(Number(rawAmt));
-      const billAmount = hasBillAmount ? Number(rawAmt) : null;
+      const isExplicitBillAmount = rawAmt !== undefined && rawAmt !== null;
+      const billAmount = isExplicitBillAmount
+        ? (String(rawAmt).trim() === '' ? 0 : (!isNaN(Number(rawAmt)) ? Number(rawAmt) : 0))
+        : null;
       const lower = name.toLowerCase().trim();
       const rawLower = String(rawName).toLowerCase().trim();
 
@@ -727,8 +729,8 @@ export function groupInvestigationsIntoLots(
         processedLotNames.add(String(matchedPkg.Name || name).toLowerCase().trim());
 
         const repWithRate = pkgReports.find((r) => r.rate !== undefined && r.rate !== '' && !isNaN(Number(r.rate)) && Number(r.rate) > 0);
-        // Prioritize official invoice amount from billing list (including explicit 0 rate)
-        const effectivePkgAmount = hasBillAmount
+        // Prioritize official invoice amount from billing list (including explicit 0 / bundled rate)
+        const effectivePkgAmount = isExplicitBillAmount
           ? billAmount
           : (Number(matchedPkg.Rate) || (repWithRate ? Number(repWithRate.rate) : 0));
 
@@ -769,8 +771,8 @@ export function groupInvestigationsIntoLots(
         processedLotNames.add(String(matchedProf.Name || name).toLowerCase().trim());
 
         const profRepWithRate = profReports.find((r) => r.rate !== undefined && r.rate !== '' && !isNaN(Number(r.rate)) && Number(r.rate) > 0);
-        // Prioritize official invoice amount from billing list (including explicit 0 rate)
-        const effectiveProfAmount = hasBillAmount
+        // Prioritize official invoice amount from billing list (including explicit 0 / bundled rate)
+        const effectiveProfAmount = isExplicitBillAmount
           ? billAmount
           : (Number(matchedProf.Rate) || (profRepWithRate ? Number(profRepWithRate.rate) : 0));
 
@@ -812,7 +814,7 @@ export function groupInvestigationsIntoLots(
           ? Number(matchedReport.rate)
           : null;
       // Prioritize official invoice amount from billing list (including explicit 0 rate)
-      const finalTestAmount = hasBillAmount
+      const finalTestAmount = isExplicitBillAmount
         ? billAmount
         : (matchedReportRate !== null ? matchedReportRate : (Number(matchedReport?.rate) || 0));
 

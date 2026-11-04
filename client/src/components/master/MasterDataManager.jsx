@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useMaster } from '../../context/context.master.jsx';
 import MasterEditModal from './MasterEditModal.jsx';
+import TemplateReportModal from '../results/TemplateReportModal.jsx';
 import {
   Database,
   RefreshCw,
@@ -35,6 +36,8 @@ export default function MasterDataManager() {
     references,
     branches,
     users,
+    nextIds = {},
+    signList = [],
     cacheStats,
     loadingMaster,
     refreshCache,
@@ -49,13 +52,43 @@ export default function MasterDataManager() {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
 
+  // Template prefill data modal state (API_UPDATE_TEMPLATE_DATA)
+  const [templateModalOpen, setTemplateModalOpen] = useState(false);
+  const [selectedTemplateForData, setSelectedTemplateForData] = useState(null);
+
+  const tabCacheKeyMap = {
+    tests: 'TEST_LIST',
+    samples: 'SAMPLE_LIST',
+    departments: 'DEPT_LIST',
+    units: 'UNIT_LIST',
+    methods: 'METHOD_LIST',
+    doctors: 'DOCT_LIST',
+    references: 'REFERANCE_LIST',
+    branches: 'BRANCH_LIST',
+    users: 'USER_LIST',
+    profiles: 'PROFILE_LIST',
+    packages: 'PKG_LIST',
+  };
+
   const handleEditItem = (item) => {
     setSelectedItem(item);
     setEditModalOpen(true);
   };
 
+  const handleEditBasic = (item) => {
+    setSelectedItem(item);
+    setEditModalOpen(true);
+  };
+
+  const handleEditPrefillData = (tmpl) => {
+    setSelectedTemplateForData(tmpl);
+    setTemplateModalOpen(true);
+  };
+
   const handleAddItem = () => {
-    setSelectedItem(null);
+    const cacheKey = tabCacheKeyMap[activeTab];
+    const autoId = (cacheKey && nextIds[cacheKey]) || nextIds[activeTab] || '';
+    setSelectedItem({ isNew: true, nextId: autoId });
     setEditModalOpen(true);
   };
 
@@ -242,15 +275,17 @@ export default function MasterDataManager() {
               )}
             </div>
 
-            <button
-              type="button"
-              onClick={handleAddItem}
-              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs py-1.5 px-3 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap shrink-0"
-              title={`Add new ${activeTab.replace(/s$/, '')} to Master Catalog`}
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add {tabs.find((t) => t.id === activeTab)?.label.replace(/s$/, '') || 'Item'}</span>
-            </button>
+            {activeTab !== 'templates' && activeTab !== 'interpretations' && (
+              <button
+                type="button"
+                onClick={handleAddItem}
+                className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs py-1.5 px-3 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap shrink-0"
+                title={`Add new ${activeTab.replace(/s$/, '')} to Master Catalog`}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add {tabs.find((t) => t.id === activeTab)?.label.replace(/s$/, '') || 'Item'}</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -381,14 +416,29 @@ export default function MasterDataManager() {
                           </span>
                         </td>
                         <td className="py-2 px-4 text-right">
-                          <button
-                            type="button"
-                            onClick={() => handleEditItem(tmpl)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 rounded-md border border-purple-200 transition-colors cursor-pointer"
-                          >
-                            <Edit3 className="w-3 h-3" />
-                            <span>Edit</span>
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                            {/* Option 1: API_UPDATE_TEMPLATE (basic info: name, dept, price, sign) */}
+                            <button
+                              type="button"
+                              onClick={() => handleEditBasic(tmpl)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 rounded-md border border-blue-200 transition-colors cursor-pointer"
+                              title="Edit basic info (name, department, price, signatures) - API_UPDATE_TEMPLATE"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                              <span>Edit Basic</span>
+                            </button>
+
+                            {/* Option 2: API_UPDATE_TEMPLATE_DATA (prefill findings schema) */}
+                            <button
+                              type="button"
+                              onClick={() => handleEditPrefillData(tmpl)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 rounded-md border border-purple-200 transition-colors cursor-pointer"
+                              title="Edit prefill template findings data - API_UPDATE_TEMPLATE_DATA"
+                            >
+                              <FileText className="w-3 h-3" />
+                              <span>Edit Prefill Data</span>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -1040,6 +1090,22 @@ export default function MasterDataManager() {
         onSaved={() => {
           setMsg(`Successfully updated ${activeTab} in master catalog!`);
           setTimeout(() => setMsg(''), 4000);
+        }}
+      />
+
+      {/* Edit Template Prefill Data Modal (API_UPDATE_TEMPLATE_DATA) */}
+      <TemplateReportModal
+        isOpen={templateModalOpen}
+        onClose={() => {
+          setTemplateModalOpen(false);
+          setSelectedTemplateForData(null);
+        }}
+        template={selectedTemplateForData}
+        patient={{ name: 'Master Template Prefill Catalog', barcode: selectedTemplateForData?.templatesId || selectedTemplateForData?.reportId || 'MASTER' }}
+        onSaveSuccess={() => {
+          setMsg(`Successfully saved prefill findings for ${selectedTemplateForData?.TEMPLATE_NAME || 'template'}!`);
+          setTimeout(() => setMsg(''), 4000);
+          refreshCache();
         }}
       />
     </div>

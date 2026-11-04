@@ -96,9 +96,11 @@ export default function PatientDetailPage() {
     return patientLots.reduce((acc, l) => acc + (Number(l.amount) || 0), 0);
   }, [patientLots]);
 
-  const effectiveTotal = lotsTotal > 0
-    ? lotsTotal
-    : Number(patient?.grossTotal || patient?.totalBill || 0);
+  const effectiveTotal = Number(patient?.totalBill) > 0
+    ? Number(patient.totalBill)
+    : (Number(patient?.grossTotal) > 0
+        ? Number(patient.grossTotal)
+        : (lotsTotal > 0 ? lotsTotal : 0));
 
   // Accurately calculate outstanding balance due for deposit modal
   const calculateDueAmount = (pt = patient, repList = reports) => {
@@ -108,19 +110,14 @@ export default function PatientDetailPage() {
     const discount = Number(pt.discount || 0);
     const paid = Number(pt.paidBill || 0);
 
-    let baseTotal = 0;
-    if (Array.isArray(repList) && repList.length > 0) {
+    let baseTotal = Number(pt.totalBill || 0) > 0
+      ? Number(pt.totalBill)
+      : (Number(pt.grossTotal || 0) > 0 ? Number(pt.grossTotal) : 0);
+
+    if (baseTotal === 0 && Array.isArray(repList) && repList.length > 0) {
       const lots = groupInvestigationsIntoLots(repList, pt, catalogProfiles, catalogPackages, catalogTests);
       const lotsTotal = lots.reduce((acc, l) => acc + (Number(l.amount) || 0), 0);
       if (lotsTotal > 0) baseTotal = lotsTotal;
-    }
-
-    if (baseTotal === 0 && Number(pt.totalBill || 0) > 0) {
-      baseTotal = Number(pt.totalBill);
-    }
-
-    if (baseTotal === 0 && Number(pt.grossTotal || 0) > 0) {
-      baseTotal = Number(pt.grossTotal);
     }
 
     if (baseTotal > 0) {

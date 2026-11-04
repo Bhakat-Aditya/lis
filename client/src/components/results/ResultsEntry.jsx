@@ -271,34 +271,25 @@ export default function ResultsEntry({
     return stats;
   }, [activeReports, resultsState]);
 
-  // Identify whether a report item is a template report
+  // Identify whether a report item is strictly an explicit template report
   const isTemplateItem = useMemo(() => {
-    const catalogNames = new Set(
-      masterTemplateCatalog.map((t) => String(t.TEMPLATE_NAME || t.name || '').toLowerCase().trim()).filter(Boolean)
-    );
-    const catalogIds = new Set(
-      masterTemplateCatalog.map((t) => String(t.templatesId || t.id || t.reportId || '').toLowerCase().trim()).filter(Boolean)
-    );
-
     return (item) => {
       if (!item) return false;
-      if (item.isTemplate || item.category === 'Template') return true;
-      if (item.resultJson || item.resultJSON) return true;
+      // Strictly check explicit template flags - never infer or hijack regular reports by test name
+      if (item.isTemplate === true || Number(item.reportType) === 1) return true;
+      if (String(item.category || '').toLowerCase() === 'template') return true;
       const tId = String(item.testId || item.id || '').toUpperCase().trim();
-      if (tId.startsWith('TEMPLATE')) return true;
-      if (catalogIds.has(tId.toLowerCase())) return true;
-      const tName = String(item.testName || item.TEMPLATE_NAME || item.name || '').toLowerCase().trim();
-      if (catalogNames.has(tName)) return true;
+      if (tId.startsWith('TEMPLATE_')) return true;
       return false;
     };
-  }, [masterTemplateCatalog]);
+  }, []);
 
   // Combined template reports list for this patient
   const templateReports = useMemo(() => {
     const list = [];
     const seen = new Set();
 
-    // 1. From templates prop
+    // 1. Strictly from templates prop returned by the server
     (templates || []).forEach((t) => {
       const repId = String(t.reportId || t.templatesId || t.id || '').trim();
       if (repId && !seen.has(repId)) {
@@ -314,7 +305,7 @@ export default function ResultsEntry({
       }
     });
 
-    // 2. From activeReports
+    // 2. Only activeReports that have explicit template flags (never hijack regular numeric tests like Hemoglobin)
     (activeReports || []).forEach((r) => {
       if (isTemplateItem(r)) {
         const repId = String(r.reportId || r.id || '').trim();

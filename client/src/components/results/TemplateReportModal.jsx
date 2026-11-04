@@ -14,6 +14,7 @@ import {
   RotateCcw,
   Check,
 } from 'lucide-react';
+import { sortSectionKeys, orderExamObject } from '../../utils/templateSequence.js';
 
 export default function TemplateReportModal({
   isOpen,
@@ -136,16 +137,21 @@ export default function TemplateReportModal({
     setSuccessMsg('');
 
     try {
+      const canonicalJson = {
+        ...resultJson,
+        Exam: resultJson.Exam ? orderExamObject(resultJson.Exam, templateName) : resultJson.Exam,
+      };
+
       // POST API_UPDATE_TEMPLATE_DATA="UPDATETEMPLATEDATA"; SEND resultJSON as body
       const res = await api.post(
         `/reports/template-data?reportId=${encodeURIComponent(reportId)}`,
-        resultJson
+        canonicalJson
       );
 
       if (res.data?.STATUS === 'SUCCESS' || res.data?.StatusCode === '0000') {
         setSuccessMsg(res.data?.Message || 'Template report updated successfully!');
         if (onSaveSuccess) {
-          onSaveSuccess(resultJson);
+          onSaveSuccess(canonicalJson);
         }
         setTimeout(() => {
           onClose();
@@ -160,7 +166,7 @@ export default function TemplateReportModal({
     }
   };
 
-  const examSections = resultJson?.Exam ? Object.keys(resultJson.Exam) : [];
+  const examSections = resultJson?.Exam ? sortSectionKeys(Object.keys(resultJson.Exam), templateName) : [];
 
   return (
     <Modal

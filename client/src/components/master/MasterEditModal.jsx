@@ -44,10 +44,170 @@ const ACCESS_ROLE_OPTIONS = [
   'Office',
 ];
 
+function SignatureSelector({ signList = [], value = '', onChange }) {
+  const selectedIds = String(value || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const getSignDetails = (id) => {
+    const found = signList.find((s) => String(s.id) === String(id));
+    return {
+      name: found?.name || `Signature #${id}`,
+      designation: found?.designation || '',
+    };
+  };
+
+  const handleToggle = (id) => {
+    const sId = String(id).trim();
+    if (selectedIds.includes(sId)) {
+      const updated = selectedIds.filter((x) => x !== sId);
+      onChange(updated.join(','));
+    } else {
+      const updated = [...selectedIds, sId];
+      onChange(updated.join(','));
+    }
+  };
+
+  const handleMoveUp = (index) => {
+    if (index <= 0) return;
+    const updated = [...selectedIds];
+    const temp = updated[index - 1];
+    updated[index - 1] = updated[index];
+    updated[index] = temp;
+    onChange(updated.join(','));
+  };
+
+  const handleMoveDown = (index) => {
+    if (index >= selectedIds.length - 1) return;
+    const updated = [...selectedIds];
+    const temp = updated[index + 1];
+    updated[index + 1] = updated[index];
+    updated[index] = temp;
+    onChange(updated.join(','));
+  };
+
+  return (
+    <div className="space-y-2.5 pt-3 border-t border-slate-200">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <label className="block text-[11px] font-bold text-slate-800 uppercase tracking-wide">
+            Select Signatures & Print Sequence
+          </label>
+          <p className="text-[11px] text-slate-500">
+            Select signatures and order sequence as required. (API sends <code className="font-mono text-indigo-600 font-bold">sign={selectedIds.join(',') || '...'}</code>)
+          </p>
+        </div>
+        {selectedIds.length > 0 && (
+          <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
+            sign={selectedIds.join(',')}
+          </span>
+        )}
+      </div>
+
+      {/* Selected Sequence List */}
+      {selectedIds.length > 0 ? (
+        <div className="space-y-1.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+          <span className="text-[10px] font-bold uppercase text-slate-500 tracking-wider block">
+            Selected Sign-Off Sequence ({selectedIds.length})
+          </span>
+          <div className="space-y-1">
+            {selectedIds.map((id, idx) => {
+              const details = getSignDetails(id);
+              return (
+                <div
+                  key={id}
+                  className="flex items-center justify-between gap-2 bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 shadow-2xs text-xs font-semibold text-slate-800"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-[10px] shrink-0">
+                      {idx + 1}
+                    </span>
+                    <span className="truncate">{details.name}</span>
+                    {details.designation && (
+                      <span className="text-[10px] text-slate-500 font-normal truncate">
+                        ({details.designation})
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleMoveUp(idx)}
+                      disabled={idx === 0}
+                      className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-slate-100 hover:bg-slate-200 text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                      title="Move up in sequence"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleMoveDown(idx)}
+                      disabled={idx === selectedIds.length - 1}
+                      className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-slate-100 hover:bg-slate-200 text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                      title="Move down in sequence"
+                    >
+                      ▼
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleToggle(id)}
+                      className="px-1.5 py-0.5 text-[11px] font-bold rounded bg-rose-50 hover:bg-rose-100 text-rose-600 cursor-pointer ml-1"
+                      title="Remove signature"
+                    >
+                      &times;
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div className="text-[11px] text-slate-400 italic bg-slate-50 p-2.5 rounded-lg border border-dashed border-slate-200 text-center">
+          No signatures selected yet. Click from the list below to assign.
+        </div>
+      )}
+
+      {/* Available Signatures */}
+      <div>
+        <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider block mb-1">
+          Available System Signatures
+        </span>
+        <div className="flex flex-wrap gap-1.5">
+          {signList.map((s) => {
+            const sId = String(s.id);
+            const isSelected = selectedIds.includes(sId);
+            return (
+              <button
+                key={sId}
+                type="button"
+                onClick={() => handleToggle(sId)}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  isSelected
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs ring-1 ring-emerald-200'
+                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <span>{isSelected ? '✓' : '+'}</span>
+                <span>{s.name || `Sign #${sId}`}</span>
+                {s.designation && (
+                  <span className="text-[10px] opacity-75 font-normal">({s.designation})</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function MasterEditModal({
   isOpen,
   onClose,
-  category, // 'tests' | 'profiles' | 'packages' | 'doctors' | 'departments' | 'units' | 'branches' | 'users'
+  category, // 'tests' | 'profiles' | 'packages' | 'doctors' | 'departments' | 'units' | 'branches' | 'users' | 'templates' | 'samples'
   item, // item data to edit or null for add
   onSaved,
 }) {
@@ -60,10 +220,11 @@ export default function MasterEditModal({
     tests = [],
     branches = [],
     samples = [],
+    signList = [],
     updateMasterItem,
   } = useMaster();
 
-  const isEditing = Boolean(item);
+  const isEditing = Boolean(item && !item.isNew);
 
   const [formData, setFormData] = useState({});
   const [loading, setLoading] = useState(false);
@@ -88,7 +249,7 @@ export default function MasterEditModal({
 
     if (category === 'tests') {
       setFormData({
-        TEST_ID: item?.['Test Id'] || item?.id || '',
+        TEST_ID: item?.['Test Id'] || item?.id || item?.nextId || '',
         TEST_NAME: item?.Name || item?.name || '',
         TEST_SHORT_NAME: item?.['Short Name'] || item?.shortName || '',
         TEST_DEPTID: item?.['Dept Id'] || item?.deptId || departments[0]?.['Dept Id'] || 'D1',
@@ -107,7 +268,7 @@ export default function MasterEditModal({
       });
     } else if (category === 'profiles') {
       setFormData({
-        PROFILE_ID: item?.['Profile Id'] || item?.id || '',
+        PROFILE_ID: item?.['Profile Id'] || item?.id || item?.nextId || '',
         PROFILE_NAME: item?.Name || item?.name || '',
         PROFILE_DEPTID: item?.['Dept Id'] || item?.deptId || departments[0]?.['Dept Id'] || 'D1',
         PROFILE_STATUS: item?.Status || item?.status || 'Active',
@@ -118,7 +279,7 @@ export default function MasterEditModal({
       });
     } else if (category === 'packages') {
       setFormData({
-        PKG_ID: item?.['Package Id'] || item?.id || '',
+        PKG_ID: item?.['Package Id'] || item?.id || item?.nextId || '',
         PKG_NAME: item?.Name || item?.name || '',
         PKG_DEPTID: item?.['Dept Id'] || item?.deptId || departments[0]?.['Dept Id'] || 'D1',
         PKG_STATUS: item?.Status || item?.status || 'Active',
@@ -130,7 +291,7 @@ export default function MasterEditModal({
       });
     } else if (category === 'doctors') {
       setFormData({
-        id: item?.['Doct Id'] || item?.id || '',
+        id: item?.['Doct Id'] || item?.id || item?.nextId || '',
         name: item?.Name || item?.name || '',
         deg: item?.Deg || item?.deg || '',
         contact: item?.Contact || item?.contact || '',
@@ -141,7 +302,7 @@ export default function MasterEditModal({
       });
     } else if (category === 'references') {
       setFormData({
-        id: item?.['Refer Id'] || item?.id || '',
+        id: item?.['Refer Id'] || item?.id || item?.nextId || '',
         name: item?.Name || item?.name || '',
         address: item?.Address || item?.address || '',
         contact: item?.Contact || item?.contact || '',
@@ -152,21 +313,22 @@ export default function MasterEditModal({
       });
     } else if (category === 'departments') {
       setFormData({
-        id: item?.['Dept Id'] || item?.id || '',
+        id: item?.['Dept Id'] || item?.id || item?.nextId || '',
         name: item?.Name || item?.name || '',
         shortname: item?.['Short Name'] || item?.shortname || '',
         status: item?.Status || item?.status || 'Active',
         sampleId: item?.sampleId || '101.3',
+        sign: item?.sign || '',
       });
     } else if (category === 'units') {
       setFormData({
-        id: item?.['Unit Id'] || item?.id || '',
+        id: item?.['Unit Id'] || item?.id || item?.nextId || '',
         name: item?.Name || item?.name || '',
         status: item?.Status || item?.status || 'Active',
       });
     } else if (category === 'branches') {
       setFormData({
-        id: item?.branchId || item?.id || '',
+        id: item?.branchId || item?.id || item?.nextId || '',
         name: item?.name || item?.Name || '',
         location: item?.location || item?.Location || '',
         contact: item?.contact || item?.Contact || '',
@@ -184,7 +346,7 @@ export default function MasterEditModal({
         }
       }
       setFormData({
-        id: item?.userId || item?.id || '',
+        id: item?.userId || item?.id || item?.nextId || '',
         login: item?.loginId || item?.login || '',
         name: item?.name || item?.Name || '',
         mobile: item?.mobile || '',
@@ -196,16 +358,18 @@ export default function MasterEditModal({
       });
     } else if (category === 'samples') {
       setFormData({
-        id: item?.['Sample Id'] || item?.id || '',
+        id: item?.['Sample Id'] || item?.id || item?.nextId || '',
         name: item?.Name || item?.name || '',
         status: item?.Status || item?.status || 'Active',
       });
     } else if (category === 'templates') {
       setFormData({
-        reportId: item?.templatesId || item?.reportId || item?.id || '',
+        reportId: item?.templatesId || item?.reportId || item?.id || item?.nextId || '',
         TEMPLATE_NAME: item?.TEMPLATE_NAME || item?.['Template Name'] || item?.name || '',
+        deptId: item?.deptId || item?.department || departments[0]?.['Dept Id'] || '1',
         price: item?.price || item?.Rate || item?.rate || '0',
         status: item?.status || item?.Status || 'Active',
+        sign: item?.sign || '',
       });
     }
   }, [isOpen, category, item, departments, units, methods]);
@@ -1181,6 +1345,13 @@ export default function MasterEditModal({
                 </select>
               </div>
             </div>
+
+            {/* Signature Selection for Department (API_ADD_UPDATE_DEPARTMENT with sign=5,2) */}
+            <SignatureSelector
+              signList={signList}
+              value={formData.sign || ''}
+              onChange={(val) => handleChange('sign', val)}
+            />
           </div>
         )}
 
@@ -1555,7 +1726,24 @@ export default function MasterEditModal({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Department
+                </label>
+                <select
+                  value={formData.deptId || ''}
+                  onChange={(e) => handleChange('deptId', e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-bold"
+                >
+                  {departments.map((d) => (
+                    <option key={d['Dept Id'] || d.id} value={d['Dept Id'] || d.id}>
+                      {d.Name || d.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
                   Price / Standard Rate (₹)
@@ -1584,6 +1772,13 @@ export default function MasterEditModal({
                 </select>
               </div>
             </div>
+
+            {/* Signature Selection for Template (API_UPDATE_TEMPLATE with sign=5,2) */}
+            <SignatureSelector
+              signList={signList}
+              value={formData.sign || ''}
+              onChange={(val) => handleChange('sign', val)}
+            />
 
             <div className="p-3 bg-purple-50 rounded-xl border border-purple-200 text-xs text-purple-900">
               <p className="font-semibold mb-1">Full-Page Report Structure (15 Templates)</p>

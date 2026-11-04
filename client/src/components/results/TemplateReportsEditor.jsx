@@ -24,12 +24,53 @@ import {
   AlertTriangle,
   ArrowRight,
 } from 'lucide-react';
+import { sortSectionKeys, orderExamObject } from '../../utils/templateSequence.js';
 
 /**
  * Standard default examination result schema for full-page template reports
+ * Matching canonical fixed section sequence
  */
 const getDefaultSchema = (templateName = 'CLINICAL EXAMINATION') => {
   const norm = String(templateName || '').toUpperCase().trim();
+
+  if (norm.includes('URINE')) {
+    return {
+      TEMPLATE_NAME: norm.includes('COMPLETE') ? 'URINE EXAMINATION - COMPLETE' : 'URINE EXAMINATION',
+      Exam: {
+        'Physical Examination': [
+          { Name: 'Quantity', Value: '' },
+          { Name: 'Colour', Value: '' },
+          { Name: 'Appearance', Value: '' },
+          { Name: 'Specific Gravity', Value: '' },
+          { Name: 'Deposit', Value: '' },
+        ],
+        'Chemical Examination': [
+          { Name: 'Reaction (pH)', Value: '' },
+          { Name: 'Protein / Albumin', Value: '' },
+          { Name: 'Sugar / Glucose', Value: '' },
+          { Name: 'Ketone Bodies', Value: '' },
+          { Name: 'Bile Salts', Value: '' },
+          { Name: 'Bile Pigments', Value: '' },
+          { Name: 'Urobilinogen', Value: '' },
+          { Name: 'Blood / Hemoglobin', Value: '' },
+        ],
+        'Microscopic Examination': [
+          { Name: 'Pus Cells', Value: '' },
+          { Name: 'R.B.C.', Value: '' },
+          { Name: 'Epithelial Cells', Value: '' },
+          { Name: 'Casts', Value: '' },
+          { Name: 'Crystals', Value: '' },
+          { Name: 'Bacteria', Value: '' },
+          { Name: 'Yeast Cells', Value: '' },
+        ],
+        Others: [
+          { Name: 'Mucus Threads', Value: '' },
+          { Name: 'Amorphous Phosphates', Value: '' },
+        ],
+      },
+      Impression: '',
+    };
+  }
 
   if (norm.includes('STOOL')) {
     return {
@@ -50,42 +91,20 @@ const getDefaultSchema = (templateName = 'CLINICAL EXAMINATION') => {
         ],
         'Microscopic Examination': [
           { Name: 'OVA / LARVAE', Value: '' },
-          { Name: 'Cysts', Value: '' },
-          { Name: 'Pus cells', Value: '' },
+          { Name: 'Trophozoites', Value: '' },
+          { Name: 'Crystals', Value: '' },
+          { Name: 'Ghost Cells', Value: '' },
           { Name: 'RBC', Value: '' },
           { Name: 'Bacteria', Value: '' },
+          { Name: 'Cysts', Value: '' },
+          { Name: 'Pyknotic Bodies', Value: '' },
+          { Name: 'Pus cells', Value: '' },
           { Name: 'Epithelial Cells', Value: '' },
+          { Name: 'Veg. cells', Value: '' },
         ],
-      },
-      Impression: '',
-    };
-  }
-
-  if (norm.includes('URINE')) {
-    return {
-      TEMPLATE_NAME: norm.includes('COMPLETE') ? 'URINE EXAMINATION - COMPLETE' : 'URINE EXAMINATION',
-      Exam: {
-        'Physical Examination': [
-          { Name: 'Quantity', Value: '' },
-          { Name: 'Colour', Value: '' },
-          { Name: 'Appearance', Value: '' },
-          { Name: 'Specific Gravity', Value: '' },
-        ],
-        'Chemical Examination': [
-          { Name: 'Reaction (pH)', Value: '' },
-          { Name: 'Protein / Albumin', Value: '' },
-          { Name: 'Sugar / Glucose', Value: '' },
-          { Name: 'Ketone Bodies', Value: '' },
-          { Name: 'Bile Salts', Value: '' },
-          { Name: 'Bile Pigments', Value: '' },
-        ],
-        'Microscopic Examination': [
-          { Name: 'Pus Cells', Value: '' },
-          { Name: 'R.B.C.', Value: '' },
-          { Name: 'Epithelial Cells', Value: '' },
-          { Name: 'Casts', Value: '' },
-          { Name: 'Crystals', Value: '' },
-          { Name: 'Bacteria', Value: '' },
+        Others: [
+          { Name: 'Others 1', Value: '' },
+          { Name: 'Others 2', Value: '' },
         ],
       },
       Impression: '',
@@ -98,6 +117,8 @@ const getDefaultSchema = (templateName = 'CLINICAL EXAMINATION') => {
       Exam: {
         'Physical Examination': [
           { Name: 'Period of Abstinence', Value: '' },
+          { Name: 'Time of Collection', Value: '' },
+          { Name: 'Time of Examination', Value: '' },
           { Name: 'Volume', Value: '' },
           { Name: 'Colour & Appearance', Value: '' },
           { Name: 'Liquefaction Time', Value: '' },
@@ -111,7 +132,122 @@ const getDefaultSchema = (templateName = 'CLINICAL EXAMINATION') => {
           { Name: 'Non-Progressive (Grade c)', Value: '' },
           { Name: 'Immotile (Grade d)', Value: '' },
           { Name: 'Normal Morphology', Value: '' },
+          { Name: 'Abnormal Forms', Value: '' },
           { Name: 'Pus Cells', Value: '' },
+          { Name: 'Epithelial Cells', Value: '' },
+          { Name: 'Agglutination', Value: '' },
+        ],
+        Others: [
+          { Name: 'Fructose', Value: '' },
+          { Name: 'Impression / Note', Value: '' },
+        ],
+      },
+      Impression: '',
+    };
+  }
+
+  if (norm.includes('CSF') || norm.includes('FLUID') || norm.includes('ASCITIC') || norm.includes('SYNOVIAL') || norm.includes('PLEURAL')) {
+    return {
+      TEMPLATE_NAME: templateName,
+      Exam: {
+        'Physical Examination': [
+          { Name: 'Quantity', Value: '' },
+          { Name: 'Colour', Value: '' },
+          { Name: 'Appearance / Clarity', Value: '' },
+          { Name: 'Coagulum / Clot', Value: '' },
+          { Name: 'Specific Gravity', Value: '' },
+        ],
+        'Chemical Examination': [
+          { Name: 'Protein', Value: '' },
+          { Name: 'Glucose', Value: '' },
+          { Name: 'Chloride', Value: '' },
+          { Name: 'L.D.H.', Value: '' },
+          { Name: 'Adenosine Deaminase (ADA)', Value: '' },
+        ],
+        'Microscopic / Cytological Examination': [
+          { Name: 'Total WBC Count', Value: '' },
+          { Name: 'Polymorphs (Neutrophils)', Value: '' },
+          { Name: 'Lymphocytes', Value: '' },
+          { Name: 'RBCs', Value: '' },
+          { Name: 'Malignant / Atypical Cells', Value: '' },
+        ],
+        'Microbiological Examination': [
+          { Name: 'Gram Stain', Value: '' },
+          { Name: 'ZN Stain for AFB', Value: '' },
+          { Name: 'India Ink Preparation', Value: '' },
+        ],
+        Others: [
+          { Name: 'Special Comments', Value: '' },
+        ],
+      },
+      Impression: '',
+    };
+  }
+
+  if (norm.includes('HISTOPATHOLOGY') || norm.includes('FNAC') || norm.includes('BIOPSY')) {
+    return {
+      TEMPLATE_NAME: templateName,
+      Exam: {
+        'Gross Examination': [
+          { Name: 'Specimen Received', Value: '' },
+          { Name: 'Dimensions / Weight', Value: '' },
+          { Name: 'External Surface & Cut Surface', Value: '' },
+          { Name: 'Number of Blocks Processed', Value: '' },
+        ],
+        'Microscopic Examination': [
+          { Name: 'Section Findings', Value: '' },
+          { Name: 'Cellular Architecture', Value: '' },
+          { Name: 'Nuclear Atypia / Mitotic Figures', Value: '' },
+          { Name: 'Stromal / Vascular Infiltration', Value: '' },
+          { Name: 'Surgical Resection Margins', Value: '' },
+        ],
+        'Diagnostic Impression': [
+          { Name: 'Final Histopathological Diagnosis', Value: '' },
+          { Name: 'Pathological Staging / Grade', Value: '' },
+          { Name: 'Comments / Recommendations', Value: '' },
+        ],
+        Others: [
+          { Name: 'Special Note', Value: '' },
+        ],
+      },
+      Impression: '',
+    };
+  }
+
+  if (norm.includes('HBA1C') || norm.includes('GLYCATED') || norm.includes('A1C')) {
+    return {
+      TEMPLATE_NAME: 'HbA1C Report',
+      headingName: 'HbA1C Report',
+      templateType: 'HBA1C',
+      Exam: {
+        'HbA1C Result': [
+          { Name: 'Glycated Haemoglobin (HbA1c)', Value: '', Unit: '% ofTotal Hb', RefRange: '<6%' },
+          { Name: 'Estimated Average Glucose', Value: '', Unit: 'mg/dL', RefRange: '' },
+        ],
+        'Peak Data Table': [
+          { Name: 'HbA1a', Value: '' },
+          { Name: 'HbA1b', Value: '' },
+          { Name: 'HbF', Value: '' },
+          { Name: 'LA1c', Value: '' },
+          { Name: 'HbA1c', Value: '' },
+          { Name: 'HbA0', Value: '' },
+          { Name: 'V_Win', Value: '' },
+        ],
+        'Summary Result': [
+          { Name: 'TotalArea', Value: '' },
+          { Name: 'HbA1C(NGSP)', Value: '' },
+          { Name: 'eAG(ADA)', Value: '' },
+          { Name: 'HbA1C(IFCC)', Value: '' },
+          { Name: 'eAG[ADA]', Value: '' },
+        ],
+        Others: [
+          { Name: 'Others 1', Value: '' },
+          { Name: 'Others 2', Value: '' },
+          { Name: 'Others 3', Value: '' },
+        ],
+        'Drawing Data': [
+          { Name: 'Peak Data', Value: '' },
+          { Name: 'Graph Data', Value: '' },
         ],
       },
       Impression: '',
@@ -878,7 +1014,7 @@ export default function TemplateReportsEditor({
             const state = reportsState[rId] || {};
             const isCollapsed = Boolean(collapsedMap[rId]);
             const schema = state.resultJson;
-            const examSections = schema?.Exam ? Object.keys(schema.Exam) : [];
+            const examSections = schema?.Exam ? sortSectionKeys(Object.keys(schema.Exam), tmpl.testName || tmpl.TEMPLATE_NAME) : [];
             const isItemDirty = Boolean(state.isDirty);
             const isItemSaving = Boolean(state.saving);
             const isDeleting = deletingId === rId;

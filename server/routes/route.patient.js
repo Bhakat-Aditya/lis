@@ -8,6 +8,7 @@ import {
   getPatientLogs,
   getPatientEmr,
 } from '../controllers/controller.patient.js';
+import { getPatientReport } from '../controllers/controller.report.js';
 import { requireAuth } from '../middleware/middleware.auth.js';
 import { requireRoles, ROLES } from '../middleware/middleware.role.js';
 
@@ -17,6 +18,12 @@ router.use(requireAuth);
 
 // Patient List (Accessible to authenticated clinic staff)
 router.get('/list', getPatients);
+
+// Individual Patient Report & Demographics
+router.get('/:id', async (req, res, next) => {
+  req.query.patientId = req.params.id;
+  return getPatientReport(req, res, next);
+});
 
 // Rule 2: Branch has NO ACCESS to Patient Activity Logs (X Log Patient)
 router.get(

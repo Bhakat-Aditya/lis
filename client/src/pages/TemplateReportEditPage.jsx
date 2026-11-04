@@ -16,6 +16,8 @@ import {
   Trash2,
   RefreshCw,
 } from 'lucide-react';
+import { sortSectionKeys, orderExamObject, getDefaultTemplateSchema } from '../utils/templateSequence.js';
+import { formatDisplayDate } from '../utils/dateUtils.js';
 
 export default function TemplateReportEditPage() {
   const { id: patientId, reportId } = useParams();
@@ -81,30 +83,55 @@ export default function TemplateReportEditPage() {
     const loadData = async () => {
       setLoading(true);
       setErrorMsg('');
+
+      const rawPid = String(patientId || '').trim();
+      const cleanPid = rawPid.toUpperCase().startsWith('P')
+        ? `P${rawPid.replace(/^P+/i, '')}`
+        : `P${rawPid}`;
+
       try {
-        // 1. Fetch Patient Info
+        let loadedPatient = null;
+        let templatesList = [];
+
+        // 1. Fetch Patient Info & Templates directly via /reports/patient-report
         try {
-          const ptRes = await api.get(`/patient/${patientId}`);
+          const ptRes = await api.get('/reports/patient-report', {
+            params: { patientId: cleanPid, withBilling: 'true' },
+          });
           if (isMounted && ptRes.data?.patient) {
-            setPatient(ptRes.data.patient);
+            loadedPatient = ptRes.data.patient;
+            setPatient(loadedPatient);
+          }
+          if (Array.isArray(ptRes.data?.templates)) {
+            templatesList = ptRes.data.templates;
           }
         } catch (ptErr) {
-          console.warn('[TemplateReportEditPage] Patient fetch error:', ptErr.message);
+          console.warn('[TemplateReportEditPage] Patient-report fetch note:', ptErr.message);
         }
 
-        // 2. Fetch Template JSON Schema
-        const tmplRes = await api.get('/reports/template-json', {
-          params: {
-            reportId,
-            templateName: queryName || 'HbA1C Report',
-          },
-        });
+        // Fallback: If patient was not returned, try /patient/:id
+        if (!loadedPatient) {
+          try {
+            const fallbackRes = await api.get(`/patient/${cleanPid}`);
+            if (isMounted && fallbackRes.data?.patient) {
+              loadedPatient = fallbackRes.data.patient;
+              setPatient(loadedPatient);
+            }
+          } catch {
+            // ignore
+          }
+        }
 
-        if (!isMounted) return;
+        // 2. Identify Matching Template from Patient's Templates List
+        const cleanRid = String(reportId || '').trim().toLowerCase();
+        const matchedTmpl = templatesList.find(
+          (t) =>
+            String(t.reportId || '').trim().toLowerCase() === cleanRid ||
+            String(t.templatesId || '').trim().toLowerCase() === cleanRid ||
+            String(t.id || '').trim().toLowerCase() === cleanRid
+        ) || (templatesList.length === 1 ? templatesList[0] : null);
 
-        const rep = tmplRes.data?.templateReport || tmplRes.data?.payLoadJSON?.TemplateReport;
-        let resultJson = rep?.resultJSON || rep?.resultJson;
-
+        let resultJson = matchedTmpl?.resultJsonParsed || matchedTmpl?.resultJson || matchedTmpl?.resultJSON;
         if (typeof resultJson === 'string') {
           try {
             resultJson = JSON.parse(resultJson);
@@ -113,27 +140,129 @@ export default function TemplateReportEditPage() {
           }
         }
 
-        const effectiveName = resultJson?.headingName || resultJson?.TEMPLATE_NAME || rep?.TEMPLATE_NAME || queryName || 'HbA1C Report';
+        const effectiveName =
+          resultJson?.headingName ||
+          resultJson?.TEMPLATE_NAME ||
+          matchedTmpl?.TEMPLATE_NAME ||
+          matchedTmpl?.name ||
+          queryName ||
+          'Template Report';
+
         setHeadingName(effectiveName);
 
+        // 3. If no prefilled findings found on patient, fetch template schema from /reports/template-json
+        if (!resultJson || (!resultJson.Exam && !resultJson.peakDataTable)) {
+          try {
+            const tmplRes = await api.get('/reports/template-json', {
+              params: {
+                reportId,
+                templateName: effectiveName,
+              },
+            });
+
+            const rep = tmplRes.data?.templateReport || tmplRes.data?.payLoadJSON?.TemplateReport;
+            const fetchedJson = rep?.resultJSON || rep?.resultJson;
+            if (fetchedJson) {
+              if (typeof fetchedJson === 'string') {
+                try {
+                  resultJson = JSON.parse(fetchedJson);
+                } catch {
+                  resultJson = null;
+                }
+              } else {
+                resultJson = fetchedJson;
+              }
+            }
+          } catch (tmplErr) {
+            console.warn('[TemplateReportEditPage] Template schema fetch note:', tmplErr.message);
+          }
+        }
+
+        if (!isMounted) return;
+
+        // 4. Distinguish between HbA1C and General Examinations
         const isHbA1C =
           resultJson?.templateType === 'HBA1C' ||
           effectiveName.toUpperCase().includes('HBA1C') ||
           effectiveName.toUpperCase().includes('GLYCATED') ||
-          resultJson?.peakDataTable !== undefined;
+          resultJson?.peakDataTable !== undefined ||
+          Boolean(resultJson?.Exam?.PeakData);
 
         if (isHbA1C) {
           setTemplateType('HBA1C');
-          if (Array.isArray(resultJson?.hba1cResult)) setHba1cResult(resultJson.hba1cResult);
-          if (Array.isArray(resultJson?.peakDataTable)) setPeakDataTable(resultJson.peakDataTable);
-          if (Array.isArray(resultJson?.summaryResult)) setSummaryResult(resultJson.summaryResult);
-          if (Array.isArray(resultJson?.others)) setOthers(resultJson.others);
-          if (Array.isArray(resultJson?.drawingData)) setDrawingData(resultJson.drawingData);
-        } else if (resultJson?.Exam) {
-          setTemplateType('GENERAL');
-          setGeneralExam(resultJson.Exam);
+
+          // A. HbA1C Result
+          const resArr = resultJson?.hba1cResult || resultJson?.Exam?.Result || resultJson?.Exam?.['HbA1C Result'];
+          if (Array.isArray(resArr) && resArr.length > 0) {
+            setHba1cResult(
+              resArr.map((r) => ({
+                name: r.Name || r.name || 'Parameter',
+                operator: r.operator || '-',
+                value: r.Value !== undefined ? String(r.Value) : (r.value !== undefined ? String(r.value) : ''),
+                unit: r.Unit || r.unit || '',
+                refRange: r['Ref Range'] || r.RefRange || r.refRange || '',
+              }))
+            );
+          }
+
+          // B. Peak Data Table
+          const peakArr = resultJson?.peakDataTable || resultJson?.Exam?.PeakData || resultJson?.Exam?.['Peak Data'];
+          if (Array.isArray(peakArr) && peakArr.length > 0) {
+            setPeakDataTable(
+              peakArr.map((p) => ({
+                peak: p.Peak || p.peak || '',
+                time: p.Time !== undefined ? String(p.Time) : (p.time !== undefined ? String(p.time) : ''),
+                abs: p.ABS !== undefined ? String(p.ABS) : (p.abs !== undefined ? String(p.abs) : ''),
+                area: p.Area !== undefined ? String(p.Area) : (p.area !== undefined ? String(p.area) : ''),
+                result: p.Result !== undefined ? String(p.Result) : (p.result !== undefined ? String(p.result) : ''),
+                refRange: p['Ref Range'] || p.RefRange || p.refRange || '',
+              }))
+            );
+          }
+
+          // C. Summary Result / Final Result
+          const sumArr = resultJson?.summaryResult || resultJson?.Exam?.['Final Result'] || resultJson?.Exam?.['Summary Result'];
+          if (Array.isArray(sumArr) && sumArr.length > 0) {
+            setSummaryResult(
+              sumArr.map((s) => ({
+                name: s.Name || s.name || '',
+                val1: s.Value !== undefined ? String(s.Value) : (s.val1 !== undefined ? String(s.val1) : ''),
+                val2: s.Unit || s.val2 || '',
+              }))
+            );
+          }
+
+          // D. Others
+          const othArr = resultJson?.others || resultJson?.Exam?.Others;
+          if (Array.isArray(othArr) && othArr.length > 0) {
+            setOthers(
+              othArr.map((o) => ({
+                name: o.Name || o.name || '',
+                value: o.Value !== undefined ? String(o.Value) : (o.value !== undefined ? String(o.value) : ''),
+              }))
+            );
+          }
+
+          // E. Drawing Data
+          const drawArr = resultJson?.drawingData || resultJson?.Exam?.['Drawing Data'];
+          if (Array.isArray(drawArr) && drawArr.length > 0) {
+            setDrawingData(
+              drawArr.map((d) => ({
+                name: d.Name || d.name || '',
+                value: d.Value !== undefined ? String(d.Value) : (d.value !== undefined ? String(d.value) : ''),
+              }))
+            );
+          }
         } else {
-          setTemplateType('HBA1C');
+          // GENERAL EXAMINATION (URINE, STOOL, SEMEN, CSF, HISTOPATHOLOGY, etc.)
+          setTemplateType('GENERAL');
+          let examData = resultJson?.Exam || resultJson?.exam;
+
+          if (!examData || typeof examData !== 'object' || Object.keys(examData).length === 0) {
+            examData = getDefaultTemplateSchema(effectiveName);
+          }
+
+          setGeneralExam(orderExamObject(examData, effectiveName));
         }
       } catch (err) {
         if (isMounted) {
@@ -174,14 +303,19 @@ export default function TemplateReportEditPage() {
         drawingData,
         Exam: {
           'HbA1C Result': hba1cResult.map((r) => ({ Name: r.name, Value: r.value, Unit: r.unit, RefRange: r.refRange })),
+          Result: hba1cResult.map((r) => ({ Name: r.name, Value: r.value, Unit: r.unit, RefRange: r.refRange })),
+          PeakData: peakDataTable.map((p) => ({ Peak: p.peak, Time: p.time, ABS: p.abs, Area: p.area, Result: p.result, RefRange: p.refRange })),
           'Summary Result': summaryResult.map((r) => ({ Name: r.name, Value: r.val1 })),
+          'Final Result': summaryResult.map((r) => ({ Name: r.name, Value: r.val1, Unit: r.val2 })),
+          Others: others.map((o) => ({ Name: o.name, Value: o.value })),
+          'Drawing Data': drawingData.map((d) => ({ Name: d.name, Value: d.value })),
         },
       };
     } else {
       compiledJson = {
         TEMPLATE_NAME: headingName,
         headingName,
-        Exam: generalExam || {},
+        Exam: orderExamObject(generalExam || {}, headingName),
       };
     }
 
@@ -206,7 +340,8 @@ export default function TemplateReportEditPage() {
     }
   };
 
-  const isPaid = patient?.billPayStatus === 2 || patient?.billPayStatus === '2';
+  const isPaid = patient?.billPayStatus === 2 || patient?.billPayStatus === '2' || (patient && Number(patient.dueAmount) <= 0 && Number(patient.totalBill) > 0);
+  const cleanPid = patientId ? (String(patientId).toUpperCase().startsWith('P') ? patientId : `P${patientId}`) : '';
 
   return (
     <div className="space-y-4 pb-12 animate-in fade-in duration-300">
@@ -214,8 +349,8 @@ export default function TemplateReportEditPage() {
         <title>Edit Template Report - {headingName} | LIS Portal</title>
       </Helmet>
 
-      {/* Top Breadcrumb & Return Navigation */}
-      <div className="flex items-center justify-between gap-3 pt-1">
+      {/* Top Navigation Row */}
+      <div className="flex items-center justify-between">
         <button
           type="button"
           onClick={() => navigate(`/patients/${patientId}?tab=results`)}
@@ -230,21 +365,25 @@ export default function TemplateReportEditPage() {
         </span>
       </div>
 
-      {/* 1. PATIENT DEMOGRAPHIC BANNER (MATCHING IMAGE 1) */}
+      {/* 1. REAL PATIENT DEMOGRAPHIC BANNER */}
       <div className="bg-gradient-to-r from-blue-50/90 via-indigo-50/70 to-blue-50/50 border border-blue-200/90 rounded-2xl p-4 shadow-xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           {/* Left: Barcode Pill & Patient Name */}
           <div className="flex items-center gap-3.5">
             <div className="w-14 h-14 rounded-full bg-blue-600 text-white flex items-center justify-center font-extrabold font-mono text-sm shadow-md ring-4 ring-blue-100 shrink-0">
-              {patient?.slNo || patient?.barcode || patientId || 'ID'}
+              {patient?.slNo || patient?.barcode || cleanPid || 'ID'}
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight uppercase">
-                {patient?.name || 'PATIENT NAME'}
+                {patient?.name
+                  ? `${patient.title ? patient.title + ' ' : ''}${patient.name}`
+                  : (patient ? `Patient (${cleanPid})` : (loading ? 'Loading Patient Details...' : `Patient (${cleanPid})`))}
               </h2>
               <div className="flex items-center gap-2 text-xs text-slate-500 font-medium mt-0.5">
                 <Calendar className="w-3.5 h-3.5 text-blue-600" />
-                <span>{patient?.date || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</span>
+                <span>
+                  {formatDisplayDate(patient?.regDate || patient?.collectionDate || patient?.date)}
+                </span>
               </div>
             </div>
           </div>
@@ -255,14 +394,17 @@ export default function TemplateReportEditPage() {
             <div className="bg-white/80 border border-blue-200/80 rounded-xl px-3.5 py-1.5 shadow-2xs min-w-[110px]">
               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Age / Sex</div>
               <div className="text-xs font-black text-slate-900 mt-0.5">
-                {patient?.age || '38'} {patient?.age_unit || 'Years'} / {patient?.gender || 'Male'}
+                {patient?.age
+                  ? `${patient.age}${!String(patient.age).toLowerCase().includes('year') && !String(patient.age).toLowerCase().includes('day') ? ` ${patient.age_unit || 'Years'}` : ''}`
+                  : '-'}{' '}
+                / {patient?.gender || '-'}
               </div>
             </div>
 
             {/* Referred By */}
             <div className="bg-white/80 border border-blue-200/80 rounded-xl px-3.5 py-1.5 shadow-2xs min-w-[110px]">
               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Referred</div>
-              <div className="text-xs font-black text-rose-600 uppercase mt-0.5">
+              <div className="text-xs font-black text-rose-600 uppercase mt-0.5 truncate max-w-[150px]" title={patient?.referedDr || patient?.doctor || 'SELF'}>
                 {patient?.referedDr || patient?.doctor || 'SELF'}
               </div>
             </div>
@@ -271,7 +413,7 @@ export default function TemplateReportEditPage() {
             <div className="bg-white/80 border border-blue-200/80 rounded-xl px-3.5 py-1.5 shadow-2xs min-w-[100px]">
               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Mobile</div>
               <div className="text-xs font-bold text-slate-700 font-mono mt-0.5">
-                {patient?.phone || patient?.mobile || '-'}
+                {patient?.mobile || patient?.phone || '-'}
               </div>
             </div>
 
@@ -287,7 +429,9 @@ export default function TemplateReportEditPage() {
                   }`}
                 >
                   <CreditCard className="w-3 h-3" />
-                  <span>{isPaid ? 'PAID' : 'UNPAID'}</span>
+                  <span>
+                    {isPaid ? 'PAID' : (patient?.dueAmount !== undefined && Number(patient.dueAmount) > 0 ? `DUE ₹${patient.dueAmount}` : 'UNPAID')}
+                  </span>
                 </span>
               </div>
             </div>
@@ -616,7 +760,7 @@ export default function TemplateReportEditPage() {
           /* ======================================================== */
           <div className="space-y-6">
             {generalExam &&
-              Object.keys(generalExam).map((sectionName) => (
+              sortSectionKeys(Object.keys(generalExam), headingName).map((sectionName) => (
                 <div key={sectionName} className="space-y-2">
                   <h3 className="text-xs font-black text-blue-700 uppercase tracking-wide">
                     {sectionName}

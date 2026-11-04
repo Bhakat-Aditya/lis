@@ -98,11 +98,11 @@ export default function PatientProfileView({
   // Synced billing from patient / upstream GETBILLJSON
   const syncedGross = Number(patient.grossTotal || 0);
   const syncedTotal = Number(patient.totalBill || 0);
-  const testsTotal = lotsTotal > 0
-    ? lotsTotal
+  const testsTotal = syncedTotal > 0
+    ? syncedTotal
     : (syncedGross > 0
         ? syncedGross
-        : (syncedTotal > 0 ? syncedTotal : (hasReports ? reportsTotal : 0)));
+        : (lotsTotal > 0 ? lotsTotal : (hasReports ? reportsTotal : 0)));
 
   const isBilled = testsTotal > 0 || syncedTotal > 0;
   const discountAmount = Number(patient.discount || 0);

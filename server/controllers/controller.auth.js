@@ -85,7 +85,11 @@ export const login = async (req, res, next) => {
         accessType = 'Receptionist';
       }
       branchId = matchedUser.accessBranch || '1';
-    } else if (loginId.toLowerCase() === 'sandip') {
+    } else if (
+      loginId.toLowerCase() === 'sandip' ||
+      loginId.toLowerCase() === 'exsuper' ||
+      loginId.toLowerCase() === 'exsuper2'
+    ) {
       accessType = 'Super';
     }
 

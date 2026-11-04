@@ -8,6 +8,14 @@ import {
   DEFAULT_TEMPLATES,
 } from './service.defaults.js';
 
+export const DEFAULT_SIGNATURES = [
+  { id: '1', name: 'Dr. P. K. Ghosh', designation: 'Consultant Pathologist (MD, DNB)' },
+  { id: '2', name: 'Dr. S. Bhattacharya', designation: 'Consultant Microbiologist (MD)' },
+  { id: '3', name: 'Dr. A. K. Roy', designation: 'Consultant Biochemist (Ph.D, FACB)' },
+  { id: '4', name: 'Dr. M. Sen', designation: 'Senior Pathologist (MD Pathology)' },
+  { id: '5', name: 'Dr. S. K. Das', designation: 'Chief Medical Director' },
+];
+
 export { DEFAULT_SAMPLES, DEFAULT_TEMPLATES, ALL_CLINICAL_DEFAULTS };
 
 // Cache keys matching user specification
@@ -103,6 +111,8 @@ class MasterCacheService {
         cachedAt: meta.cachedAt,
         expiresAt: meta.expiresAt,
         itemCount: cached.length,
+        nextId: meta.nextId || null,
+        signList: meta.signList || DEFAULT_SIGNATURES,
       };
     }
 
@@ -135,6 +145,9 @@ class MasterCacheService {
     }
 
     let items = [];
+    let nextId = null;
+    let signList = null;
+
     try {
       console.log(`[Cache] Fetching fresh data from upstream for ${cacheKey} (${mapping.api})...`);
       const rawData = await upstreamService.get(mapping.api, {}, activeSid);
@@ -143,11 +156,21 @@ class MasterCacheService {
         if (Array.isArray(extracted) && extracted.length > 0) {
           items = extracted;
         }
+        if (rawData?.payLoadJSON?.nextId !== undefined && rawData?.payLoadJSON?.nextId !== null) {
+          nextId = String(rawData.payLoadJSON.nextId);
+        }
+        if (Array.isArray(rawData?.payLoadJSON?.signList)) {
+          signList = rawData.payLoadJSON.signList;
+        }
       } else {
         console.warn(`[Cache] Upstream response not successful for ${cacheKey}: ${rawData?.Message || rawData?.StatusCode}`);
       }
     } catch (fetchErr) {
       console.warn(`[Cache] Upstream fetch failed for ${cacheKey}:`, fetchErr.message);
+    }
+
+    if (!signList && (cacheKey === CACHE_KEYS.DEPT_LIST || cacheKey === CACHE_KEYS.TEMPLATE_LIST)) {
+      signList = DEFAULT_SIGNATURES;
     }
 
     // 1. If upstream failed or returned 0, preserve existing memory cache if valid
@@ -193,6 +216,8 @@ class MasterCacheService {
       expiresAt: expiresAt.toISOString(),
       api: mapping.api,
       itemCount: items.length,
+      nextId: nextId || null,
+      signList: signList || DEFAULT_SIGNATURES,
     });
 
     // Optionally persist in MongoDB if connected (do not overwrite non-empty DB record with empty array)
@@ -221,6 +246,8 @@ class MasterCacheService {
       cachedAt: now.toISOString(),
       expiresAt: expiresAt.toISOString(),
       itemCount: items.length,
+      nextId: nextId || null,
+      signList: signList || DEFAULT_SIGNATURES,
     };
   }
 

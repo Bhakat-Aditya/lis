@@ -22,6 +22,8 @@ export const MasterProvider = ({ children }) => {
   });
   const [cacheStats, setCacheStats] = useState({});
   const [loadingMaster, setLoadingMaster] = useState(false);
+  const [signList, setSignList] = useState([]);
+  const [nextIds, setNextIds] = useState({});
 
   const fetchAllMaster = useCallback(async (forceRefresh = false) => {
     if (!isAuthenticated) return;
@@ -33,6 +35,12 @@ export const MasterProvider = ({ children }) => {
       }
       if (res.data?.stats) {
         setCacheStats(res.data.stats);
+      }
+      if (Array.isArray(res.data?.signList)) {
+        setSignList(res.data.signList);
+      }
+      if (res.data?.nextIds && typeof res.data.nextIds === 'object') {
+        setNextIds(res.data.nextIds);
       }
     } catch (err) {
       console.warn('[MasterContext] Error fetching master data:', err.message);
@@ -84,6 +92,8 @@ export const MasterProvider = ({ children }) => {
         references: masterData.REFERANCE_LIST || [],
         branches: masterData.BRANCH_LIST || [],
         users: masterData.USER_LIST || [],
+        signList,
+        nextIds,
         cacheStats,
         loadingMaster,
         refreshCache,
