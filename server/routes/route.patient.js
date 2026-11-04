@@ -19,12 +19,6 @@ router.use(requireAuth);
 // Patient List (Accessible to authenticated clinic staff)
 router.get('/list', getPatients);
 
-// Individual Patient Report & Demographics
-router.get('/:id', async (req, res, next) => {
-  req.query.patientId = req.params.id;
-  return getPatientReport(req, res, next);
-});
-
 // Rule 2: Branch has NO ACCESS to Patient Activity Logs (X Log Patient)
 router.get(
   '/logs',
@@ -44,6 +38,16 @@ router.get(
   }),
   getPatientEmr
 );
+
+// Individual Patient Report & Demographics (Must come AFTER specific static routes like /logs and /emr)
+router.get('/:id', async (req, res, next) => {
+  const { id } = req.params;
+  if (!id || ['logs', 'emr', 'list', 'add', 'update', 'delete', 'add-tests'].includes(id.toLowerCase())) {
+    return next();
+  }
+  req.query.patientId = id;
+  return getPatientReport(req, res, next);
+});
 
 // Rule 1 & 2: Patient Entry => Add Patient / Update
 router.post(
