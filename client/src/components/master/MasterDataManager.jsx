@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useMaster } from '../../context/context.master.jsx';
 import MasterEditModal from './MasterEditModal.jsx';
 import TemplateReportModal from '../results/TemplateReportModal.jsx';
+import { openUpstreamTemplateEditor } from '../../utils/templateSequence.js';
 import {
   Database,
   RefreshCw,
@@ -81,8 +82,19 @@ export default function MasterDataManager() {
   };
 
   const handleEditPrefillData = (tmpl) => {
-    setSelectedTemplateForData(tmpl);
-    setTemplateModalOpen(true);
+    // For master data list template edit use patient id : P14
+    const patientId = 'P14';
+    let reportId = tmpl.reportId;
+    if (!reportId && tmpl.templatesId) {
+      const num = String(tmpl.templatesId).replace(/^T/i, '');
+      reportId = `P14R${num}`;
+    }
+    if (!reportId) reportId = 'P14R1';
+    openUpstreamTemplateEditor({
+      patientId,
+      reportId,
+      name: tmpl.TEMPLATE_NAME || tmpl.name,
+    });
   };
 
   const handleAddItem = () => {
@@ -169,11 +181,11 @@ export default function MasterDataManager() {
 
   const tabs = [
     { id: 'tests', label: 'Tests', count: tests.length, icon: FlaskConical },
+    { id: 'departments', label: 'Departments', count: departments.length, icon: Building },
     { id: 'templates', label: 'Templates', count: templates.length, icon: FileText },
     { id: 'samples', label: 'Sample Types', count: samples.length, icon: TestTube },
     { id: 'profiles', label: 'Profiles', count: profiles.length, icon: Layers },
     { id: 'packages', label: 'Packages', count: packages.length, icon: FileSpreadsheet },
-    { id: 'doctors', label: 'Doctors', count: doctors.length, icon: Stethoscope },
     { id: 'doctors', label: 'Doctors', count: doctors.length, icon: Stethoscope },
     { id: 'references', label: 'Referring Agents', count: references.length, icon: Users },
     { id: 'units', label: 'Units', count: units.length, icon: Ruler },
@@ -1093,7 +1105,8 @@ export default function MasterDataManager() {
         }}
       />
 
-      {/* Edit Template Prefill Data Modal (API_UPDATE_TEMPLATE_DATA) */}
+      {/* Edit Template Prefill Data Modal (Temporarily commented out - redirected to upstream editTemplateV2.jsp in new window) */}
+      {/*
       <TemplateReportModal
         isOpen={templateModalOpen}
         onClose={() => {
@@ -1108,6 +1121,7 @@ export default function MasterDataManager() {
           refreshCache();
         }}
       />
+      */}
     </div>
   );
 }

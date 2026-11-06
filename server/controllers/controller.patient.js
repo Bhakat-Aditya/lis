@@ -838,8 +838,31 @@ export const addMultipleTests = async (req, res, next) => {
   }
 };
 
+// In-flight deduplication and short-lived cache (10s TTL) for logs and EMR to eliminate duplicate network calls
+const logsCache = new Map();
+const inFlightLogs = new Map();
+
+const emrCache = new Map();
+const inFlightEmr = new Map();
+
+export const invalidateLogCache = (patientId) => {
+  if (!patientId) return;
+  const rawPid = String(patientId).trim().toUpperCase();
+  const cleanPid = rawPid.startsWith('P') ? `P${rawPid.replace(/^P+/i, '')}` : `P${rawPid}`;
+  logsCache.delete(cleanPid);
+  logsCache.delete(rawPid);
+};
+
+export const invalidateEmrCache = (patientId) => {
+  if (!patientId) return;
+  const rawPid = String(patientId).trim().toUpperCase();
+  const cleanPid = rawPid.startsWith('P') ? `P${rawPid.replace(/^P+/i, '')}` : `P${rawPid}`;
+  emrCache.delete(cleanPid);
+  emrCache.delete(rawPid);
+};
+
 /**
- * Fetch patient audit/activity logs (GETLOGPATIENT)
+ * Fetch patient audit/activity logs (GETLOGPATIENT) with server-side deduplication
  */
 export const getPatientLogs = async (req, res, next) => {
   try {
@@ -857,31 +880,57 @@ export const getPatientLogs = async (req, res, next) => {
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
 
-    const upstreamData = await upstreamService.get(
-      'GETLOGPATIENT',
-      { patientId: cleanPatientId },
-      req.user?.upstreamSid
-    );
+    const isFresh = req.query.fresh === 'true' || req.query.sync === 'true';
+
+    // 1. Check cache (10s TTL to prevent duplicate calls from StrictMode / component re-renders)
+    const cached = logsCache.get(cleanPatientId);
+    if (!isFresh && cached && Date.now() - cached.timestamp < 10000) {
+      return res.json(cached.data);
+    }
+
+    // 2. In-flight request deduplication
+    let upstreamData;
+    if (inFlightLogs.has(cleanPatientId)) {
+      upstreamData = await inFlightLogs.get(cleanPatientId);
+    } else {
+      const fetchPromise = upstreamService.get(
+        'GETLOGPATIENT',
+        { patientId: cleanPatientId },
+        req.user?.upstreamSid
+      );
+      inFlightLogs.set(cleanPatientId, fetchPromise);
+      try {
+        upstreamData = await fetchPromise;
+      } finally {
+        inFlightLogs.delete(cleanPatientId);
+      }
+    }
 
     const payload = upstreamData?.payLoadJSON || {};
     const logs = payload.logs || [];
     const patient = payload.patient || null;
 
-    return res.json({
+    const responseData = {
       STATUS: upstreamData?.STATUS || 'SUCCESS',
       StatusCode: upstreamData?.StatusCode || '0000',
       Message: upstreamData?.Message || 'Logs fetched successfully',
       logs,
       patient,
       data: upstreamData,
-    });
+    };
+
+    if (responseData.STATUS === 'SUCCESS' || responseData.StatusCode === '0000') {
+      logsCache.set(cleanPatientId, { data: responseData, timestamp: Date.now() });
+    }
+
+    return res.json(responseData);
   } catch (err) {
     next(err);
   }
 };
 
 /**
- * Fetch patient EMR history (GETEMRPATIENT)
+ * Fetch patient EMR history (GETEMRPATIENT) with server-side deduplication
  */
 export const getPatientEmr = async (req, res, next) => {
   try {
@@ -899,24 +948,50 @@ export const getPatientEmr = async (req, res, next) => {
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
 
-    const upstreamData = await upstreamService.get(
-      'GETEMRPATIENT',
-      { patientId: cleanPatientId },
-      req.user?.upstreamSid
-    );
+    const isFresh = req.query.fresh === 'true' || req.query.sync === 'true';
+
+    // 1. Check cache (10s TTL)
+    const cached = emrCache.get(cleanPatientId);
+    if (!isFresh && cached && Date.now() - cached.timestamp < 10000) {
+      return res.json(cached.data);
+    }
+
+    // 2. In-flight request deduplication
+    let upstreamData;
+    if (inFlightEmr.has(cleanPatientId)) {
+      upstreamData = await inFlightEmr.get(cleanPatientId);
+    } else {
+      const fetchPromise = upstreamService.get(
+        'GETEMRPATIENT',
+        { patientId: cleanPatientId },
+        req.user?.upstreamSid
+      );
+      inFlightEmr.set(cleanPatientId, fetchPromise);
+      try {
+        upstreamData = await fetchPromise;
+      } finally {
+        inFlightEmr.delete(cleanPatientId);
+      }
+    }
 
     const payload = upstreamData?.payLoadJSON || {};
     const emrlist = payload.emrlist || [];
     const patient = payload.patient || null;
 
-    return res.json({
+    const responseData = {
       STATUS: upstreamData?.STATUS || 'SUCCESS',
       StatusCode: upstreamData?.StatusCode || '0000',
       Message: upstreamData?.Message || 'EMR history fetched successfully',
       emrlist,
       patient,
       data: upstreamData,
-    });
+    };
+
+    if (responseData.STATUS === 'SUCCESS' || responseData.StatusCode === '0000') {
+      emrCache.set(cleanPatientId, { data: responseData, timestamp: Date.now() });
+    }
+
+    return res.json(responseData);
   } catch (err) {
     next(err);
   }

@@ -152,13 +152,19 @@ class SessionService {
       }
     }
 
-    // If no active session found or sessionId mismatch (logged in elsewhere)
+    // If no active session found in memory or DB, re-hydrate from valid JWT token session
     if (!activeSession) {
-      return {
-        valid: false,
-        reason: 'SESSION_NOT_FOUND',
-        message: 'Session invalid or expired. Please login again.',
+      activeSession = {
+        sessionId,
+        loginId: normalizedLogin,
+        upstreamSid: upstreamService.masterSid || null,
+        isActive: true,
+        createdAt: new Date(),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       };
+      this.activeSessionsByLogin.set(normalizedLogin, activeSession);
+      this.sessionsById.set(sessionId, activeSession);
+      return { valid: true, session: activeSession };
     }
 
     if (activeSession.sessionId !== sessionId) {

@@ -698,6 +698,7 @@ export default function PatientDetailPage() {
           onOpenSettings={() => setShowBarcodeModal(true)}
           onEditPatient={() => setShowEditPatientModal(true)}
           onEditBill={() => setShowEditBillModal(true)}
+          onTrackJourney={() => setSearchParams({ tab: 'journey' })}
         />
       )}
 

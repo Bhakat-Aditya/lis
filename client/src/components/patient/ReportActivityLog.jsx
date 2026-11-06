@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Terminal,
   RefreshCw,
@@ -13,12 +13,15 @@ import { formatLogDateTime } from '../../utils/dateUtils.js';
 
 export default function ReportActivityLog({ patientId }) {
   const [logs, setLogs] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   // Minimized by default as requested by user
   const [isCollapsed, setIsCollapsed] = useState(true);
   const [filterText, setFilterText] = useState('');
   const [copied, setCopied] = useState(false);
+
+  const lastFetchedPidRef = useRef(null);
+  const inFlightRef = useRef(false);
 
   const cleanPid = patientId
     ? String(patientId).toUpperCase().startsWith('P')
@@ -26,28 +29,70 @@ export default function ReportActivityLog({ patientId }) {
       : `P${patientId}`
     : '';
 
-  const fetchLogs = async () => {
+  const fetchLogs = async (forceRefresh = false) => {
     if (!cleanPid) return;
+    if (inFlightRef.current) return;
+    if (!forceRefresh && lastFetchedPidRef.current === cleanPid && logs.length > 0) return;
+
+    inFlightRef.current = true;
+    lastFetchedPidRef.current = cleanPid;
     setLoading(true);
     setError('');
+
     try {
       const res = await api.get('/patients/logs', {
-        params: { patientId: cleanPid },
+        params: { patientId: cleanPid, ...(forceRefresh ? { fresh: 'true' } : {}) },
       });
       const list = res.data?.logs || [];
       setLogs(list);
     } catch (err) {
       console.warn('Failed to load patient activity logs:', err.message);
       setError('Unable to fetch activity logs for this patient.');
+      // Allow retry on error
+      lastFetchedPidRef.current = null;
     } finally {
+      inFlightRef.current = false;
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (cleanPid) {
-      fetchLogs();
+    if (!cleanPid) return;
+
+    // Guard against React StrictMode double invocation and redundant renders
+    if (lastFetchedPidRef.current === cleanPid || inFlightRef.current) {
+      return;
     }
+
+    let isMounted = true;
+    inFlightRef.current = true;
+    lastFetchedPidRef.current = cleanPid;
+    setLoading(true);
+    setError('');
+
+    api
+      .get('/patients/logs', {
+        params: { patientId: cleanPid },
+      })
+      .then((res) => {
+        if (!isMounted) return;
+        const list = res.data?.logs || [];
+        setLogs(list);
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        console.warn('Failed to load patient activity logs:', err.message);
+        setError('Unable to fetch activity logs for this patient.');
+        lastFetchedPidRef.current = null;
+      })
+      .finally(() => {
+        inFlightRef.current = false;
+        if (isMounted) setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
   }, [cleanPid]);
 
   const filteredLogs = useMemo(() => {
@@ -106,7 +151,7 @@ export default function ReportActivityLog({ patientId }) {
         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
           <button
             type="button"
-            onClick={fetchLogs}
+            onClick={() => fetchLogs(true)}
             disabled={loading}
             className="p-1.5 hover:bg-white/20 rounded-lg transition-colors text-white cursor-pointer"
             title="Refresh logs"

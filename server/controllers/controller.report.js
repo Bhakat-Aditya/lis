@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { config } from '../config/config.env.js';
 import { upstreamService } from '../services/service.upstream.js';
 import { reportOverrideService } from '../services/service.reportOverride.js';
 import { invalidatePatientListCache } from './controller.patient.js';
@@ -1769,6 +1770,104 @@ export const updateTemplateBatchData = async (req, res, next) => {
       updatedCount: results.length,
       results,
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Generate authenticated URL for upstream editTemplateV2.jsp
+ * /api/reports/template-url?patientId=P14&reportId=P14R11
+ */
+export const getTemplateEditUrl = async (req, res, next) => {
+  try {
+    const rawPid = String(req.query.patientId || req.body?.patientId || 'P14').trim();
+    let cleanPatientId = rawPid.toUpperCase().startsWith('P')
+      ? `P${rawPid.replace(/^P+/i, '')}`
+      : `P${rawPid}`;
+
+    let rawRid = String(req.query.reportId || req.body?.reportId || '').trim();
+    if (!rawRid && cleanPatientId === 'P14') {
+      rawRid = 'P14R1';
+    } else if (cleanPatientId === 'P14' && rawRid.toUpperCase().startsWith('T')) {
+      const tNum = rawRid.replace(/^T+/i, '');
+      rawRid = `P14R${tNum}`;
+    }
+
+    // 1. Candidate session: client-supplied sid, user upstreamSid, or cached masterSid
+    let activeSid = req.query.sid || req.body?.sid || req.user?.upstreamSid || upstreamService.masterSid;
+
+    // 2. Validate whether candidate session is live upstream (does not 302 to login.jsp)
+    let isAlive = false;
+    if (activeSid) {
+      isAlive = await upstreamService.isSessionAlive(activeSid);
+    }
+
+    // 3. If invalid or expired, generate a fresh active upstream master session
+    if (!isAlive) {
+      console.log(`[TemplateEdit] Upstream session ${activeSid || 'none'} expired or inactive. Provisioning fresh upstream session...`);
+      activeSid = await upstreamService.ensureMasterSession(true);
+      upstreamService.masterSid = activeSid;
+    }
+
+    // 4. Construct bulletproof upstream URL with session ID in both path and query parameters
+    const domain = config.lab.domain;
+    const path = config.lab.path;
+    const targetUrl = `${domain}/${path}/editTemplateV2.jsp;jsessionid=${activeSid}?patientId=${encodeURIComponent(cleanPatientId)}&reportId=${encodeURIComponent(rawRid)}&jsessionid=${activeSid}&sid=${activeSid}`;
+
+    return res.json({
+      STATUS: 'SUCCESS',
+      StatusCode: '0000',
+      url: targetUrl,
+      patientId: cleanPatientId,
+      reportId: rawRid,
+      sid: activeSid,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Direct redirect to upstream editTemplateV2.jsp
+ * /api/reports/edit-template?patientId=P14&reportId=P14R11
+ */
+export const redirectToTemplateEdit = async (req, res, next) => {
+  try {
+    const rawPid = String(req.query.patientId || 'P14').trim();
+    let cleanPatientId = rawPid.toUpperCase().startsWith('P')
+      ? `P${rawPid.replace(/^P+/i, '')}`
+      : `P${rawPid}`;
+
+    let rawRid = String(req.query.reportId || '').trim();
+    if (!rawRid && cleanPatientId === 'P14') {
+      rawRid = 'P14R1';
+    } else if (cleanPatientId === 'P14' && rawRid.toUpperCase().startsWith('T')) {
+      const tNum = rawRid.replace(/^T+/i, '');
+      rawRid = `P14R${tNum}`;
+    }
+
+    // 1. Candidate session: client-supplied sid, user upstreamSid, or cached masterSid
+    let activeSid = req.query.sid || req.user?.upstreamSid || upstreamService.masterSid;
+
+    // 2. Validate candidate session
+    let isAlive = false;
+    if (activeSid) {
+      isAlive = await upstreamService.isSessionAlive(activeSid);
+    }
+
+    // 3. If missing or dead, provision a fresh session
+    if (!isAlive) {
+      console.log(`[TemplateEdit Redirect] Upstream session ${activeSid || 'none'} expired. Provisioning fresh upstream session...`);
+      activeSid = await upstreamService.ensureMasterSession(true);
+      upstreamService.masterSid = activeSid;
+    }
+
+    const domain = config.lab.domain;
+    const path = config.lab.path;
+    const targetUrl = `${domain}/${path}/editTemplateV2.jsp;jsessionid=${activeSid}?patientId=${encodeURIComponent(cleanPatientId)}&reportId=${encodeURIComponent(rawRid)}&jsessionid=${activeSid}&sid=${activeSid}`;
+
+    return res.redirect(targetUrl);
   } catch (err) {
     next(err);
   }

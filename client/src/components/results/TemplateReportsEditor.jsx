@@ -23,8 +23,9 @@ import {
   FileCheck2,
   AlertTriangle,
   ArrowRight,
+  ExternalLink,
 } from 'lucide-react';
-import { sortSectionKeys, orderExamObject } from '../../utils/templateSequence.js';
+import { sortSectionKeys, orderExamObject, openUpstreamTemplateEditor } from '../../utils/templateSequence.js';
 
 /**
  * Standard default examination result schema for full-page template reports
@@ -981,22 +982,22 @@ export default function TemplateReportsEditor({
                     </div>
                   </div>
 
-                  {/* Bottom Full-Width Blue Action Button: Edit Template (matching Image 2) */}
+                  {/* Bottom Full-Width Blue Action Button: Edit Template (redirects to upstream editTemplateV2.jsp in new window) */}
                   <div className="mt-6">
                     <button
                       type="button"
                       onClick={() => {
-                        if (pid && rId) {
-                          navigate(
-                            `/patients/${pid}/template/${rId}?name=${encodeURIComponent(testName)}`
-                          );
-                        } else if (onOpenModal) {
-                          onOpenModal(tmpl);
-                        }
+                        openUpstreamTemplateEditor({
+                          patientId: pid,
+                          reportId: rId,
+                          name: testName,
+                        });
                       }}
-                      className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-sm rounded-xl shadow-xs transition-all cursor-pointer text-center"
+                      className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-sm rounded-xl shadow-xs transition-all cursor-pointer text-center flex items-center justify-center gap-2"
+                      title="Open template in official upstream editor window (editTemplateV2.jsp)"
                     >
-                      Edit Template
+                      <ExternalLink className="w-4 h-4" />
+                      <span>Edit Template</span>
                     </button>
                   </div>
                 </div>
@@ -1093,17 +1094,22 @@ export default function TemplateReportsEditor({
                       <span className="hidden sm:inline">{isItemSaving ? 'Saving...' : isItemDirty ? 'Save' : 'Saved'}</span>
                     </button>
 
-                    {/* Focused Modal Pop-out Button */}
-                    {onOpenModal && (
-                      <button
-                        type="button"
-                        onClick={() => onOpenModal(tmpl)}
-                        className="p-1.5 bg-white hover:bg-slate-100 text-slate-600 hover:text-purple-700 border border-slate-200 rounded-lg transition-colors cursor-pointer"
-                        title="Open in focused popup modal editor"
-                      >
-                        <Maximize2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+                    {/* Focused Upstream Pop-out Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        openUpstreamTemplateEditor({
+                          patientId: pid,
+                          reportId: rId,
+                          name: tmpl.testName || tmpl.TEMPLATE_NAME,
+                        });
+                      }}
+                      className="p-1.5 bg-white hover:bg-purple-50 text-slate-600 hover:text-purple-700 border border-slate-200 rounded-lg transition-colors cursor-pointer flex items-center gap-1 text-xs font-semibold"
+                      title="Open template in official upstream editor window (editTemplateV2.jsp)"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Upstream</span>
+                    </button>
 
                     {/* Delete Report Button */}
                     {onDeleteReport && (

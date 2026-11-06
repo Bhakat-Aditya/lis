@@ -103,15 +103,21 @@ export default function PatientJourneyTimeline({
   const regDateFormatted = formatDisplayDate(patient?.regDate || patient?.collectionDate || new Date());
   const sampleTime = patient?.sampleTime || '10:30 AM';
 
-  // Determine current active stage index (0 to 9)
+  // Determine current active stage index (0 to 9) dynamically from patient status and live report lot statuses
   const determineCurrentStageIndex = () => {
-    if (statusStr === 'RELEASED') return 9; // Delivery & feedback
-    if (statusStr === 'PRINTING' || statusStr === 'READY') return 8; // Final report done, ready for delivery
-    if (statusStr === 'APPROVED' || statusStr === 'VERIFIED') return 7; // Verified, generating final report
-    if (statusStr === 'RESULT FULLY' || statusStr === 'SAVED') return 6; // Results mapped, awaiting verification
-    if (statusStr === 'RESULT PARTLY' || statusStr === 'TESTING') return 4; // Generating & transmitting results
-    if (statusStr === 'SAMPLE') return 2; // Sample received, connecting to analyzer
-    return 1; // Registered, awaiting sample receipt
+    const hasReleasedReports = reports.length > 0 && reports.some(r => String(r.status || '').toUpperCase() === 'RELEASED');
+    const allReportsReleased = reports.length > 0 && reports.every(r => String(r.status || '').toUpperCase() === 'RELEASED');
+    const hasApproved = reports.some(r => r.isApproved || String(r.status || '').toUpperCase() === 'APPROVED');
+    const hasSampleReceived = reports.some(r => r.isReceived || String(r.status || '').toUpperCase() === 'SAMPLE');
+    const hasResultsEntered = reports.some(r => r.isResultFilled || (r.testParameters && r.testParameters.some(p => p.resultValue)));
+
+    if (allReportsReleased || statusStr === 'RELEASED') return 9; // Stage 10: Feedback (all 9 stages completed)
+    if (statusStr === 'PRINTING' || statusStr === 'READY' || hasReleasedReports) return 8; // Stage 9: WhatsApp Delivery
+    if (statusStr === 'APPROVED' || statusStr === 'VERIFIED' || hasApproved) return 7; // Stage 8: Final Report Generation
+    if (statusStr === 'RESULT FULLY' || statusStr === 'SAVED' || (hasResultsEntered && reports.every(r => r.isResultFilled))) return 6; // Stage 7: Pathologist Verification
+    if (statusStr === 'RESULT PARTLY' || statusStr === 'TESTING' || hasResultsEntered) return 4; // Stage 5: Result Transmission
+    if (statusStr === 'SAMPLE' || hasSampleReceived) return 2; // Stage 3: Analyzer Connection
+    return 1; // Stage 2: Sample Received (Awaiting Phlebotomy)
   };
 
   const currentStageIndex = determineCurrentStageIndex();

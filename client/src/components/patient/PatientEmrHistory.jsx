@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Calendar,
@@ -27,10 +27,13 @@ export default function PatientEmrHistory({
 }) {
   const navigate = useNavigate();
   const [emrList, setEmrList] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   // Minimized by default as requested by user
   const [isCollapsed, setIsCollapsed] = useState(true);
+
+  const lastFetchedPidRef = useRef(null);
+  const inFlightRef = useRef(false);
 
   const cleanPid = patientId
     ? String(patientId).toUpperCase().startsWith('P')
@@ -38,28 +41,69 @@ export default function PatientEmrHistory({
       : `P${patientId}`
     : '';
 
-  const fetchEmrHistory = async () => {
+  const fetchEmrHistory = async (forceRefresh = false) => {
     if (!cleanPid) return;
+    if (inFlightRef.current) return;
+    if (!forceRefresh && lastFetchedPidRef.current === cleanPid && emrList.length > 0) return;
+
+    inFlightRef.current = true;
+    lastFetchedPidRef.current = cleanPid;
     setLoading(true);
     setError('');
+
     try {
       const res = await api.get('/patients/emr', {
-        params: { patientId: cleanPid },
+        params: { patientId: cleanPid, ...(forceRefresh ? { fresh: 'true' } : {}) },
       });
       const list = res.data?.emrlist || [];
       setEmrList(list);
     } catch (err) {
       console.warn('Failed to fetch patient EMR history:', err.message);
       setError('Unable to load EMR archive for this patient.');
+      lastFetchedPidRef.current = null;
     } finally {
+      inFlightRef.current = false;
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (cleanPid) {
-      fetchEmrHistory();
+    if (!cleanPid) return;
+
+    // Guard against React StrictMode double invocation and redundant re-renders
+    if (lastFetchedPidRef.current === cleanPid || inFlightRef.current) {
+      return;
     }
+
+    let isMounted = true;
+    inFlightRef.current = true;
+    lastFetchedPidRef.current = cleanPid;
+    setLoading(true);
+    setError('');
+
+    api
+      .get('/patients/emr', {
+        params: { patientId: cleanPid },
+      })
+      .then((res) => {
+        if (!isMounted) return;
+        const list = res.data?.emrlist || [];
+        setEmrList(list);
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        console.warn('Failed to fetch patient EMR history:', err.message);
+        setError('Unable to load EMR archive for this patient.');
+        lastFetchedPidRef.current = null;
+      })
+      .finally(() => {
+        inFlightRef.current = false;
+        if (isMounted) setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
   }, [cleanPid]);
 
   const currentPidStr = String(currentPatient?.patientId || cleanPid || '').trim().toUpperCase();
@@ -99,7 +143,7 @@ export default function PatientEmrHistory({
         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
           <button
             type="button"
-            onClick={fetchEmrHistory}
+            onClick={() => fetchEmrHistory(true)}
             disabled={loading}
             className="p-1.5 hover:bg-white/20 rounded-lg transition-colors text-white cursor-pointer"
             title="Refresh EMR history"

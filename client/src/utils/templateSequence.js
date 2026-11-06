@@ -11,6 +11,8 @@
  * Inside individual array sequence and size as per array item.
  */
 
+import api from '../services/api.js';
+
 export const CANONICAL_SECTION_ORDER = {
   // T1, T2: URINE EXAMINATION
   URINE: [
@@ -391,4 +393,104 @@ export const getDefaultTemplateSchema = (templateName = 'CLINICAL EXAMINATION') 
     Impression: '',
   };
 };
+
+/**
+ * Open official upstream template editor (editTemplateV2.jsp) in a new browser window.
+ * Supports both individual patient templates and master catalog templates (patientId = 'P14').
+ * 
+ * Target URL structure:
+ * https://lis.newlifecaremidnapore.com/lifecare/editTemplateV2.jsp;jsessionid=...&patientId=P14&reportId=P14R11
+ */
+export async function openUpstreamTemplateEditor({ patientId = 'P14', reportId = 'P14R1', name = '' }) {
+  const token = localStorage.getItem('lis_auth_token') || '';
+  let userSid = '';
+  try {
+    const rawUser = localStorage.getItem('lis_user');
+    if (rawUser) {
+      const u = JSON.parse(rawUser);
+      userSid = u.upstreamSid || u.sid || '';
+    }
+  } catch {}
+
+  const rawPid = String(patientId || 'P14').trim();
+  const cleanPid = rawPid.toUpperCase().startsWith('P') ? `P${rawPid.replace(/^P+/i, '')}` : `P${rawPid}`;
+
+  let cleanRid = String(reportId || '').trim();
+  if (!cleanRid && cleanPid === 'P14') {
+    cleanRid = 'P14R1';
+  } else if (cleanPid === 'P14' && cleanRid.toUpperCase().startsWith('T')) {
+    cleanRid = `P14R${cleanRid.replace(/^T+/i, '')}`;
+  }
+
+  // Pre-open a blank window synchronously to prevent browser popup blockers on asynchronous callbacks
+  const targetWin = window.open('about:blank', '_blank');
+  if (targetWin) {
+    try {
+      targetWin.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Opening Template Editor...</title>
+            <style>
+              body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f8fafc; color: #334155; }
+              .box { text-align: center; padding: 2rem; background: #fff; border-radius: 1rem; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); border: 1px solid #e2e8f0; max-width: 420px; }
+              .spinner { width: 36px; height: 36px; border: 3px solid #e2e8f0; border-top-color: #4f46e5; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 1rem; }
+              @keyframes spin { to { transform: rotate(360deg); } }
+              h3 { margin: 0 0 0.5rem; font-size: 1.1rem; font-weight: 700; color: #1e293b; }
+              p { margin: 0; font-size: 0.85rem; color: #64748b; }
+            </style>
+          </head>
+          <body>
+            <div class="box">
+              <div class="spinner"></div>
+              <h3>Opening Template Editor</h3>
+              <p>Authenticating session for ${name || cleanRid} (${cleanPid})...</p>
+            </div>
+          </body>
+        </html>
+      `);
+    } catch {
+      // ignore
+    }
+  }
+
+  try {
+    const res = await api.get('/reports/template-url', {
+      params: { patientId: cleanPid, reportId: cleanRid, sid: userSid },
+    });
+
+    if (res.data?.sid) {
+      try {
+        const stored = localStorage.getItem('lis_user');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed.upstreamSid !== res.data.sid) {
+            parsed.upstreamSid = res.data.sid;
+            localStorage.setItem('lis_user', JSON.stringify(parsed));
+          }
+        }
+      } catch {}
+    }
+
+    if (res.data?.url) {
+      if (targetWin && !targetWin.closed) {
+        targetWin.location.replace(res.data.url);
+      } else {
+        window.open(res.data.url, '_blank');
+      }
+      return res.data.url;
+    }
+  } catch (err) {
+    console.warn('[openUpstreamTemplateEditor] Failed to fetch direct URL, falling back to server redirect route:', err.message);
+  }
+
+  // Fallback to server redirect route
+  const fallbackUrl = `/api/reports/edit-template?patientId=${encodeURIComponent(cleanPid)}&reportId=${encodeURIComponent(cleanRid)}${userSid ? `&sid=${encodeURIComponent(userSid)}` : ''}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
+  if (targetWin && !targetWin.closed) {
+    targetWin.location.replace(fallbackUrl);
+  } else {
+    window.open(fallbackUrl, '_blank');
+  }
+  return fallbackUrl;
+}
 

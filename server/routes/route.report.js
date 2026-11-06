@@ -19,6 +19,8 @@ import {
   getTemplateJson,
   updateTemplateData,
   updateTemplateBatchData,
+  getTemplateEditUrl,
+  redirectToTemplateEdit,
 } from '../controllers/controller.report.js';
 import { requireAuth } from '../middleware/middleware.auth.js';
 import { requireRoles, ROLES } from '../middleware/middleware.role.js';
@@ -27,10 +29,12 @@ const router = express.Router();
 
 router.use(requireAuth);
 
-// Read report & PDF
+// Read report & PDF & Upstream Template URLs
 router.get('/patient-report', getPatientReport);
 router.get('/pdf', streamReportPdf);
 router.get('/template-json', getTemplateJson);
+router.get('/template-url', getTemplateEditUrl);
+router.get('/edit-template', redirectToTemplateEdit);
 
 // Update Template Report Full-Page Data (UPDATETEMPLATEDATA)
 router.post(

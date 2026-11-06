@@ -66,6 +66,7 @@ export default function PatientProfileView({
   onOpenSettings,
   onEditPatient,
   onEditBill,
+  onTrackJourney,
 }) {
   const [activeTab, setActiveTab] = useState('tests'); // 'tests' | 'timeline' | 'deposits'
   const [showWhatsAppDropdown, setShowWhatsAppDropdown] = useState(false);
@@ -78,7 +79,10 @@ export default function PatientProfileView({
     );
   }
 
-  const pid = patient.patientId || patient.slNo || '';
+  const rawPid = String(patient.patientId || patient.slNo || '').trim();
+  const pid = rawPid.toUpperCase().startsWith('P')
+    ? `P${rawPid.replace(/^P+/i, '')}`
+    : rawPid;
   const { canViewPatientLogs, canViewPatientEmr } = useAuth();
   const { tests: catalogTests = [], profiles: catalogProfiles = [], packages: catalogPackages = [] } = useMaster();
   const [expandedLots, setExpandedLots] = useState({});
@@ -320,7 +324,13 @@ export default function PatientProfileView({
               {renderStatusBadge()}
               <button
                 type="button"
-                onClick={() => setActiveTab('timeline')}
+                onClick={() => {
+                  if (onTrackJourney) {
+                    onTrackJourney();
+                  } else {
+                    setActiveTab('timeline');
+                  }
+                }}
                 className="text-[11px] text-blue-600 hover:text-blue-800 font-bold hover:underline cursor-pointer inline-flex items-center gap-1"
                 title="View 10-Stage Flipkart-style diagnostic journey"
               >

@@ -24,34 +24,24 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor: handle 401s and superseded session invalidation gracefully
+// Response interceptor: preserve client session and only logout on explicit middleman superseded session
 api.interceptors.response.use(
   (response) => {
-    // If backend returns session invalid/logout code in a 200 wrapper
-    if (response.data && (response.data.StatusCode === '1140' || response.data.StatusCode === '1150')) {
-      localStorage.removeItem('lis_auth_token');
-      localStorage.removeItem('lis_user');
-      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
-        const reasonMsg = response.data.Message || 'Session expired: You have been logged in from another browser.';
-        window.location.href = `/login?reason=${encodeURIComponent(reasonMsg)}`;
-      }
-    }
+    // Upstream 1140/1150 codes are auto-recovered by middleman and should NOT logout the client user
     return response;
   },
   (error) => {
-    if (
-      error.response &&
-      (error.response.status === 401 ||
-        error.response.data?.StatusCode === '1150' ||
-        error.response.data?.StatusCode === '1140')
-    ) {
-      // Clear token and redirect to login if session expired or logged in from another browser
+    const isSuperseded =
+      error.response?.data?.reason === 'SESSION_SUPERSEDED' ||
+      error.response?.data?.Message?.includes('logged in from another browser');
+
+    // Only redirect to login if session was explicitly superseded by a newer login on another browser
+    if (isSuperseded) {
+      console.warn('[API] Session superseded by login from another browser/device.');
       localStorage.removeItem('lis_auth_token');
       localStorage.removeItem('lis_user');
       if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
-        const reasonMsg =
-          error.response.data?.Message ||
-          'Session expired: You have been logged in from another browser or device.';
+        const reasonMsg = error.response?.data?.Message || 'Session expired: You have been logged in from another browser or device.';
         window.location.href = `/login?reason=${encodeURIComponent(reasonMsg)}`;
       }
     }

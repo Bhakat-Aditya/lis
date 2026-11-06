@@ -45,6 +45,7 @@ import EditIndividualReportModal from './EditIndividualReportModal.jsx';
 import TemplateReportModal from './TemplateReportModal.jsx';
 import TemplateReportsEditor from './TemplateReportsEditor.jsx';
 import ConfirmationModal from '../common/ConfirmationModal.jsx';
+import { openUpstreamTemplateEditor } from '../../utils/templateSequence.js';
 import {
   getTestPhaseInfo,
   evaluateResultValue,
@@ -1687,7 +1688,15 @@ export default function ResultsEntry({
           onRefresh={onRefresh}
           onDeleteReport={handleDeleteTemplateReport}
           deletingId={deletingId}
-          onOpenModal={(tmpl) => setEditingTemplate(tmpl)}
+          onOpenModal={(tmpl) => {
+            const rawPid = patient?.patientId || patient?.slNo;
+            const rid = tmpl.reportId || tmpl.templatesId;
+            openUpstreamTemplateEditor({
+              patientId: rawPid,
+              reportId: rid,
+              name: tmpl.testName || tmpl.TEMPLATE_NAME,
+            });
+          }}
         />
       )}
 
@@ -1778,7 +1787,8 @@ export default function ResultsEntry({
         />
       )}
 
-      {/* 8. Dedicated Full-Page Template Report Modal */}
+      {/* 8. Dedicated Full-Page Template Report Modal - Temporarily commented out as requested (redirected to upstream editTemplateV2.jsp) */}
+      {/*
       {editingTemplate && (
         <TemplateReportModal
           isOpen={Boolean(editingTemplate)}
@@ -1792,6 +1802,7 @@ export default function ResultsEntry({
           }}
         />
       )}
+      */}
 
       {/* Universal Side-Effect Operations Confirmation Modal */}
       <ConfirmationModal

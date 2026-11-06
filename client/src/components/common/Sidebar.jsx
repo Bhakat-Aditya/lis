@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/context.auth.jsx';
-import { usePatientContext } from '../../context/context.patient.jsx';
 import {
   Home,
   UserPlus,
@@ -19,8 +18,6 @@ import {
   Database,
   FileText,
   CreditCard,
-  Barcode,
-  X,
   Phone,
 } from 'lucide-react';
 
@@ -28,54 +25,8 @@ export default function Sidebar({ onOpenNewPatient }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const {
-    activePatient,
-    clearActivePatient,
-    activePatientMenuOpen,
-    setActivePatientMenuOpen,
-    openModal,
-  } = usePatientContext();
 
   const [collapsed, setCollapsed] = useState(false);
-
-  const handlePatientClose = (e) => {
-    e?.stopPropagation();
-    clearActivePatient();
-    navigate('/patients');
-  };
-
-  const handlePatientAction = (action) => {
-    if (!activePatient) return;
-    const pid = activePatient.patientId || activePatient.slNo;
-
-    switch (action) {
-      case 'report':
-      case 'results':
-        navigate(`/patients/${pid}?tab=results`);
-        break;
-      case 'invoice':
-        navigate(`/invoice/${pid}`);
-        break;
-      case 'barcode':
-        openModal('barcode');
-        break;
-      case 'deposit':
-        openModal('deposit');
-        break;
-      case 'tests':
-        navigate(`/patients/${pid}?tab=tests`);
-        break;
-      case 'update':
-        openModal('update');
-        break;
-      case 'close':
-        clearActivePatient();
-        navigate('/patients');
-        break;
-      default:
-        break;
-    }
-  };
 
   const navItemClass = (isActive, activeColorClass = 'bg-blue-50 text-blue-700 font-bold') =>
     `flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
@@ -158,65 +109,6 @@ export default function Sidebar({ onOpenNewPatient }) {
             >
               <UserPlus className="w-4 h-4" />
             </button>
-          </div>
-        )}
-
-        {/* Active Patient Quick Card (Clean & White with soft border) */}
-        {!collapsed && activePatient && (
-          <div className="mx-3 my-2 border border-blue-200 bg-blue-50/30 rounded-xl p-2.5">
-            <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-blue-100">
-              <div className="flex items-center gap-1.5 truncate">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                <span className="font-bold text-xs text-slate-900 truncate">
-                  {activePatient.title ? `${activePatient.title} ` : ''}
-                  {activePatient.name}
-                </span>
-              </div>
-              <button
-                onClick={handlePatientClose}
-                title="Deselect patient"
-                className="text-slate-400 hover:text-rose-600 p-0.5 rounded cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            <div className="text-[10px] text-slate-500 mb-2 font-mono flex items-center justify-between">
-              <span>Barcode: #{activePatient.slNo || activePatient.barcode || '-'}</span>
-              <span className="font-semibold text-slate-700">₹{activePatient.totalBill || 0}</span>
-            </div>
-
-            {/* Quick Action Chips with Attractive Colors */}
-            <div className="grid grid-cols-2 gap-1.5 text-[11px] font-semibold">
-              <button
-                onClick={() => handlePatientAction('tests')}
-                className="flex items-center gap-1 px-2 py-1 bg-violet-50 text-violet-700 hover:bg-violet-100 rounded-lg transition-colors text-left"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-violet-600" />
-                <span>Order Tests</span>
-              </button>
-              <button
-                onClick={() => handlePatientAction('deposit')}
-                className="flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg transition-colors text-left"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
-                <span>Deposit</span>
-              </button>
-              <button
-                onClick={() => handlePatientAction('results')}
-                className="flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg transition-colors text-left"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
-                <span>Fill Results</span>
-              </button>
-              <button
-                onClick={() => handlePatientAction('invoice')}
-                className="flex items-center gap-1 px-2 py-1 bg-amber-50 text-amber-800 hover:bg-amber-100 rounded-lg transition-colors text-left"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-600" />
-                <span>Invoice</span>
-              </button>
-            </div>
           </div>
         )}
 

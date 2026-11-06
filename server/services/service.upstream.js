@@ -174,9 +174,32 @@ class UpstreamService {
   }
 
   /**
-   * Generic GET call to GetAPIServlet
+   * Check whether a given upstream session id is alive and accepted by editTemplateV2.jsp
    */
-  async get(apiName, params = {}, sid = null) {
+  async isSessionAlive(sid) {
+    if (!sid) return false;
+    try {
+      const testUrl = `${this.baseUrl}/editTemplateV2.jsp;jsessionid=${sid}?patientId=P14&reportId=P14R1`;
+      const res = await axios.get(testUrl, {
+        maxRedirects: 0,
+        validateStatus: null,
+        timeout: 4000,
+        headers: {
+          'Cookie': `JSESSIONID=${sid}`,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+      });
+      // 200 OK means valid active session; 302 means redirect to login.jsp
+      return res.status === 200;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Generic GET call to GetAPIServlet with auto-recovery on session invalidation (1140/1150)
+   */
+  async get(apiName, params = {}, sid = null, isRetry = false) {
     let activeSid = sid;
     if (!activeSid) {
       try {
@@ -207,6 +230,23 @@ class UpstreamService {
         timeout: 15000,
       });
 
+      // Auto-recovery: If upstream returns 1140 (Session invalid) or 1150 (Auto logout), refresh session & retry once
+      if (!isRetry && res.data && (res.data.StatusCode === '1140' || res.data.StatusCode === '1150')) {
+        console.warn(`[Upstream] Session ${activeSid} invalid/superseded (${res.data.StatusCode}) on GET ${apiName}. Re-authenticating master session...`);
+        this.masterSid = null;
+        this.masterCookie = null;
+        this.lastLoginTime = null;
+        try {
+          const freshSid = await this.ensureMasterSession(true);
+          if (freshSid) {
+            console.log(`[Upstream] Retrying GET ${apiName} with fresh sid: ${freshSid}`);
+            return await this.get(apiName, params, freshSid, true);
+          }
+        } catch (recoverErr) {
+          console.error('[Upstream] Auto-recovery failed:', recoverErr.message);
+        }
+      }
+
       if (res.data && res.data.StatusCode && UPSTREAM_ERROR_MAP[res.data.StatusCode]) {
         if (!res.data.Message || res.data.Message === 'FAILED') {
           res.data.Message = `${UPSTREAM_ERROR_MAP[res.data.StatusCode]} (${res.data.StatusCode})`;
@@ -221,9 +261,9 @@ class UpstreamService {
   }
 
   /**
-   * Generic POST call to APIServlet
+   * Generic POST call to APIServlet with auto-recovery on session invalidation (1140/1150)
    */
-  async post(apiName, params = {}, body = null, sid = null, customHeaders = {}) {
+  async post(apiName, params = {}, body = null, sid = null, customHeaders = {}, isRetry = false) {
     let activeSid = sid;
     if (!activeSid) {
       try {
@@ -258,6 +298,23 @@ class UpstreamService {
         },
         timeout: 15000,
       });
+
+      // Auto-recovery: If upstream returns 1140 (Session invalid) or 1150 (Auto logout), refresh session & retry once
+      if (!isRetry && res.data && (res.data.StatusCode === '1140' || res.data.StatusCode === '1150')) {
+        console.warn(`[Upstream] Session ${activeSid} invalid/superseded (${res.data.StatusCode}) on POST ${apiName}. Re-authenticating master session...`);
+        this.masterSid = null;
+        this.masterCookie = null;
+        this.lastLoginTime = null;
+        try {
+          const freshSid = await this.ensureMasterSession(true);
+          if (freshSid) {
+            console.log(`[Upstream] Retrying POST ${apiName} with fresh sid: ${freshSid}`);
+            return await this.post(apiName, params, body, freshSid, customHeaders, true);
+          }
+        } catch (recoverErr) {
+          console.error('[Upstream] Auto-recovery failed:', recoverErr.message);
+        }
+      }
 
       if (res.data && res.data.StatusCode && UPSTREAM_ERROR_MAP[res.data.StatusCode]) {
         if (!res.data.Message || res.data.Message === 'FAILED') {
