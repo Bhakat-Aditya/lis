@@ -11,7 +11,10 @@ const reportCache = new Map();
 const inFlightReports = new Map();
 
 export const invalidateReportCache = (patientId) => {
-  if (!patientId) return;
+  if (!patientId) {
+    reportCache.clear();
+    return;
+  }
   const rawPid = String(patientId).trim().toUpperCase();
   const cleanPid = rawPid.startsWith('P') ? `P${rawPid.replace(/^P+/i, '')}` : `P${rawPid}`;
   reportCache.delete(cleanPid);
@@ -177,6 +180,13 @@ export const getPatientReport = async (req, res, next) => {
     });
 
     const templates = (payload.templates || []).map((t) => {
+      const rid = String(t.reportId || t.templatesId || t.id || '').trim();
+      let statusOverride = null;
+      let isDel = Boolean(t.isDeleted || String(t.status || '').toUpperCase() === 'DELETED');
+      if (overrides[rid]) {
+        statusOverride = overrides[rid].status || 'DELETED';
+        isDel = statusOverride === 'DELETED';
+      }
       let parsed = null;
       if (typeof t.resultJson === 'string') {
         try {
@@ -187,7 +197,12 @@ export const getPatientReport = async (req, res, next) => {
       } else {
         parsed = t.resultJson;
       }
-      return { ...t, resultJsonParsed: parsed };
+      return {
+        ...t,
+        status: statusOverride || t.status || (isDel ? 'DELETED' : 'SAVED'),
+        isDeleted: isDel,
+        resultJsonParsed: parsed,
+      };
     });
 
     let billing = upstreamService.getCachedBilling(cleanPatientId);
@@ -1184,21 +1199,38 @@ export const deleteReport = async (req, res, next) => {
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
     const cleanReportId = String(reportId).trim();
-    const resolvedReportType = String(reportType || 1);
+    const isTemplate =
+      String(reportType) === '2' ||
+      reportType === 2 ||
+      /[A-Z0-9]+T\d+$/i.test(cleanReportId);
+    const resolvedReportType = isTemplate ? '2' : String(reportType || 1);
 
     // 1. Call upstream native DELETEREPORT API (as per main server specification)
     let upstreamData = null;
     try {
-      upstreamData = await upstreamService.post(
-        'DELETEREPORT',
-        {
-          patientId: cleanPatientId,
-          reportId: cleanReportId,
-          reportType: resolvedReportType,
-        },
-        null,
-        req.user?.upstreamSid
-      );
+      if (isTemplate) {
+        // Upstream template reports use GET APIServlet with reportType=2
+        upstreamData = await upstreamService.getAPIServlet(
+          'DELETEREPORT',
+          {
+            patientId: cleanPatientId,
+            reportId: cleanReportId,
+            reportType: '2',
+          },
+          req.user?.upstreamSid
+        );
+      } else {
+        upstreamData = await upstreamService.post(
+          'DELETEREPORT',
+          {
+            patientId: cleanPatientId,
+            reportId: cleanReportId,
+            reportType: resolvedReportType,
+          },
+          null,
+          req.user?.upstreamSid
+        );
+      }
       console.log(`[ReportDelete] Upstream DELETEREPORT response for ${cleanReportId}:`, upstreamData);
     } catch (e) {
       console.warn(`[ReportDelete] Upstream DELETEREPORT note for ${cleanReportId}:`, e.message);
@@ -1684,7 +1716,9 @@ export const updateTemplateData = async (req, res, next) => {
     localTemplateReports.set(cleanReportId, updatedReport);
 
     // Invalidate report cache
-    reportCache.flushAll();
+    const targetPid = req.body?.patientId || req.query?.patientId || cleanReportId.replace(/R\d+$/i, '');
+    invalidateReportCache(targetPid);
+    reportCache.clear();
 
     return res.json({
       STATUS: upstreamRes?.STATUS || 'SUCCESS',
@@ -1771,7 +1805,8 @@ export const updateTemplateBatchData = async (req, res, next) => {
       results.push({ reportId: cleanReportId, status: 'SUCCESS' });
     }
 
-    reportCache.flushAll();
+    // Invalidate report cache
+    reportCache.clear();
 
     return res.json({
       STATUS: 'SUCCESS',

@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import api from '../../services/api.js';
 import {
   FileText,
+  FileEdit,
+  Edit3,
   Save,
   Plus,
   Trash2,
@@ -24,8 +26,9 @@ import {
   AlertTriangle,
   ArrowRight,
   ExternalLink,
+  Activity,
 } from 'lucide-react';
-import { sortSectionKeys, orderExamObject, openUpstreamTemplateEditor } from '../../utils/templateSequence.js';
+import { sortSectionKeys, orderExamObject } from '../../utils/templateSequence.js';
 
 /**
  * Standard default examination result schema for full-page template reports
@@ -426,11 +429,16 @@ export default function TemplateReportsEditor({
 
   const dirtyCount = dirtyReports.length;
 
-  // Filtered template reports according to search term
+  // Filtered template reports according to search term and deletion status
   const filteredList = useMemo(() => {
-    if (!searchTerm) return templateReports;
+    const activeTemplates = (templateReports || []).filter((tmpl) => {
+      if (!tmpl) return false;
+      const st = String(tmpl.status || '').toUpperCase();
+      return !tmpl.isDeleted && st !== 'DELETED';
+    });
+    if (!searchTerm) return activeTemplates;
     const term = searchTerm.toLowerCase().trim();
-    return templateReports.filter((tmpl) => {
+    return activeTemplates.filter((tmpl) => {
       const name = String(tmpl.testName || tmpl.TEMPLATE_NAME || '').toLowerCase();
       const rId = String(tmpl.reportId || '').toLowerCase();
       return name.includes(term) || rId.includes(term);
@@ -780,7 +788,7 @@ export default function TemplateReportsEditor({
                 Template Reports — Full Page Clinical Examination Editor
               </h3>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
-                {templateReports.length} Examinations from API
+                {filteredList.length} Examination{filteredList.length !== 1 ? 's' : ''}
               </span>
               {dirtyCount > 0 && (
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300 animate-pulse">
@@ -928,89 +936,217 @@ export default function TemplateReportsEditor({
         </div>
       )}
 
-      {/* 2. MODE: ITEM BOXES GRID MATCHING IMAGE 2 */}
+      {/* 2. MODE: ITEM BOXES GRID */}
       {viewMode === 'boxes' && (
         <div className="p-4 sm:p-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredList.map((tmpl, idx) => {
+          {filteredList.length === 0 ? (
+            <div className="py-12 text-center text-xs font-semibold text-slate-500 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+              No active clinical template reports for this patient.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">
+              {filteredList.map((tmpl, idx) => {
               const rId = String(tmpl.reportId || tmpl.templatesId || tmpl.id || '').trim();
               const isDeleting = deletingId === rId;
               const testName = tmpl.testName || tmpl.TEMPLATE_NAME || 'Template Report';
               const deptName =
                 tmpl.deptName || tmpl.department || 'DEPT HAEMATOLOGY TESTS - Template';
               const pid = patient?.patientId || patient?.slNo || '';
+              const rawPid = String(pid).trim();
+              const cleanPid = rawPid.toUpperCase().startsWith('P')
+                ? `P${rawPid.replace(/^P+/i, '')}`
+                : `P${rawPid}`;
+
+              const state = reportsState[rId] || {};
+              const isItemDirty = Boolean(state.isDirty);
+              const schema = state.resultJson;
+              const sections = schema?.Exam ? sortSectionKeys(Object.keys(schema.Exam), testName) : [];
+              const totalParams = sections.reduce(
+                (acc, s) => acc + (schema.Exam[s]?.length || 0),
+                0
+              );
+
+              let filledCount = 0;
+              if (schema?.Exam) {
+                sections.forEach((s) => {
+                  (schema.Exam[s] || []).forEach((p) => {
+                    if (p && p.Value !== undefined && String(p.Value).trim() !== '') {
+                      filledCount++;
+                    }
+                  });
+                });
+              }
+
+              const statusStr = String(state.status || tmpl.status || '').toUpperCase();
+              const isSaved = statusStr === 'SAVED';
 
               return (
                 <div
                   key={rId || idx}
-                  className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 relative border-l-[6px] border-l-teal-500 hover:shadow-md transition-all flex flex-col justify-between"
+                  className="group relative bg-white rounded-2xl border border-slate-200/90 hover:border-violet-300 shadow-xs hover:shadow-lg transition-all duration-300 hover:-translate-y-1 flex flex-col justify-between overflow-hidden"
                 >
-                  {/* Top Header: Title, Department Subtitle, and Red Delete Button */}
-                  <div>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 pr-1">
-                        <h4
-                          className="text-base sm:text-lg font-bold text-slate-900 leading-snug tracking-tight truncate"
-                          title={testName}
-                        >
-                          {testName}
-                        </h4>
-                        <p
-                          className="text-[11px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wide mt-1 truncate"
-                          title={deptName}
-                        >
-                          {deptName}
-                        </p>
+                  {/* Top Colorful Accent Line */}
+                  <div className="h-1.5 w-full bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600" />
+
+                  <div className="p-5 flex-1 flex flex-col justify-between">
+                    <div>
+                      {/* Top Header: Icon + Identifiers + Delete */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-3 min-w-0">
+                          {/* Modern Squircle Badge */}
+                          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-500 via-purple-600 to-indigo-600 text-white flex items-center justify-center shadow-xs shrink-0 group-hover:scale-105 transition-transform">
+                            <FileText className="w-5 h-5" />
+                          </div>
+
+                          <div className="min-w-0">
+                            {/* Badges */}
+                            <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                              <span className="font-mono text-[10px] font-bold bg-violet-50 text-violet-700 px-2 py-0.5 rounded-md border border-violet-200/70">
+                                #{rId}
+                              </span>
+                              {isItemDirty ? (
+                                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                                  ● Unsaved
+                                </span>
+                              ) : isSaved ? (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  ● Saved
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                                  Template
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Examination Name */}
+                            <h4
+                              className="text-base sm:text-lg font-bold text-slate-900 group-hover:text-violet-950 leading-snug tracking-tight truncate transition-colors"
+                              title={testName}
+                            >
+                              {testName}
+                            </h4>
+
+                            {/* Department Subtitle */}
+                            <div
+                              className="flex items-center gap-1 text-[11px] font-medium text-slate-500 mt-0.5 truncate"
+                              title={deptName}
+                            >
+                              <Layers className="w-3 h-3 text-slate-400 shrink-0" />
+                              <span className="truncate">{deptName}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Soft Danger Delete Button */}
+                        {onDeleteReport && (
+                          <button
+                            type="button"
+                            onClick={() => onDeleteReport(tmpl)}
+                            disabled={isDeleting}
+                            className="w-8 h-8 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 flex items-center justify-center transition-all cursor-pointer shrink-0 disabled:opacity-50 active:scale-95"
+                            title="Delete template report from worklist"
+                          >
+                            {isDeleting ? (
+                              <Loader2 className="w-4 h-4 animate-spin text-rose-500" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </button>
+                        )}
                       </div>
 
-                      {/* Circular Red Trash Button (matching Image 2) */}
-                      {onDeleteReport && (
+                      {/* Middle Details / Observations Preview Chips */}
+                      <div className="mt-4 pt-3.5 border-t border-slate-100">
+                        {sections.length > 0 ? (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between text-[11px] text-slate-600">
+                              <span className="font-semibold text-slate-700">
+                                {sections.length} Clinical Section{sections.length !== 1 ? 's' : ''}
+                              </span>
+                              <span className="font-mono text-[10px] text-slate-500">
+                                {filledCount > 0 ? `${filledCount}/${totalParams} filled` : `${totalParams} parameters`}
+                              </span>
+                            </div>
+
+                            <div className="flex flex-wrap gap-1.5">
+                              {sections.slice(0, 3).map((sec) => (
+                                <span
+                                  key={sec}
+                                  className="text-[10px] font-semibold bg-slate-50 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200/80 truncate max-w-[140px]"
+                                  title={sec}
+                                >
+                                  {sec}
+                                </span>
+                              ))}
+                              {sections.length > 3 && (
+                                <span className="text-[10px] font-bold bg-violet-50 text-violet-700 px-1.5 py-0.5 rounded-md border border-violet-100">
+                                  +{sections.length - 3} more
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
+                            <Activity className="w-3.5 h-3.5 text-violet-500 shrink-0" />
+                            <span>Clinical template ready for findings entry</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Bottom Action Buttons: Dedicated Template Editor + Quick Inline */}
+                    <div className="mt-5 pt-3 border-t border-slate-100">
+                      <div className="flex items-center gap-2">
+                        {/* 1. HERO BUTTON: Dedicated My Template Editor */}
                         <button
                           type="button"
-                          onClick={() => onDeleteReport(tmpl)}
-                          disabled={isDeleting}
-                          className="w-7 h-7 rounded-full bg-rose-500 hover:bg-rose-600 active:scale-95 text-white flex items-center justify-center shadow-xs transition-all cursor-pointer shrink-0 disabled:opacity-50"
-                          title="Delete template report"
+                          onClick={() => {
+                            navigate(
+                              `/patients/${cleanPid}/template/${rId}?name=${encodeURIComponent(testName)}`,
+                              { state: { patient } }
+                            );
+                          }}
+                          className="flex-1 py-2.5 px-4 bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 active:scale-95 text-white font-bold text-xs sm:text-sm rounded-xl shadow-xs hover:shadow-md transition-all cursor-pointer text-center flex items-center justify-center gap-2"
+                          title="Open full-page dedicated template findings editor"
                         >
-                          {isDeleting ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <Trash2 className="w-3.5 h-3.5" />
-                          )}
+                          <FileEdit className="w-4 h-4" />
+                          <span>Template Editor</span>
                         </button>
-                      )}
-                    </div>
-                  </div>
 
-                  {/* Bottom Full-Width Blue Action Button: Edit Template (redirects to upstream editTemplateV2.jsp in new window) */}
-                  <div className="mt-6">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        openUpstreamTemplateEditor({
-                          patientId: pid,
-                          reportId: rId,
-                          name: testName,
-                        });
-                      }}
-                      className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-sm rounded-xl shadow-xs transition-all cursor-pointer text-center flex items-center justify-center gap-2"
-                      title="Open template in official upstream editor window (editTemplateV2.jsp)"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                      <span>Edit Template</span>
-                    </button>
+                        {/* 2. Quick Inline Drawer Button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setViewMode('editor');
+                            setCollapsedMap((prev) => ({ ...prev, [rId]: false }));
+                          }}
+                          className="py-2.5 px-3 bg-violet-50 hover:bg-violet-100 active:scale-95 text-violet-700 font-bold text-xs rounded-xl border border-violet-200 transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
+                          title="Quick inline edit directly on this page"
+                        >
+                          <FileCheck2 className="w-4 h-4" />
+                          <span>Inline</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               );
             })}
           </div>
+          )}
         </div>
       )}
 
       {/* 3. MODE: ONE-PAGE WHOLE EDIT VIEW (ALL THINGS EDITABLE TO SHOW UP ON PAGE) */}
       {viewMode === 'editor' && (
         <div className="p-4 space-y-4">
-          {filteredList.map((tmpl, idx) => {
+          {filteredList.length === 0 ? (
+            <div className="py-12 text-center text-xs font-semibold text-slate-500 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+              No active clinical template reports for this patient.
+            </div>
+          ) : (
+            filteredList.map((tmpl, idx) => {
             const rId = String(tmpl.reportId || tmpl.templatesId || tmpl.id || '').trim();
             const state = reportsState[rId] || {};
             const isCollapsed = Boolean(collapsedMap[rId]);
@@ -1094,21 +1230,24 @@ export default function TemplateReportsEditor({
                       <span className="hidden sm:inline">{isItemSaving ? 'Saving...' : isItemDirty ? 'Save' : 'Saved'}</span>
                     </button>
 
-                    {/* Focused Upstream Pop-out Button */}
+                    {/* Dedicated Full-Page Template Editor Button */}
                     <button
                       type="button"
                       onClick={() => {
-                        openUpstreamTemplateEditor({
-                          patientId: pid,
-                          reportId: rId,
-                          name: tmpl.testName || tmpl.TEMPLATE_NAME,
-                        });
+                        const rawPid = patient?.patientId || patient?.slNo || '';
+                        const cleanPid = String(rawPid).toUpperCase().startsWith('P')
+                          ? `P${String(rawPid).replace(/^P+/i, '')}`
+                          : `P${rawPid}`;
+                        navigate(
+                          `/patients/${cleanPid}/template/${rId}?name=${encodeURIComponent(tmpl.testName || tmpl.TEMPLATE_NAME)}`,
+                          { state: { patient } }
+                        );
                       }}
-                      className="p-1.5 bg-white hover:bg-purple-50 text-slate-600 hover:text-purple-700 border border-slate-200 rounded-lg transition-colors cursor-pointer flex items-center gap-1 text-xs font-semibold"
-                      title="Open template in official upstream editor window (editTemplateV2.jsp)"
+                      className="p-1.5 px-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white rounded-lg transition-all cursor-pointer flex items-center gap-1 text-xs font-bold shadow-2xs active:scale-95"
+                      title="Open full-page dedicated template findings editor"
                     >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Upstream</span>
+                      <FileEdit className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Template Editor</span>
                     </button>
 
                     {/* Delete Report Button */}
@@ -1362,7 +1501,8 @@ export default function TemplateReportsEditor({
                 )}
               </div>
             );
-          })}
+          })
+          )}
         </div>
       )}
 
@@ -1381,7 +1521,14 @@ export default function TemplateReportsEditor({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredList.map((tmpl, idx) => {
+              {filteredList.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-xs font-semibold text-slate-500 bg-slate-50/50">
+                    No active clinical template reports for this patient.
+                  </td>
+                </tr>
+              ) : (
+                filteredList.map((tmpl, idx) => {
                 const rId = String(tmpl.reportId || tmpl.templatesId || tmpl.id || '').trim();
                 const state = reportsState[rId] || {};
                 const isExpanded = !collapsedMap[rId];
@@ -1423,13 +1570,33 @@ export default function TemplateReportsEditor({
                       </td>
                       <td className="py-2.5 px-3 text-right">
                         <div className="inline-flex items-center gap-1.5 justify-end">
+                          {/* Dedicated Full-Page Template Editor */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const rawPid = patient?.patientId || patient?.slNo || '';
+                              const cleanPid = String(rawPid).toUpperCase().startsWith('P')
+                                ? `P${String(rawPid).replace(/^P+/i, '')}`
+                                : `P${rawPid}`;
+                              navigate(
+                                `/patients/${cleanPid}/template/${rId}?name=${encodeURIComponent(tmpl.testName || tmpl.TEMPLATE_NAME)}`,
+                                { state: { patient } }
+                              );
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer"
+                            title="Open full-page dedicated template findings editor"
+                          >
+                            <FileEdit className="w-3.5 h-3.5" />
+                            <span className="hidden md:inline">Editor</span>
+                          </button>
+
                           <button
                             type="button"
                             onClick={() => toggleCollapse(rId)}
-                            className="inline-flex items-center gap-1 px-3 py-1 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-50 hover:bg-purple-100 active:scale-95 text-purple-700 rounded-lg text-xs font-bold border border-purple-200 shadow-2xs transition-all cursor-pointer"
                             title="Toggle inline edit drawer"
                           >
-                            <span>{isExpanded ? 'Close' : 'Edit'}</span>
+                            <span>{isExpanded ? 'Close' : 'Inline'}</span>
                             {isExpanded ? (
                               <ChevronUp className="w-3.5 h-3.5" />
                             ) : (
@@ -1523,7 +1690,8 @@ export default function TemplateReportsEditor({
                     )}
                   </React.Fragment>
                 );
-              })}
+              })
+              )}
             </tbody>
           </table>
         </div>

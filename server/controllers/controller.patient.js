@@ -495,15 +495,18 @@ export const addMultipleTests = async (req, res, next) => {
     let testList = [];
     let profList = [];
     let pkgList = [];
+    let templateList = [];
     try {
-      const [tRes, pRes, kRes] = await Promise.all([
+      const [tRes, pRes, kRes, tmplRes] = await Promise.all([
         cacheService.getList(CACHE_KEYS.TEST_LIST),
         cacheService.getList(CACHE_KEYS.PROFILE_LIST),
         cacheService.getList(CACHE_KEYS.PKG_LIST),
+        cacheService.getList(CACHE_KEYS.TEMPLATE_LIST),
       ]);
       testList = tRes?.data || [];
       profList = pRes?.data || [];
       pkgList = kRes?.data || [];
+      templateList = tmplRes?.data || [];
     } catch (e) {
       console.warn('[AddTests] Could not fetch master lists for validation:', e.message);
     }
@@ -554,6 +557,21 @@ export const addMultipleTests = async (req, res, next) => {
         pkgMap.set(`K${id.toUpperCase()}`, id);
       }
       if (pkg.Name) pkgNameMap.set(pkg.Name.toLowerCase().trim(), id);
+    }
+
+    const templateMap = new Map();
+    const templateNameMap = new Map();
+    for (const tmpl of templateList) {
+      const id = String(tmpl.templatesId || tmpl.id || '').trim();
+      if (!id) continue;
+      templateMap.set(id.toUpperCase(), id);
+      if (id.toUpperCase().startsWith('T')) {
+        templateMap.set(id.slice(1).toUpperCase(), id);
+      } else {
+        templateMap.set(`T${id.toUpperCase()}`, id);
+      }
+      const tName = tmpl.TEMPLATE_NAME || tmpl.name;
+      if (tName) templateNameMap.set(String(tName).toLowerCase().trim(), id);
     }
 
     // Parse and sanitize incoming tokens
@@ -615,6 +633,11 @@ export const addMultipleTests = async (req, res, next) => {
 
       // Case 2b: Token marked as Template (TEMPLATE)
       if (prefix === 'TEMPLATE') {
+        const matchedTmplId = templateMap.get(upperVal) || templateNameMap.get(lowerVal);
+        if (matchedTmplId) {
+          validTokens.push(`TEMPLATE|${matchedTmplId}`);
+          continue;
+        }
         validTokens.push(`TEMPLATE|${val}`);
         continue;
       }
@@ -705,18 +728,22 @@ export const addMultipleTests = async (req, res, next) => {
     // Duplicate Investigation Check against patient's existing worklist
     let tokensToSend = uniqueValidTokens;
     const duplicateLabels = [];
+    let existingTemplates = [];
 
     if (!allowRepeat) {
       try {
         const repData = await upstreamService.get('GETPATIENTREPORT', { patientId: cleanPatientId }, req.user?.upstreamSid);
         const existingReports = repData?.payLoadJSON?.reports || [];
+        existingTemplates = repData?.payLoadJSON?.templates || [];
 
         const existingTestIds = new Set();
         const existingProfIds = new Set();
         const existingPkgIds = new Set();
+        const existingTemplateIds = new Set();
         const existingNames = new Set();
 
         existingReports.forEach((r) => {
+          if (r.status === 'DELETED' || r.isDeleted) return;
           if (r.testId) {
             const tid = String(r.testId).toUpperCase().trim();
             existingTestIds.add(tid);
@@ -738,6 +765,22 @@ export const addMultipleTests = async (req, res, next) => {
           }
         });
 
+        existingTemplates.forEach((t) => {
+          if (t.status === 'DELETED' || t.isDeleted) return;
+          const tid = String(t.templatesId || t.id || '').toUpperCase().trim();
+          if (tid) {
+            existingTemplateIds.add(tid);
+            if (tid.startsWith('T')) existingTemplateIds.add(tid.slice(1));
+            else existingTemplateIds.add(`T${tid}`);
+          }
+          if (t.reportId) {
+            existingTemplateIds.add(String(t.reportId).toUpperCase().trim());
+          }
+          if (t.TEMPLATE_NAME || t.name) {
+            existingNames.add(String(t.TEMPLATE_NAME || t.name).toLowerCase().trim());
+          }
+        });
+
         const nonDuplicateTokens = [];
         for (const token of uniqueValidTokens) {
           const [prefix, id] = token.split('|');
@@ -747,6 +790,7 @@ export const addMultipleTests = async (req, res, next) => {
           if (prefix === 'TEST' && existingTestIds.has(uId)) isDup = true;
           if (prefix === 'PROF' && (existingProfIds.has(uId) || existingProfIds.has(uId.replace(/^P+/i, '')))) isDup = true;
           if (prefix === 'PKG' && (existingPkgIds.has(uId) || existingPkgIds.has(uId.replace(/^K+/i, '')))) isDup = true;
+          if (prefix === 'TEMPLATE' && (existingTemplateIds.has(uId) || existingTemplateIds.has(uId.replace(/^T+/i, '')))) isDup = true;
 
           if (isDup) {
             // Find friendly readable name
@@ -760,6 +804,9 @@ export const addMultipleTests = async (req, res, next) => {
             } else if (prefix === 'PKG') {
               const k = pkgList.find((x) => String(x['Package Id']).toUpperCase() === uId || String(x['Package Id']).replace(/^K+/i, '') === uId.replace(/^K+/i, ''));
               if (k?.Name) friendlyName = k.Name;
+            } else if (prefix === 'TEMPLATE') {
+              const tmpl = templateList.find((x) => String(x.templatesId || x.id).toUpperCase() === uId || String(x.templatesId || x.id).replace(/^T+/i, '') === uId.replace(/^T+/i, ''));
+              if (tmpl?.TEMPLATE_NAME || tmpl?.name) friendlyName = tmpl.TEMPLATE_NAME || tmpl.name;
             }
             duplicateLabels.push(friendlyName);
           } else {
@@ -786,39 +833,117 @@ export const addMultipleTests = async (req, res, next) => {
       }
     }
 
-    const sanitizedTestIds = tokensToSend.join(',');
-    console.log(`[AddTests] Ordering ${tokensToSend.length} test(s) for patient ${cleanPatientId}: ${sanitizedTestIds}`);
+    const templateTokens = [];
+    const regularTokens = [];
 
-    const params = {
-      patientId: cleanPatientId,
-      selectedTestIds: sanitizedTestIds,
-    };
-
-    const upstreamData = await upstreamService.post('ADDTESTMULTIPLE', params, null, req.user?.upstreamSid);
-    invalidateReportCache(cleanPatientId);
-
-    if (upstreamData?.StatusCode === '1211' || upstreamData?.STATUS === 'FAILED') {
-      console.error('[AddTests] Upstream returned error (1211):', {
-        patientId: cleanPatientId,
-        selectedTestIds: sanitizedTestIds,
-        upstreamData,
-      });
-
-      const errMsg =
-        upstreamData?.Message && upstreamData?.Message !== 'Error In Proccessing - 1211'
-          ? upstreamData.Message
-          : `Upstream server was unable to add test (1211). Please verify patient #${cleanPatientId} and selected investigations.`;
-
-      return res.status(400).json({
-        STATUS: 'FAILED',
-        StatusCode: upstreamData?.StatusCode || '1211',
-        Message: errMsg,
-        data: upstreamData,
-      });
+    for (const token of tokensToSend) {
+      if (token.startsWith('TEMPLATE|')) {
+        const val = token.split('|')[1];
+        if (val) templateTokens.push(val);
+      } else {
+        regularTokens.push(token);
+      }
     }
 
-    // Bill is generated and modified internally upstream upon adding tests;
-    // do not trigger routine BILLGENERATE here.
+    let upstreamData = null;
+
+    // 1. Process regular diagnostic tests, profiles, and packages via native ADDTESTMULTIPLE
+    if (regularTokens.length > 0) {
+      const sanitizedTestIds = regularTokens.join(',');
+      console.log(`[AddTests] Ordering ${regularTokens.length} test(s) for patient ${cleanPatientId}: ${sanitizedTestIds}`);
+
+      const params = {
+        patientId: cleanPatientId,
+        selectedTestIds: sanitizedTestIds,
+      };
+
+      upstreamData = await upstreamService.post('ADDTESTMULTIPLE', params, null, req.user?.upstreamSid);
+
+      if (upstreamData?.StatusCode === '1211' || upstreamData?.STATUS === 'FAILED') {
+        console.error('[AddTests] Upstream returned error (1211):', {
+          patientId: cleanPatientId,
+          selectedTestIds: sanitizedTestIds,
+          upstreamData,
+        });
+
+        const errMsg =
+          upstreamData?.Message && upstreamData?.Message !== 'Error In Proccessing - 1211'
+            ? upstreamData.Message
+            : `Upstream server was unable to add test (1211). Please verify patient #${cleanPatientId} and selected investigations.`;
+
+        return res.status(400).json({
+          STATUS: 'FAILED',
+          StatusCode: upstreamData?.StatusCode || '1211',
+          Message: errMsg,
+          data: upstreamData,
+        });
+      }
+    }
+
+    // 2. Process template reports via native upstream ADDTEMPLATE API (APIServlet?api=ADDTEMPLATE&patientId=...&tempId=...)
+    if (templateTokens.length > 0) {
+      // Ensure we have current template reports to detect any soft-deleted templates needing restore
+      if (!existingTemplates || existingTemplates.length === 0) {
+        try {
+          const repCheck = await upstreamService.get('GETPATIENTREPORT', { patientId: cleanPatientId }, req.user?.upstreamSid);
+          existingTemplates = repCheck?.payLoadJSON?.templates || [];
+        } catch (e) {
+          console.warn('[AddTests] Could not fetch existing templates for restore check:', e.message);
+        }
+      }
+
+      for (const tVal of templateTokens) {
+        const rawTempId = String(tVal).trim().toUpperCase();
+        const tempId = rawTempId.startsWith('T') ? rawTempId : `T${rawTempId}`;
+        console.log(`[AddTests] Processing template ${tempId} for patient ${cleanPatientId}...`);
+
+        try {
+          // Check if template was previously added and is currently DELETED
+          const deletedTmpl = existingTemplates.find((t) => {
+            const tId = String(t.templatesId || t.id || '').toUpperCase().trim();
+            const repId = String(t.reportId || '').toUpperCase().trim();
+            const isMatch = tId === tempId || tId === tempId.replace(/^T+/i, '') || repId === `${cleanPatientId}${tempId}`;
+            return isMatch && (String(t.status || '').toUpperCase() === 'DELETED' || t.isDeleted);
+          });
+
+          let tmplRes;
+          if (deletedTmpl && deletedTmpl.reportId) {
+            console.log(`[AddTests] Template ${tempId} was previously DELETED (${deletedTmpl.reportId}). Restoring via RESTOREREPORT...`);
+            tmplRes = await upstreamService.getAPIServlet('RESTOREREPORT', {
+              patientId: cleanPatientId,
+              reportId: deletedTmpl.reportId,
+              reportType: '2',
+            }, req.user?.upstreamSid);
+          } else {
+            console.log(`[AddTests] Adding new template ${tempId} via ADDTEMPLATE...`);
+            tmplRes = await upstreamService.getAPIServlet('ADDTEMPLATE', {
+              patientId: cleanPatientId,
+              tempId,
+            }, req.user?.upstreamSid);
+
+            // If ADDTEMPLATE returns 1211, it might already exist as soft-deleted in upstream DB
+            if (tmplRes?.StatusCode === '1211' || tmplRes?.STATUS === 'FAILED') {
+              console.log(`[AddTests] ADDTEMPLATE returned 1211, attempting restore fallback with ${cleanPatientId}${tempId}...`);
+              const fallbackRestore = await upstreamService.getAPIServlet('RESTOREREPORT', {
+                patientId: cleanPatientId,
+                reportId: `${cleanPatientId}${tempId}`,
+                reportType: '2',
+              }, req.user?.upstreamSid);
+              if (fallbackRestore?.STATUS === 'SUCCESS') {
+                tmplRes = fallbackRestore;
+              }
+            }
+          }
+
+          console.log(`[AddTests] Upstream result for template ${tempId}:`, tmplRes?.STATUS, tmplRes?.Message);
+          if (!upstreamData) upstreamData = tmplRes;
+        } catch (tmplErr) {
+          console.error(`[AddTests] Error processing template ${tempId}:`, tmplErr.message);
+        }
+      }
+    }
+
+    invalidateReportCache(cleanPatientId);
 
     const successMsg = duplicateLabels.length > 0
       ? `Added ${tokensToSend.length} new test(s). Skipped duplicate(s): ${duplicateLabels.join(', ')}.`
@@ -829,7 +954,7 @@ export const addMultipleTests = async (req, res, next) => {
       StatusCode: upstreamData?.StatusCode || '0000',
       Message: successMsg,
       patientId: cleanPatientId,
-      selectedTestIds: sanitizedTestIds,
+      selectedTestIds: tokensToSend.join(','),
       skippedDuplicates: duplicateLabels,
       data: upstreamData,
     });

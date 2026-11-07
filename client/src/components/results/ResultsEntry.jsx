@@ -45,7 +45,6 @@ import EditIndividualReportModal from './EditIndividualReportModal.jsx';
 import TemplateReportModal from './TemplateReportModal.jsx';
 import TemplateReportsEditor from './TemplateReportsEditor.jsx';
 import ConfirmationModal from '../common/ConfirmationModal.jsx';
-import { openUpstreamTemplateEditor } from '../../utils/templateSequence.js';
 import {
   getTestPhaseInfo,
   evaluateResultValue,
@@ -72,6 +71,7 @@ export default function ResultsEntry({
   const { tests: masterTests = [], templates: masterTemplateCatalog = [] } = useMaster();
   const [showTemplatesSection, setShowTemplatesSection] = useState(true);
   const [editingTemplate, setEditingTemplate] = useState(null);
+  const [deletedTemplateIds, setDeletedTemplateIds] = useState(() => new Set());
   // Helper to normalize status into one of 10 official upstream LIS statuses
   const resolveStatus = (report = {}, current = {}) => {
     const raw = String(current.status || report.status || '').toUpperCase().trim();
@@ -293,6 +293,13 @@ export default function ResultsEntry({
     // 1. Strictly from templates prop returned by the server
     (templates || []).forEach((t) => {
       const repId = String(t.reportId || t.templatesId || t.id || '').trim();
+      const isDeleted = Boolean(
+        t.isDeleted ||
+        String(t.status || '').toUpperCase() === 'DELETED' ||
+        (repId && deletedTemplateIds.has(repId))
+      );
+      if (isDeleted) return;
+
       if (repId && !seen.has(repId)) {
         seen.add(repId);
         list.push({
@@ -308,8 +315,15 @@ export default function ResultsEntry({
 
     // 2. Only activeReports that have explicit template flags (never hijack regular numeric tests like Hemoglobin)
     (activeReports || []).forEach((r) => {
+      const repId = String(r.reportId || r.id || '').trim();
+      const isDeleted = Boolean(
+        r.isDeleted ||
+        String(r.status || '').toUpperCase() === 'DELETED' ||
+        (repId && deletedTemplateIds.has(repId))
+      );
+      if (isDeleted) return;
+
       if (isTemplateItem(r)) {
-        const repId = String(r.reportId || r.id || '').trim();
         if (repId && !seen.has(repId)) {
           seen.add(repId);
           list.push({
@@ -325,7 +339,7 @@ export default function ResultsEntry({
     });
 
     return list;
-  }, [templates, activeReports, isTemplateItem]);
+  }, [templates, activeReports, isTemplateItem, deletedTemplateIds]);
 
   // Filtered Reports list
   const filteredReports = useMemo(() => {
@@ -968,12 +982,19 @@ export default function ResultsEntry({
         setDeletingId(tmpl.reportId);
         setErrorMsg('');
 
+        // Optimistically remove immediately from view
+        setDeletedTemplateIds((prev) => {
+          const next = new Set(prev);
+          next.add(tmpl.reportId);
+          return next;
+        });
+
         try {
           const res = await api.post('/reports/delete', {
             patientId: targetPid,
             reportId: tmpl.reportId,
             testName: tmpl.testName,
-            reportType: 1,
+            reportType: 2,
           });
 
           if (res.data?.STATUS === 'FAILED') {
@@ -984,6 +1005,12 @@ export default function ResultsEntry({
           setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
           if (onRefresh) await onRefresh(true);
         } catch (err) {
+          // Revert optimistic delete on error
+          setDeletedTemplateIds((prev) => {
+            const next = new Set(prev);
+            next.delete(tmpl.reportId);
+            return next;
+          });
           setErrorMsg(err.response?.data?.Message || err.message || 'Failed to delete template report');
           setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
         } finally {
@@ -1688,15 +1715,6 @@ export default function ResultsEntry({
           onRefresh={onRefresh}
           onDeleteReport={handleDeleteTemplateReport}
           deletingId={deletingId}
-          onOpenModal={(tmpl) => {
-            const rawPid = patient?.patientId || patient?.slNo;
-            const rid = tmpl.reportId || tmpl.templatesId;
-            openUpstreamTemplateEditor({
-              patientId: rawPid,
-              reportId: rid,
-              name: tmpl.testName || tmpl.TEMPLATE_NAME,
-            });
-          }}
         />
       )}
 

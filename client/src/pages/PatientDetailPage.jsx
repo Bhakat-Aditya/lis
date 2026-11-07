@@ -48,7 +48,7 @@ export default function PatientDetailPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { activePatient, setActivePatient, activeModal, openModal, closeModal } = usePatientContext();
-  const { tests: catalogTests = [], profiles: catalogProfiles = [], packages: catalogPackages = [] } = useMaster();
+  const { tests: catalogTests = [], profiles: catalogProfiles = [], packages: catalogPackages = [], templates: catalogTemplates = [] } = useMaster();
 
   const activeTab = searchParams.get('tab') || 'profile'; // profile, tests, results, invoice
 
@@ -89,8 +89,8 @@ export default function PatientDetailPage() {
   });
 
   const patientLots = useMemo(() => {
-    return groupInvestigationsIntoLots(reports, patient, catalogProfiles, catalogPackages, catalogTests);
-  }, [reports, patient, catalogProfiles, catalogPackages, catalogTests]);
+    return groupInvestigationsIntoLots(reports, patient, catalogProfiles, catalogPackages, catalogTests, catalogTemplates, templates);
+  }, [reports, patient, catalogProfiles, catalogPackages, catalogTests, catalogTemplates, templates]);
 
   const lotsTotal = useMemo(() => {
     return patientLots.reduce((acc, l) => acc + (Number(l.amount) || 0), 0);
@@ -135,7 +135,7 @@ export default function PatientDetailPage() {
 
     let baseGross = Number(pt.grossTotal || 0);
     if (baseGross === 0 && Array.isArray(repList) && repList.length > 0) {
-      const lots = groupInvestigationsIntoLots(repList, pt, catalogProfiles, catalogPackages, catalogTests);
+      const lots = groupInvestigationsIntoLots(repList, pt, catalogProfiles, catalogPackages, catalogTests, catalogTemplates, templates);
       baseGross = lots.reduce((acc, l) => acc + (Number(l.amount) || 0), 0);
     }
     if (baseGross === 0) {
@@ -186,7 +186,7 @@ export default function PatientDetailPage() {
         if (repList.length > 0) {
           setReports(repList);
         }
-        if (res.data?.templates?.length > 0) {
+        if (Array.isArray(res.data?.templates)) {
           setTemplates(res.data.templates);
         }
         setActivePatient(pt);
@@ -267,7 +267,7 @@ export default function PatientDetailPage() {
         amount: Number(t.Amount || 0),
       }));
     } else if (rList && rList.length > 0) {
-      const lots = groupInvestigationsIntoLots(rList, p, catalogProfiles, catalogPackages, catalogTests);
+      const lots = groupInvestigationsIntoLots(rList, p, catalogProfiles, catalogPackages, catalogTests, catalogTemplates, templates);
       items = lots.map((lot, idx) => ({
         slNo: idx + 1,
         testName: lot.name,
@@ -705,6 +705,7 @@ export default function PatientDetailPage() {
         <PatientProfileView
           patient={patient}
           reports={reports}
+          templates={templates}
           onAddTests={() => setSearchParams({ tab: 'tests' })}
           onFillResults={() => setSearchParams({ tab: 'results' })}
           onPrintInvoice={() => setShowBillPreviewModal(true)}
@@ -746,6 +747,7 @@ export default function PatientDetailPage() {
         <TestSelectionView
           patient={patient}
           reports={reports}
+          templates={templates}
           onRefresh={fetchPatientData}
           onPrintInvoice={() => setSearchParams({ tab: 'invoice' })}
           onFillResults={() => setSearchParams({ tab: 'results' })}

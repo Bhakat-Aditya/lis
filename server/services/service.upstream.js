@@ -271,6 +271,63 @@ class UpstreamService {
   }
 
   /**
+   * Generic GET call to APIServlet (used by ADDTEMPLATE, DELETEREPORT for templates, etc.)
+   */
+  async getAPIServlet(apiName, params = {}, sid = null, isRetry = false) {
+    let activeSid = sid;
+    if (!activeSid) {
+      try {
+        activeSid = await this.ensureMasterSession();
+      } catch (sidErr) {
+        try {
+          const { Session } = await import('../models/model.session.js');
+          const latest = await Session.findOne({ isActive: true }).sort({ createdAt: -1 });
+          if (latest?.upstreamSid) {
+            activeSid = latest.upstreamSid;
+            this.masterSid = activeSid;
+            this.lastLoginTime = Date.now();
+          }
+        } catch (dbErr) {
+          // ignore
+        }
+        if (!activeSid) throw sidErr;
+      }
+    }
+    const query = new URLSearchParams({ api: apiName, ...this._sanitizeParams(params) }).toString();
+    const url = `${this.baseUrl}/APIServlet;jsessionid=${activeSid}?${query}`;
+
+    try {
+      const res = await axios.get(url, {
+        headers: {
+          'Cookie': `JSESSIONID=${activeSid}`,
+        },
+        timeout: 15000,
+      });
+
+      // Auto-recovery: If upstream returns 1140 (Session invalid) or 1150 (Auto logout), refresh session & retry once
+      if (!isRetry && res.data && (res.data.StatusCode === '1140' || res.data.StatusCode === '1150')) {
+        console.warn(`[Upstream] Session ${activeSid} invalid (${res.data.StatusCode}) on GET APIServlet ${apiName}. Re-authenticating master session...`);
+        this.masterSid = null;
+        this.masterCookie = null;
+        this.lastLoginTime = null;
+        try {
+          const freshSid = await this.ensureMasterSession(true);
+          if (freshSid) {
+            return await this.getAPIServlet(apiName, params, freshSid, true);
+          }
+        } catch (recoverErr) {
+          console.error('[Upstream] Auto-recovery failed:', recoverErr.message);
+        }
+      }
+
+      return res.data;
+    } catch (err) {
+      console.error(`[Upstream] GET APIServlet ${apiName} failed:`, err.message);
+      throw err;
+    }
+  }
+
+  /**
    * Generic POST call to APIServlet with auto-recovery on session invalidation (1140/1150)
    */
   async post(apiName, params = {}, body = null, sid = null, customHeaders = {}, isRetry = false) {

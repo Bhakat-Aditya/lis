@@ -17,7 +17,7 @@ import {
   RefreshCw,
   ExternalLink,
 } from 'lucide-react';
-import { sortSectionKeys, orderExamObject, getDefaultTemplateSchema, openUpstreamTemplateEditor } from '../utils/templateSequence.js';
+import { sortSectionKeys, orderExamObject, getDefaultTemplateSchema } from '../utils/templateSequence.js';
 import { formatDisplayDate } from '../utils/dateUtils.js';
 
 export default function TemplateReportEditPage() {
@@ -363,22 +363,6 @@ export default function TemplateReportEditPage() {
         </button>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              openUpstreamTemplateEditor({
-                patientId,
-                reportId,
-                name: headingName,
-              });
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-95 text-white text-xs font-bold shadow-2xs transition-all cursor-pointer"
-            title="Open official upstream template editor in a new window (editTemplateV2.jsp)"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-            <span>Open in Upstream Window (editTemplateV2.jsp)</span>
-          </button>
-
           <span className="text-xs font-mono font-bold text-slate-400">
             Template Report #{reportId}
           </span>

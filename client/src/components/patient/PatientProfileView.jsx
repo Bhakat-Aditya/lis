@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   User,
   Phone,
@@ -32,6 +33,7 @@ import {
   Stethoscope,
   Building2,
   Undo2,
+  ExternalLink,
 } from 'lucide-react';
 import { formatDisplayDate } from '../../utils/dateUtils.js';
 import { useMaster } from '../../context/context.master.jsx';
@@ -52,6 +54,7 @@ const formatGender = (raw) => {
 export default function PatientProfileView({
   patient,
   reports = [],
+  templates = [],
   onAddTests,
   onFillResults,
   onPrintInvoice,
@@ -83,13 +86,22 @@ export default function PatientProfileView({
   const pid = rawPid.toUpperCase().startsWith('P')
     ? `P${rawPid.replace(/^P+/i, '')}`
     : rawPid;
+  const navigate = useNavigate();
   const { canViewPatientLogs, canViewPatientEmr } = useAuth();
-  const { tests: catalogTests = [], profiles: catalogProfiles = [], packages: catalogPackages = [] } = useMaster();
+  const { tests: catalogTests = [], profiles: catalogProfiles = [], packages: catalogPackages = [], templates: catalogTemplates = [] } = useMaster();
   const [expandedLots, setExpandedLots] = useState({});
 
   const investigationLots = useMemo(() => {
-    return groupInvestigationsIntoLots(reports, patient, catalogProfiles, catalogPackages, catalogTests);
-  }, [reports, patient, catalogProfiles, catalogPackages, catalogTests]);
+    return groupInvestigationsIntoLots(
+      reports,
+      patient,
+      catalogProfiles,
+      catalogPackages,
+      catalogTests,
+      catalogTemplates,
+      templates
+    );
+  }, [reports, patient, catalogProfiles, catalogPackages, catalogTests, catalogTemplates, templates]);
 
   const hasReports = reports && reports.length > 0;
   const lotsTotal = useMemo(() => {
@@ -847,6 +859,9 @@ export default function PatientProfileView({
                       } else if (lot.category === 'Profile') {
                         badgeColor = 'bg-purple-50 text-purple-900 border-purple-300';
                         catIcon = <Layers className="w-3 h-3 text-purple-600" />;
+                      } else if (lot.category === 'Template') {
+                        badgeColor = 'bg-rose-50 text-rose-900 border-rose-300';
+                        catIcon = <FileText className="w-3 h-3 text-rose-600" />;
                       }
 
                       return (
@@ -863,6 +878,22 @@ export default function PatientProfileView({
                                     <span>{lot.category} Lot</span>
                                   </span>
                                   <span className="font-bold text-slate-900">{lot.name}</span>
+                                  {lot.category === 'Template' && (
+                                    <div className="inline-flex items-center gap-1.5 ml-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const repId = lot.reportId || lot.testId || 'P14R1';
+                                          navigate(`/patients/${pid}/template/${repId}?name=${encodeURIComponent(lot.name)}`);
+                                        }}
+                                        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-[11px] transition-all shadow-2xs cursor-pointer"
+                                        title="Open template workspace and fill findings for this patient"
+                                      >
+                                        <FileEdit className="w-3 h-3" />
+                                        <span>Open Template</span>
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
 
                                 {hasSubTests && (

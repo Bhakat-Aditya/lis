@@ -167,7 +167,7 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
   const fetchAbortRef = useRef(null);
 
   // Master catalog investigations for grouping into packages & groups
-  const { profiles = [], packages = [], tests = [] } = useMaster();
+  const { profiles = [], packages = [], tests = [], templates = [] } = useMaster();
   const [expandedLotsMap, setExpandedLotsMap] = useState({});
   const [lotsViewMode, setLotsViewMode] = useState({}); // pid -> 'grouped' | 'flat'
 
@@ -836,7 +836,9 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                                   currentPatient,
                                   profiles,
                                   packages,
-                                  tests
+                                  tests,
+                                  templates,
+                                  details?.templates || []
                                 );
                                 const isFlatMode = lotsViewMode[pid] === 'flat';
                                 const reportsCount = details?.reports?.length || 0;
@@ -1009,7 +1011,9 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                                   effectivePatient,
                                   profiles,
                                   packages,
-                                  tests
+                                  tests,
+                                  templates,
+                                  details?.templates || []
                                 );
                                 const lotsRateTotal = patientLots && patientLots.length > 0
                                   ? patientLots.reduce((acc, lot) => acc + Number(lot.amount || 0), 0)

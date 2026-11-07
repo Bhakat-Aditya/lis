@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Plus,
   Trash2,
@@ -23,6 +24,7 @@ import {
   Edit,
   AlertCircle,
   RefreshCw,
+  ExternalLink,
 } from 'lucide-react';
 import Modal from '../common/Modal.jsx';
 import { useMaster } from '../../context/context.master.jsx';
@@ -32,11 +34,13 @@ import { groupInvestigationsIntoLots } from '../../utils/labTestUtils.js';
 export default function TestSelectionView({
   patient,
   reports = [],
+  templates = [],
   onRefresh,
   onPrintInvoice,
   onFillResults,
   onMakePayment,
 }) {
+  const navigate = useNavigate();
   const {
     tests: catalogTests = [],
     profiles: catalogProfiles = [],
@@ -182,10 +186,18 @@ export default function TestSelectionView({
     return items;
   }, [catalogTests, catalogProfiles, catalogPackages, catalogTemplates, testMapById, profileSubTestsMap]);
 
-  // Group existing reports and patient testList into clean Package, Profile, and Test lots
+  // Group existing reports and patient testList into clean Package, Profile, Test, and Template lots
   const existingLots = useMemo(() => {
-    return groupInvestigationsIntoLots(reports, patient, catalogProfiles, catalogPackages, catalogTests);
-  }, [reports, patient, catalogProfiles, catalogPackages, catalogTests]);
+    return groupInvestigationsIntoLots(
+      reports,
+      patient,
+      catalogProfiles,
+      catalogPackages,
+      catalogTests,
+      catalogTemplates,
+      templates
+    );
+  }, [reports, patient, catalogProfiles, catalogPackages, catalogTests, catalogTemplates, templates]);
 
   // Combined selected investigations list: existing booked lots + newly added uncommitted lots
   const [selectedTests, setSelectedTests] = useState(existingLots);
@@ -213,21 +225,29 @@ export default function TestSelectionView({
           } else if (type === 'PKG') {
             existingKeySet.add(`PKG|${id.replace(/^K+/i, '')}`);
             existingKeySet.add(`PKG|K${id.replace(/^K+/i, '')}`);
+          } else if (type === 'TEMPLATE') {
+            existingKeySet.add(`TEMPLATE|${id}`);
+            existingKeySet.add(`TEMPLATE|${id.replace(/^T+/i, '')}`);
+            existingKeySet.add(`TEMPLATE|T${id.replace(/^T+/i, '')}`);
+            if (lot.reportId) existingKeySet.add(`TEMPLATE|${String(lot.reportId).toUpperCase()}`);
           }
         }
         if (name) existingNameSet.add(name);
       });
 
-      // Keep only newly added items that have not yet been booked into existingLots
+      // Keep newly added items that have not yet been booked into existingLots
+      // ALSO: If an item was just saved but has not yet synced into existingLots, PRESERVE IT so it NEVER vanishes!
       const newlyAdded = prev.filter((t) => {
-        if (!t.isNew) return false;
-        if (t.isRepeat) return true; // keep unsaved intentional repeats
-
         const type = (t.type || 'TEST').toUpperCase();
         const id = String(t.testId || t.id || '').toUpperCase().trim();
         const name = String(t.name || '').toLowerCase().trim();
 
         if (existingKeySet.has(`${type}|${id}`)) return false;
+        if (type === 'TEMPLATE') {
+          if (existingKeySet.has(`TEMPLATE|${id.replace(/^T+/i, '')}`)) return false;
+          if (existingKeySet.has(`TEMPLATE|T${id.replace(/^T+/i, '')}`)) return false;
+          if (t.reportId && existingKeySet.has(`TEMPLATE|${String(t.reportId).toUpperCase()}`)) return false;
+        }
         if (existingNameSet.has(name)) return false;
         return true;
       });
@@ -359,6 +379,7 @@ export default function TestSelectionView({
     const bookedTestIds = new Set();
     const bookedProfIds = new Set();
     const bookedPkgIds = new Set();
+    const bookedTemplateIds = new Set();
     const bookedNames = new Set();
     const coveredSubTestNames = new Map(); // testNameLower -> parentLotName
 
@@ -381,6 +402,12 @@ export default function TestSelectionView({
         if (type === 'PKG') {
           bookedPkgIds.add(id);
           bookedPkgIds.add(id.replace(/^K+/i, ''));
+        }
+        if (type === 'TEMPLATE') {
+          bookedTemplateIds.add(id);
+          bookedTemplateIds.add(id.replace(/^T+/i, ''));
+          bookedTemplateIds.add(`T${id.replace(/^T+/i, '')}`);
+          if (t.reportId) bookedTemplateIds.add(String(t.reportId).toUpperCase());
         }
       }
       if (name) bookedNames.add(name);
@@ -417,6 +444,20 @@ export default function TestSelectionView({
       }
     });
 
+    // 2b. From patient templates
+    (templates || []).forEach((tmpl) => {
+      const repId = String(tmpl.reportId || tmpl.templatesId || tmpl.id || '').toUpperCase().trim();
+      const tId = String(tmpl.templatesId || '').toUpperCase().trim();
+      if (repId) bookedTemplateIds.add(repId);
+      if (tId) {
+        bookedTemplateIds.add(tId);
+        bookedTemplateIds.add(tId.replace(/^T+/i, ''));
+      }
+      if (tmpl.TEMPLATE_NAME || tmpl.name) {
+        bookedNames.add(String(tmpl.TEMPLATE_NAME || tmpl.name).toLowerCase().trim());
+      }
+    });
+
     // 3. From bill test list
     const billList = patient?.testList || patient?.billing?.testList;
     if (Array.isArray(billList)) {
@@ -430,10 +471,11 @@ export default function TestSelectionView({
       bookedTestIds,
       bookedProfIds,
       bookedPkgIds,
+      bookedTemplateIds,
       bookedNames,
       coveredSubTestNames,
     };
-  }, [selectedTests, reports, patient]);
+  }, [selectedTests, reports, templates, patient]);
 
   // Check if a catalog item is already booked or covered under a booked profile/package
   const getCatalogItemStatus = (item) => {
@@ -453,6 +495,16 @@ export default function TestSelectionView({
     if (type === 'PKG') {
       const cleanId = id.replace(/^K+/i, '');
       if (alreadyBookedInfo.bookedPkgIds.has(id) || alreadyBookedInfo.bookedPkgIds.has(cleanId)) {
+        isBooked = true;
+      }
+    }
+    if (type === 'TEMPLATE') {
+      const cleanId = id.replace(/^T+/i, '');
+      if (
+        alreadyBookedInfo.bookedTemplateIds?.has(id) ||
+        alreadyBookedInfo.bookedTemplateIds?.has(cleanId) ||
+        alreadyBookedInfo.bookedTemplateIds?.has(`T${cleanId}`)
+      ) {
         isBooked = true;
       }
     }
@@ -1205,11 +1257,25 @@ export default function TestSelectionView({
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                               ) : (
-                                <div className="flex items-center justify-center gap-1">
+                                <div className="flex items-center justify-center gap-1.5 flex-wrap">
                                   <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
                                     <Check className="w-3 h-3 text-emerald-600" />
                                     Booked
                                   </span>
+                                  {(t.category === 'Template' || t.type === 'TEMPLATE') && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const repId = t.reportId || t.testId || t.id || 'P14R1';
+                                        navigate(`/patients/${pid}/template/${repId}?name=${encodeURIComponent(t.name)}`);
+                                      }}
+                                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-[11px] transition-all shadow-2xs cursor-pointer"
+                                      title="Open template workspace and fill findings for this patient"
+                                    >
+                                      <FileEdit className="w-3 h-3" />
+                                      <span>Open Template</span>
+                                    </button>
+                                  )}
                                   <button
                                     type="button"
                                     onClick={() => handleOpenEditRateModal(t)}

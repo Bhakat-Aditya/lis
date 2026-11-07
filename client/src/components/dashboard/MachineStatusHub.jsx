@@ -307,8 +307,6 @@ export default function MachineStatusHub({ className = '' }) {
   const [packetTick, setPacketTick] = useState(0);
   const [isFetchingHeartbeats, setIsFetchingHeartbeats] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState('');
-  const [isPinging, setIsPinging] = useState(false);
-  const [pingNotice, setPingNotice] = useState(null);
 
   /**
    * Fetch live heartbeats directly from BetterStack endpoint
@@ -395,48 +393,6 @@ export default function MachineStatusHub({ className = '' }) {
     }, 40);
     return () => clearInterval(interval);
   }, []);
-
-  // Live Ping Test via BetterStack Heartbeat URL
-  const handlePingTest = async (machine) => {
-    setIsPinging(true);
-    setPingNotice(null);
-
-    try {
-      if (machine.heartbeatUrl) {
-        // Send actual ping to update heartbeat in BetterStack!
-        const res = await api.post('/heartbeats/ping', {
-          url: machine.heartbeatUrl,
-          id: machine.heartbeatId,
-        });
-
-        if (res.data?.STATUS === 'SUCCESS') {
-          setPingNotice({
-            type: 'success',
-            text: `Echo ACK dispatched to ${machine.name}! Heartbeat ping registered with BetterStack. Refreshing status...`,
-          });
-          // Immediately re-fetch fresh telemetry
-          setTimeout(() => syncBetterStackHeartbeats(true), 800);
-        } else {
-          throw new Error(res.data?.Message || 'Ping failed');
-        }
-      } else {
-        // Simulated echo for satellite integration nodes
-        await new Promise((r) => setTimeout(r, 500));
-        setPingNotice({
-          type: 'success',
-          text: `WebSocket ping echo ACK received from ${machine.name} in 3ms. Network latency healthy.`,
-        });
-      }
-    } catch (err) {
-      setPingNotice({
-        type: 'error',
-        text: `Ping diagnostic notice: ${err.message || 'Port unresponsive'}`,
-      });
-    } finally {
-      setIsPinging(false);
-      setTimeout(() => setPingNotice(null), 6000);
-    }
-  };
 
   const onlineMachines = machines.filter((m) => m.heartbeatStatus === 'up' && !m.isCenter);
   const offlineMachines = machines.filter((m) => m.heartbeatStatus === 'down');
@@ -1033,49 +989,6 @@ export default function MachineStatusHub({ className = '' }) {
                 </span>
               </div>
             </div>
-
-            {/* Ping Notice Message */}
-            {pingNotice && (
-              <div
-                className={`p-2.5 rounded-xl border text-xs flex items-center gap-2 animate-in fade-in duration-200 ${
-                  pingNotice.type === 'success'
-                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                    : 'bg-rose-50 border-rose-200 text-rose-800'
-                }`}
-              >
-                {pingNotice.type === 'success' ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                ) : (
-                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                )}
-                <span className="font-medium text-[11px]">{pingNotice.text}</span>
-              </div>
-            )}
-          </div>
-
-          {/* Diagnostic Action Button */}
-          <div className="pt-4 border-t border-slate-200/80 mt-4 space-y-2">
-            <button
-              onClick={() => handlePingTest(selectedMachine)}
-              disabled={isPinging}
-              className={`w-full py-2.5 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer active:scale-98 disabled:opacity-50 ${
-                selectedMachine.heartbeatStatus === 'down'
-                  ? 'bg-rose-600 hover:bg-rose-700 text-white'
-                  : 'bg-blue-600 hover:bg-blue-700 text-white'
-              }`}
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isPinging ? 'animate-spin' : ''}`} />
-              <span>
-                {isPinging
-                  ? 'Dispatching Heartbeat Ping...'
-                  : selectedMachine.heartbeatStatus === 'down'
-                  ? `Simulate Heartbeat / Ping Echo (${selectedMachine.name})`
-                  : `Send Heartbeat Echo Ping (${selectedMachine.name})`}
-              </span>
-            </button>
-            <p className="text-[10px] text-slate-400 text-center">
-              Directly triggers BetterStack monitor heartbeat ping (Bypasses AWS Server)
-            </p>
           </div>
         </div>
       </div>

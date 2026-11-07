@@ -654,7 +654,9 @@ export function groupInvestigationsIntoLots(
   patient = {},
   catalogProfiles = [],
   catalogPackages = [],
-  catalogTests = []
+  catalogTests = [],
+  catalogTemplates = [],
+  templates = []
 ) {
   const profileMapById = new Map();
   const profileMapByName = new Map();
@@ -681,6 +683,21 @@ export function groupInvestigationsIntoLots(
     const shortName = String(t['Short Name'] || '').trim();
     if (name && id) testMapByName.set(name.toLowerCase(), id);
     if (shortName && id) testMapByName.set(shortName.toLowerCase(), id);
+  });
+
+  const templateMapById = new Map();
+  const templateMapByName = new Map();
+  (catalogTemplates || []).forEach((t) => {
+    const id = String(t.templatesId || t.id || t.reportId || '').trim();
+    const name = String(t.TEMPLATE_NAME || t.name || '').trim();
+    if (id) {
+      templateMapById.set(id.toLowerCase(), t);
+      templateMapById.set(id.replace(/^T+/i, '').toLowerCase(), t);
+      templateMapById.set(`t${id.replace(/^T+/i, '').toLowerCase()}`, t);
+    }
+    if (name) {
+      templateMapByName.set(name.toLowerCase(), t);
+    }
   });
 
   // 1. If patient has official testList from billing, use that as the primary source of truth
@@ -786,6 +803,45 @@ export function groupInvestigationsIntoLots(
           isNew: false,
           subTestCount: subTests.length,
           subTests,
+        });
+        return;
+      }
+
+      // Check if it's a Template
+      const matchedTmpl =
+        templateMapByName.get(lower) ||
+        templateMapByName.get(rawLower) ||
+        (catalogTemplates || []).find((t) => {
+          const tn = String(t.TEMPLATE_NAME || t.name || '').toLowerCase().trim();
+          return tn === lower || tn === rawLower || (lower.length > 4 && tn.includes(lower)) || (tn.length > 4 && lower.includes(tn));
+        });
+
+      if (matchedTmpl) {
+        const tmplId = String(matchedTmpl.templatesId || matchedTmpl.id || matchedTmpl.reportId || '').trim();
+        const matchedPatientTmpl = (templates || []).find((t) => {
+          if (t.status === 'DELETED' || t.isDeleted || String(t.status || '').toUpperCase() === 'DELETED') return false;
+          const tn = String(t.TEMPLATE_NAME || t.name || t.testName || '').toLowerCase().trim();
+          const trId = String(t.reportId || t.templatesId || '').toLowerCase().trim();
+          return tn === lower || tn === rawLower || (tmplId && trId.includes(tmplId.toLowerCase()));
+        });
+
+        const effectiveReportId = matchedPatientTmpl?.reportId || matchedTmpl.reportId || '';
+        processedLotKeys.add(`TEMPLATE|${tmplId.toUpperCase()}`);
+        if (effectiveReportId) processedLotKeys.add(`TEMPLATE|${effectiveReportId.toUpperCase()}`);
+        processedLotNames.add(lower);
+        processedLotNames.add(String(matchedTmpl.TEMPLATE_NAME || matchedTmpl.name || name).toLowerCase().trim());
+
+        lots.push({
+          id: `EXISTING_TEMPLATE_${effectiveReportId || tmplId || idx + 1}`,
+          testId: tmplId || effectiveReportId,
+          reportId: effectiveReportId,
+          type: 'TEMPLATE',
+          name: matchedTmpl.TEMPLATE_NAME || matchedTmpl.name || name,
+          amount: isExplicitBillAmount ? billAmount : Number(matchedTmpl.price || matchedTmpl.Rate || 0),
+          category: 'Template',
+          isNew: false,
+          subTestCount: 0,
+          subTests: [],
         });
         return;
       }
@@ -901,6 +957,34 @@ export function groupInvestigationsIntoLots(
       const tName = r.testName || `Test ${r.testId || idx + 1}`;
       const tid = r.testId || `T_${idx + 1}`;
       const lowerName = tName.toLowerCase().trim();
+
+      const isTemplate =
+        r.isTemplate === true ||
+        Number(r.reportType) === 1 ||
+        String(r.category || '').toLowerCase() === 'template' ||
+        templateMapByName.has(lowerName);
+
+      if (isTemplate) {
+        if (!processedLotKeys.has(`TEMPLATE|${String(tid).toUpperCase()}`) && !processedLotNames.has(lowerName)) {
+          processedLotKeys.add(`TEMPLATE|${String(tid).toUpperCase()}`);
+          if (r.reportId) processedLotKeys.add(`TEMPLATE|${String(r.reportId).toUpperCase()}`);
+          processedLotNames.add(lowerName);
+          lots.push({
+            id: `EXISTING_TEMPLATE_${r.reportId || idx + 1}`,
+            testId: tid,
+            reportId: r.reportId,
+            type: 'TEMPLATE',
+            name: tName,
+            amount: Number(r.rate) || 0,
+            category: 'Template',
+            isNew: false,
+            subTestCount: 0,
+            subTests: [],
+          });
+        }
+        return;
+      }
+
       if (!processedLotKeys.has(`TEST|${String(tid).toUpperCase()}`) && !processedLotNames.has(lowerName)) {
         processedLotKeys.add(`TEST|${String(tid).toUpperCase()}`);
         processedLotNames.add(lowerName);
@@ -911,6 +995,51 @@ export function groupInvestigationsIntoLots(
           name: tName,
           amount: Number(r.rate) || 0,
           category: 'Test',
+          isNew: false,
+          subTestCount: 0,
+          subTests: [],
+        });
+      }
+    }
+  });
+
+  // Step D: Add patient Template Reports that were not covered by billTestList
+  const effectiveTemplates = [
+    ...(Array.isArray(templates) ? templates : []),
+    ...(Array.isArray(patient?.templates) ? patient.templates : []),
+  ];
+
+  effectiveTemplates.forEach((t, idx) => {
+    if (t && t.status !== 'DELETED' && !t.isDeleted) {
+      const tmplName = t.TEMPLATE_NAME || t.name || t.testName || `Template Report ${t.templatesId || idx + 1}`;
+      const lower = String(tmplName).toLowerCase().trim();
+      const tmplId = String(t.templatesId || t.id || '').toUpperCase().trim();
+      const repId = String(t.reportId || '').toUpperCase().trim();
+
+      const isAlreadyProcessed =
+        (tmplId && (processedLotKeys.has(`TEMPLATE|${tmplId}`) || processedLotKeys.has(`TEMPLATE|${tmplId.replace(/^T+/i, '')}`))) ||
+        (repId && processedLotKeys.has(`TEMPLATE|${repId}`)) ||
+        processedLotNames.has(lower);
+
+      if (!isAlreadyProcessed) {
+        if (tmplId) processedLotKeys.add(`TEMPLATE|${tmplId}`);
+        if (repId) processedLotKeys.add(`TEMPLATE|${repId}`);
+        processedLotNames.add(lower);
+
+        const matchedCatalog = (catalogTemplates || []).find((ct) => {
+          const cn = String(ct.TEMPLATE_NAME || ct.name || '').toLowerCase().trim();
+          const cid = String(ct.templatesId || ct.id || '').toUpperCase().trim();
+          return cn === lower || (tmplId && (cid === tmplId || cid === `T${tmplId}`));
+        });
+
+        lots.push({
+          id: `EXISTING_TEMPLATE_${repId || tmplId || idx + 1}`,
+          testId: tmplId || matchedCatalog?.templatesId || repId,
+          reportId: t.reportId || repId,
+          type: 'TEMPLATE',
+          name: tmplName,
+          amount: Number(t.price || matchedCatalog?.price || matchedCatalog?.Rate || 0),
+          category: 'Template',
           isNew: false,
           subTestCount: 0,
           subTests: [],
