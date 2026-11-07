@@ -17,10 +17,15 @@ export default function DiscountModal({ isOpen, onClose, patient, totalAmount, o
     ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
     : '';
 
+  const discountAmount = Number(patient.discount || 0);
   const grossTotal = Number(
     totalAmount !== undefined && totalAmount !== null && Number(totalAmount) > 0
       ? totalAmount
-      : (patient.grossTotal || patient.totalBill || 0)
+      : (Number(patient.grossTotal) > 0
+          ? Number(patient.grossTotal)
+          : (Number(patient.totalBill) > 0 && discountAmount > 0
+              ? Number(patient.totalBill) + discountAmount
+              : Number(patient.totalBill || 0)))
   );
   const val = Number(discountVal) || 0;
   const calculatedDiscount = discountType === 'percent'

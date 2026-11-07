@@ -236,7 +236,8 @@ export const applyDiscount = async (req, res, next) => {
 
       if (Array.isArray(pt?.testList) && pt.testList.length > 0) {
         tests = pt.testList;
-        grossTotal = Number(pt.totalBill) || tests.reduce((acc, t) => acc + (parseFloat(t.Amount) || 0), 0);
+        const testSum = tests.reduce((acc, t) => acc + (parseFloat(t.Amount) || 0), 0);
+        grossTotal = testSum > 0 ? testSum : (Number(pt.grossTotal) || Number(pt.totalBill) || 0);
       } else {
         // Group by package and profile to avoid unbundled sub-test rates
         const seenPkg = new Set();
@@ -268,7 +269,8 @@ export const applyDiscount = async (req, res, next) => {
             });
           }
         });
-        grossTotal = Number(pt.totalBill) > 0 ? Number(pt.totalBill) : tests.reduce((acc, t) => acc + (parseFloat(t.Amount) || 0), 0);
+        const testSum = tests.reduce((acc, t) => acc + (parseFloat(t.Amount) || 0), 0);
+        grossTotal = testSum > 0 ? testSum : (Number(pt.grossTotal) || Number(pt.totalBill) || 0);
       }
     }
 
@@ -644,13 +646,26 @@ export const getInvoice = async (req, res, next) => {
     }
 
     const testTotal = testItems.reduce((acc, curr) => acc + curr.amount, 0);
-    const grossAmount = summary?.gross || summary?.total || (testTotal > 0 ? testTotal : Number(patient.totalBill)) || 0;
-    const discount = summary?.discount || Number(patient.discount || 0);
-    const roundoff = summary?.roundoff || 0;
-    const netAmount = summary?.total || Math.max(0, grossAmount - discount - roundoff);
+    const summaryGross = Number(summary?.gross || 0);
+    const summaryTotal = Number(summary?.total || 0);
+    const discount = Number(summary?.discount ?? patient.discount ?? 0);
+    const roundoff = Number(summary?.roundoff ?? 0);
+
+    const grossAmount = summaryGross > 0
+      ? summaryGross
+      : (testTotal > 0
+          ? testTotal
+          : (summaryTotal > 0 && discount > 0
+              ? summaryTotal + discount + roundoff
+              : (summaryTotal > 0 ? summaryTotal : Number(patient.totalBill || 0))));
+
+    const netAmount = summaryTotal > 0 && summaryTotal !== grossAmount
+      ? summaryTotal
+      : Math.max(0, grossAmount - discount - roundoff);
+
     const isExplicitPaid = (patient.billPayStatus === 2 || patient.billPayStatus === '2') || summary?.isPaid;
-    const deposited = summary ? summary.paid : (isExplicitPaid ? netAmount : Number(patient.paidBill || 0));
-    const due = summary ? summary.due : (isExplicitPaid ? 0 : Math.max(0, netAmount - deposited));
+    const deposited = summary ? Number(summary.paid) : (isExplicitPaid ? netAmount : Number(patient.paidBill || 0));
+    const due = summary && summary.due !== undefined ? Number(summary.due) : (isExplicitPaid ? 0 : Math.max(0, netAmount - deposited));
 
     const invoiceData = {
       clinic: {

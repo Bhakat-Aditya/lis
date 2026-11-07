@@ -1,4 +1,4 @@
-import { cacheService, CACHE_KEYS } from '../services/service.cache.js';
+import { cacheService, CACHE_KEYS, computeNextIdForList } from '../services/service.cache.js';
 import { upstreamService } from '../services/service.upstream.js';
 
 export const getMasterList = async (req, res, next) => {
@@ -43,8 +43,9 @@ export const getAllMasterData = async (req, res, next) => {
         try {
           const result = await cacheService.getList(key, forceRefresh, req.user?.upstreamSid);
           results[key] = result.data;
-          if (result.nextId) {
-            nextIds[key] = result.nextId;
+          const nId = result.nextId || computeNextIdForList(key, result.data);
+          if (nId) {
+            nextIds[key] = String(nId);
           }
           if (Array.isArray(result.signList) && result.signList.length > 0) {
             globalSignList = result.signList;

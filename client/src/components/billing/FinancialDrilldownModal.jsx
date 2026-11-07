@@ -186,9 +186,10 @@ export default function FinancialDrilldownModal({
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-800">
                 {filteredList.map((p, idx) => {
-                  const gross = Number(p.totalBill || 0);
-                  const net = Math.max(0, gross - Number(p.discountAmount || 0) - Number(p.roundOff || 0));
-                  const due = Number(p.totalOutstanding || 0);
+                  const disc = Number(p.discountAmount || 0);
+                  const gross = Number(p.grossAmount ?? (p.totalBill && disc > 0 ? Number(p.totalBill) + disc : Number(p.totalBill || 0)));
+                  const net = Number(p.totalBill ?? Math.max(0, gross - disc - Number(p.roundOff || 0)));
+                  const due = Number(p.totalOutstanding ?? 0);
 
                   return (
                     <tr key={idx} className="hover:bg-slate-50 transition-colors">

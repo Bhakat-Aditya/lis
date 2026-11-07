@@ -478,18 +478,23 @@ export default function TestSelectionView({
     if (selectedTests.length > 0) {
       return selectedTests.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
     }
-    return Number(patient?.totalBill) || 0;
+    const disc = Number(patient?.discount || 0);
+    const gross = Number(patient?.grossTotal || 0);
+    if (gross > 0) return gross;
+    const ptTotal = Number(patient?.totalBill || 0);
+    if (ptTotal > 0 && disc > 0) return ptTotal + disc;
+    return ptTotal;
   }, [selectedTests, patient]);
 
   const discount = Number(patient?.discount || 0);
   const totalAmount = Math.max(0, subtotal - discount);
   const totalDeposits = Number(patient?.paidBill || 0);
   const explicitDue =
-    patient?.balance !== undefined && patient?.balance !== null
-      ? Number(patient.balance)
-      : patient?.dueAmount !== undefined
+    patient?.dueAmount !== undefined && patient?.dueAmount !== null
       ? Number(patient.dueAmount)
-      : null;
+      : (patient?.balance !== undefined && patient?.balance !== null
+          ? Number(patient.balance)
+          : null);
   const balanceDue =
     totalAmount > 0
       ? (patient?.billPayStatus === 2 || patient?.billPayStatus === '2'

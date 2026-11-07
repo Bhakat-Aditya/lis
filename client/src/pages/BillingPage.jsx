@@ -120,9 +120,10 @@ export default function BillingPage() {
 
         const discountAmount = Number(b['Discount Amount'] ?? p.discount ?? 0);
         const roundOff = Number(b['Round Off'] ?? b.roundOff ?? p.roundOff ?? 0);
-        const totalBill = Number(b['Total Bill'] ?? b['Total Amount'] ?? p.totalBill ?? 0);
+        const grossAmount = Number(b['Total Amount'] ?? (Number(b['Total Bill'] ?? p.totalBill ?? 0) + discountAmount));
+        const totalBill = Number(b['Total Bill'] ?? (grossAmount > 0 && discountAmount > 0 ? Math.max(0, grossAmount - discountAmount - roundOff) : grossAmount));
         const totalPayment = Number(b['Total Payment'] ?? p.paidBill ?? (p.billPayStatus === 2 ? totalBill : 0));
-        const totalOutstanding = Number(b['Total Outstanding'] ?? p.balance ?? Math.max(0, totalBill - totalPayment));
+        const totalOutstanding = Number(b['Total Outstanding'] ?? p.balance ?? p.dueAmount ?? Math.max(0, totalBill - totalPayment));
         const drCom = Number(b['Dr Com'] ?? 0);
         const agentCom = Number(b['Agent Com'] ?? 0);
         const paymentList = b['Payment List'] || [];
@@ -160,6 +161,7 @@ export default function BillingPage() {
           ...p,
           sn: idx + 1,
           bill: b,
+          grossAmount,
           discountAmount,
           roundOff,
           totalBill,

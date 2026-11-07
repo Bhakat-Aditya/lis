@@ -344,9 +344,12 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
         const statusNum = Number(p.billPayStatus);
         if (statusNum === PAYMENT_STATUS_CODE_PAID) return false;
         const billTotal = Number(p.totalBill || 0);
-        const billDiscount = Number(p.discount || 0);
         const billPaid = Number(p.paidBill || 0);
-        const due = Math.max(0, billTotal - billDiscount - billPaid);
+        const due = p.dueAmount !== undefined && p.dueAmount !== null
+          ? Number(p.dueAmount)
+          : (p.balance !== undefined && p.balance !== null
+              ? Number(p.balance)
+              : Math.max(0, billTotal - billPaid));
         if (due <= 0 && statusNum !== PAYMENT_STATUS_CODE_UNPAID) return false;
       }
       if (searchTerm) {
@@ -582,7 +585,11 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                   const billTotal = Number(p.totalBill || 0);
                   const billDiscount = Number(p.discount || 0);
                   const billPaid = Number(p.paidBill || 0);
-                  const billBalance = Math.max(0, billTotal - billDiscount - billPaid);
+                  const billBalance = p.dueAmount !== undefined && p.dueAmount !== null
+                    ? Number(p.dueAmount)
+                    : (p.balance !== undefined && p.balance !== null
+                        ? Number(p.balance)
+                        : Math.max(0, billTotal - billPaid));
                   const billPayStatusNum = Number(p.billPayStatus);
                   const isPaid = billPayStatusNum === PAYMENT_STATUS_CODE_PAID;
                   const isUnpaid = billPayStatusNum === PAYMENT_STATUS_CODE_UNPAID || (!isPaid && billPayStatusNum !== PAYMENT_STATUS_CODE_NOBILL && billTotal > 0);
@@ -1008,25 +1015,30 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                                   ? patientLots.reduce((acc, lot) => acc + Number(lot.amount || 0), 0)
                                   : (details?.reports && details.reports.length > 0 ? details.reports.reduce((acc, rep) => acc + Number(rep.rate || 0), 0) : 0);
 
-                                const effectiveTotal = Number(effectivePatient.totalBill) > 0
-                                  ? Number(effectivePatient.totalBill)
-                                  : (Number(effectivePatient.grossTotal) > 0
-                                      ? Number(effectivePatient.grossTotal)
-                                      : (lotsRateTotal > 0 ? lotsRateTotal : billTotal));
-
                                 const discountAmount = Number(effectivePatient.discount || 0);
+                                const grossTotal = Number(effectivePatient.grossTotal) > 0
+                                  ? Number(effectivePatient.grossTotal)
+                                  : (lotsRateTotal > 0
+                                      ? lotsRateTotal
+                                      : (discountAmount > 0 && Number(effectivePatient.totalBill) > 0
+                                          ? Number(effectivePatient.totalBill) + discountAmount
+                                          : Number(effectivePatient.totalBill || billTotal || 0)));
+
+                                const netTotal = Math.max(0, grossTotal - discountAmount);
                                 const effectivePaid = effectivePatient.paidBill !== undefined && effectivePatient.paidBill !== null
                                   ? Number(effectivePatient.paidBill)
-                                  : (effectivePatient.billPayStatus === PAYMENT_STATUS_CODE_PAID ? Math.max(0, effectiveTotal - discountAmount) : billPaid);
+                                  : (effectivePatient.billPayStatus === PAYMENT_STATUS_CODE_PAID ? netTotal : billPaid);
 
-                                const netDue = Math.max(0, effectiveTotal - discountAmount);
-                                // Strict mathematical consistency: Balance Due = Total Amount - Discount - Deposits
                                 const effectiveBalance = effectivePatient.billPayStatus === PAYMENT_STATUS_CODE_PAID
                                   ? 0
-                                  : Math.max(0, netDue - effectivePaid);
+                                  : (effectivePatient.dueAmount !== undefined && effectivePatient.dueAmount !== null
+                                      ? Number(effectivePatient.dueAmount)
+                                      : (effectivePatient.balance !== undefined && effectivePatient.balance !== null
+                                          ? Number(effectivePatient.balance)
+                                          : Math.max(0, netTotal - effectivePaid)));
 
-                                const effectiveIsPaid = effectivePatient.billPayStatus === PAYMENT_STATUS_CODE_PAID || (effectiveTotal > 0 && effectiveBalance <= 0 && effectivePaid >= netDue);
-                                const effectiveIsBilled = effectiveTotal > 0;
+                                const effectiveIsPaid = effectivePatient.billPayStatus === PAYMENT_STATUS_CODE_PAID || (netTotal > 0 && effectiveBalance <= 0 && effectivePaid >= netTotal);
+                                const effectiveIsBilled = grossTotal > 0 || netTotal > 0;
 
                                 return (
                                   <div className="space-y-2 border-r border-slate-100 pr-3">
@@ -1043,9 +1055,17 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                                       <div className="flex justify-between">
                                         <span className="text-slate-400">Total Amount:</span>
                                         <span className="font-bold text-slate-900">
-                                          ₹{effectiveTotal.toLocaleString('en-IN')}
+                                          ₹{grossTotal.toLocaleString('en-IN')}
                                         </span>
                                       </div>
+                                      {discountAmount > 0 && (
+                                        <div className="flex justify-between text-emerald-600">
+                                          <span>Discount:</span>
+                                          <span className="font-bold">
+                                            (-) ₹{discountAmount.toLocaleString('en-IN')}
+                                          </span>
+                                        </div>
+                                      )}
                                       <div className="flex justify-between">
                                         <span className="text-slate-400">Total Deposit:</span>
                                         <span className="font-bold text-slate-900">

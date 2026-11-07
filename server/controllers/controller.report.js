@@ -204,14 +204,24 @@ export const getPatientReport = async (req, res, next) => {
     const patientTotal = Number(patient?.totalBill || 0);
     const discountVal = Number(billing?.discount || patient?.discount || 0);
     const roundoffVal = Number(billing?.roundoff || patient?.roundoff || 0);
+    const billingGross = Number(billing?.gross || 0);
+    const billingTotal = Number(billing?.total || 0);
 
-    const effectiveGross = Number(billing?.gross || 0) > 0
-      ? Number(billing.gross)
-      : (Number(billing?.total || 0) > 0 ? Number(billing.total) : patientTotal);
+    // Determine Net Bill (after discount)
+    const effectiveTotal = billingTotal > 0
+      ? billingTotal
+      : (patientTotal > 0 ? patientTotal : 0);
 
-    const effectiveTotal = Number(billing?.total || 0) > 0
-      ? Number(billing.total)
-      : patientTotal;
+    // Determine Gross Total (before discount)
+    let effectiveGross = billingGross > 0
+      ? billingGross
+      : (effectiveTotal > 0 && discountVal > 0
+          ? effectiveTotal + discountVal + roundoffVal
+          : (effectiveTotal > 0 ? effectiveTotal : patientTotal));
+
+    if (discountVal > 0 && effectiveGross <= effectiveTotal) {
+      effectiveGross = effectiveTotal + discountVal + roundoffVal;
+    }
 
     const statusNum = Number(patient?.billPayStatus);
     const paidAmount = billing ? Number(billing.paid) : Number(patient?.paidBill || 0);

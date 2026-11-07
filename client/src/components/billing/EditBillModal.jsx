@@ -74,7 +74,7 @@ export default function EditBillModal({
 
         if (billJson) {
           billHeading = billJson['Bill Name'] || billJson['billname'] || 'TXN/RECEIPT';
-          discAmt = String(billJson['Discount'] || billJson['discamt'] || '0');
+          discAmt = String(billJson['Discount Amount'] || billJson['Discount'] || billJson['discamt'] || patient?.discount || '0');
           roundoffVal = String(billJson['Round Off'] || billJson['roundoff'] || '0');
           manualRo = roundoffVal !== '0' && roundoffVal !== '0.00' && Boolean(roundoffVal);
 
@@ -126,6 +126,9 @@ export default function EditBillModal({
         setHeadingName(billHeading);
         setItems(parsedItems);
         setDiscountAmount(discAmt);
+        if (Number(discAmt) > 0) {
+          setDiscountMode('flat');
+        }
         setRoundoff(roundoffVal);
         setIsManualRoundoff(manualRo);
       } catch (err) {

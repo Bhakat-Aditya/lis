@@ -91,6 +91,41 @@ export const API_MAPPING = {
   },
 };
 
+/**
+ * Robustly compute the next sequential ID for any master list if upstream nextId is absent
+ */
+export const computeNextIdForList = (cacheKey, items = []) => {
+  if (!Array.isArray(items) || items.length === 0) return '1';
+  let maxNum = 0;
+  for (const it of items) {
+    if (!it || typeof it !== 'object') continue;
+    const rawId =
+      it['Test Id'] ||
+      it['Dept Id'] ||
+      it['Profile Id'] ||
+      it['Package Id'] ||
+      it['Doct Id'] ||
+      it['Refer Id'] ||
+      it['Unit Id'] ||
+      it['Method Id'] ||
+      it['Sample Id'] ||
+      it.testId ||
+      it.deptId ||
+      it.profileId ||
+      it.packageId ||
+      it.branchId ||
+      it.userId ||
+      it.id;
+    if (rawId !== undefined && rawId !== null) {
+      const num = parseInt(String(rawId).replace(/\D/g, ''), 10);
+      if (!isNaN(num) && num > maxNum) {
+        maxNum = num;
+      }
+    }
+  }
+  return maxNum > 0 ? String(maxNum + 1) : '1';
+};
+
 class MasterCacheService {
   constructor() {
     // 24 hours TTL (86400 seconds)
@@ -110,13 +145,14 @@ class MasterCacheService {
 
     if (!forceRefresh && this.cache.has(cacheKey) && hasValidData) {
       const meta = this.metadata.get(cacheKey) || {};
+      const resolvedNextId = meta.nextId || computeNextIdForList(cacheKey, cached);
       return {
         data: cached,
         fromCache: true,
         cachedAt: meta.cachedAt,
         expiresAt: meta.expiresAt,
         itemCount: cached.length,
-        nextId: meta.nextId || null,
+        nextId: resolvedNextId,
         signList: meta.signList || DEFAULT_SIGNATURES,
       };
     }
@@ -211,6 +247,10 @@ class MasterCacheService {
       }
     }
 
+    if (!nextId) {
+      nextId = computeNextIdForList(cacheKey, items);
+    }
+
     const now = new Date();
     const expiresAt = new Date(now.getTime() + config.cacheTtlSeconds * 1000);
 
@@ -236,6 +276,8 @@ class MasterCacheService {
             ttlSeconds: config.cacheTtlSeconds,
             expiresAt,
             itemCount: items.length,
+            nextId: nextId || null,
+            signList: signList || null,
             lastFetchedAt: now,
           },
           { upsert: true }
@@ -285,12 +327,15 @@ class MasterCacheService {
         const storedDocs = await CacheModel.find({});
         for (const doc of storedDocs) {
           if (doc?.key && Array.isArray(doc.data) && doc.data.length > 0) {
+            const resolvedNextId = doc.nextId || computeNextIdForList(doc.key, doc.data);
             this.cache.set(doc.key, doc.data, config.cacheTtlSeconds);
             this.metadata.set(doc.key, {
               cachedAt: doc.lastFetchedAt ? new Date(doc.lastFetchedAt).toISOString() : new Date().toISOString(),
               expiresAt: doc.expiresAt ? new Date(doc.expiresAt).toISOString() : new Date(Date.now() + config.cacheTtlSeconds * 1000).toISOString(),
               api: API_MAPPING[doc.key]?.api || '',
               itemCount: doc.data.length,
+              nextId: resolvedNextId,
+              signList: doc.signList || (doc.key === CACHE_KEYS.DEPT_LIST || doc.key === CACHE_KEYS.TEMPLATE_LIST ? DEFAULT_SIGNATURES : null),
             });
           }
         }
@@ -300,12 +345,13 @@ class MasterCacheService {
       console.warn('[Cache] Could not pre-load from MongoDB:', dbInitErr.message);
     }
 
-    // 2. Fetch fresh data for any missing or empty lists
+    // 2. Fetch fresh data for any missing or un-synchronized lists
     const keys = Object.values(CACHE_KEYS);
     for (const key of keys) {
       try {
         const cached = this.cache.get(key);
-        if (!cached || !Array.isArray(cached) || cached.length === 0) {
+        const meta = this.metadata.get(key);
+        if (!cached || !Array.isArray(cached) || cached.length === 0 || !meta?.nextId) {
           await this.getList(key, true, sid);
         }
       } catch (err) {

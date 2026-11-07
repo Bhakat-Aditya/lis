@@ -246,7 +246,11 @@ export default function MasterEditModal({
     tests = [],
     branches = [],
     samples = [],
+    doctors = [],
+    references = [],
+    users = [],
     signList = [],
+    nextIds = {},
     updateMasterItem,
   } = useMaster();
 
@@ -273,6 +277,42 @@ export default function MasterEditModal({
     setError('');
     setSuccessMsg('');
 
+    // Intelligent next ID resolver ensuring next ID is prefilled by default
+    const resolveNextId = (cacheKeyName, fallbackList = []) => {
+      if (item?.nextId && String(item.nextId).trim() !== '' && String(item.nextId) !== '0') {
+        return String(item.nextId);
+      }
+      if (nextIds[cacheKeyName] && String(nextIds[cacheKeyName]).trim() !== '' && String(nextIds[cacheKeyName]) !== '0') {
+        return String(nextIds[cacheKeyName]);
+      }
+      let max = 0;
+      for (const it of fallbackList) {
+        if (!it) continue;
+        const raw =
+          it['Test Id'] ||
+          it['Dept Id'] ||
+          it['Profile Id'] ||
+          it['Package Id'] ||
+          it['Doct Id'] ||
+          it['Refer Id'] ||
+          it['Unit Id'] ||
+          it['Method Id'] ||
+          it['Sample Id'] ||
+          it.testId ||
+          it.deptId ||
+          it.profileId ||
+          it.packageId ||
+          it.branchId ||
+          it.userId ||
+          it.id;
+        if (raw !== undefined && raw !== null) {
+          const n = parseInt(String(raw).replace(/\D/g, ''), 10);
+          if (!isNaN(n) && n > max) max = n;
+        }
+      }
+      return max > 0 ? String(max + 1) : '1';
+    };
+
     if (category === 'tests') {
       const rf0 = parseRangeString(item?.RF0 || item?.['Ref Range'], item?.rg0l, item?.rg0h);
       const rf1 = parseRangeString(item?.RF1, item?.rg1l, item?.rg1h);
@@ -283,7 +323,7 @@ export default function MasterEditModal({
       const rf6 = parseRangeString(item?.RF6, item?.rg6l, item?.rg6h);
 
       setFormData({
-        TEST_ID: item?.['Test Id'] || item?.id || item?.nextId || '',
+        TEST_ID: item?.['Test Id'] || item?.id || resolveNextId('TEST_LIST', tests),
         TEST_NAME: item?.Name || item?.name || '',
         TEST_SHORT_NAME: item?.['Short Name'] || item?.shortName || '',
         TEST_DEPTID: item?.['Dept Id'] || item?.deptId || departments[0]?.['Dept Id'] || 'D1',
@@ -312,7 +352,7 @@ export default function MasterEditModal({
       });
     } else if (category === 'profiles') {
       setFormData({
-        PROFILE_ID: item?.['Profile Id'] || item?.id || item?.nextId || '',
+        PROFILE_ID: item?.['Profile Id'] || item?.id || resolveNextId('PROFILE_LIST', profiles),
         PROFILE_NAME: item?.Name || item?.name || '',
         PROFILE_DEPTID: item?.['Dept Id'] || item?.deptId || departments[0]?.['Dept Id'] || 'D1',
         PROFILE_STATUS: item?.Status || item?.status || 'Active',
@@ -323,7 +363,7 @@ export default function MasterEditModal({
       });
     } else if (category === 'packages') {
       setFormData({
-        PKG_ID: item?.['Package Id'] || item?.id || item?.nextId || '',
+        PKG_ID: item?.['Package Id'] || item?.id || resolveNextId('PKG_LIST', packages),
         PKG_NAME: item?.Name || item?.name || '',
         PKG_DEPTID: item?.['Dept Id'] || item?.deptId || departments[0]?.['Dept Id'] || 'D1',
         PKG_STATUS: item?.Status || item?.status || 'Active',
@@ -335,7 +375,7 @@ export default function MasterEditModal({
       });
     } else if (category === 'doctors') {
       setFormData({
-        id: item?.['Doct Id'] || item?.id || item?.nextId || '',
+        id: item?.['Doct Id'] || item?.id || resolveNextId('DOCT_LIST', doctors),
         name: item?.Name || item?.name || '',
         deg: item?.Deg || item?.deg || '',
         contact: item?.Contact || item?.contact || '',
@@ -346,7 +386,7 @@ export default function MasterEditModal({
       });
     } else if (category === 'references') {
       setFormData({
-        id: item?.['Refer Id'] || item?.id || item?.nextId || '',
+        id: item?.['Refer Id'] || item?.id || resolveNextId('REFERANCE_LIST', references),
         name: item?.Name || item?.name || '',
         address: item?.Address || item?.address || '',
         contact: item?.Contact || item?.contact || '',
@@ -357,7 +397,7 @@ export default function MasterEditModal({
       });
     } else if (category === 'departments') {
       setFormData({
-        id: item?.['Dept Id'] || item?.id || item?.nextId || '',
+        id: item?.['Dept Id'] || item?.id || resolveNextId('DEPT_LIST', departments),
         name: item?.Name || item?.name || '',
         shortname: item?.['Short Name'] || item?.shortname || '',
         status: item?.Status || item?.status || 'Active',
@@ -366,13 +406,13 @@ export default function MasterEditModal({
       });
     } else if (category === 'units') {
       setFormData({
-        id: item?.['Unit Id'] || item?.id || item?.nextId || '',
+        id: item?.['Unit Id'] || item?.id || resolveNextId('UNIT_LIST', units),
         name: item?.Name || item?.name || '',
         status: item?.Status || item?.status || 'Active',
       });
     } else if (category === 'branches') {
       setFormData({
-        id: item?.branchId || item?.id || item?.nextId || '',
+        id: item?.branchId || item?.id || resolveNextId('BRANCH_LIST', branches),
         name: item?.name || item?.Name || '',
         location: item?.location || item?.Location || '',
         contact: item?.contact || item?.Contact || '',
@@ -390,7 +430,7 @@ export default function MasterEditModal({
         }
       }
       setFormData({
-        id: item?.userId || item?.id || item?.nextId || '',
+        id: item?.userId || item?.id || resolveNextId('USER_LIST', users),
         login: item?.loginId || item?.login || '',
         name: item?.name || item?.Name || '',
         mobile: item?.mobile || '',
@@ -402,7 +442,7 @@ export default function MasterEditModal({
       });
     } else if (category === 'samples') {
       setFormData({
-        id: item?.['Sample Id'] || item?.id || item?.nextId || '',
+        id: item?.['Sample Id'] || item?.id || resolveNextId('SAMPLE_LIST', samples),
         name: item?.Name || item?.name || '',
         status: item?.Status || item?.status || 'Active',
       });

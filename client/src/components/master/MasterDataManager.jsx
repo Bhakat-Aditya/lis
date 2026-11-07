@@ -101,9 +101,57 @@ export default function MasterDataManager() {
     });
   };
 
+  const computeFallbackNextId = (items = []) => {
+    if (!Array.isArray(items) || items.length === 0) return '1';
+    let maxNum = 0;
+    for (const it of items) {
+      if (!it || typeof it !== 'object') continue;
+      const raw =
+        it['Test Id'] ||
+        it['Dept Id'] ||
+        it['Profile Id'] ||
+        it['Package Id'] ||
+        it['Doct Id'] ||
+        it['Refer Id'] ||
+        it['Unit Id'] ||
+        it['Method Id'] ||
+        it['Sample Id'] ||
+        it.testId ||
+        it.deptId ||
+        it.profileId ||
+        it.packageId ||
+        it.branchId ||
+        it.userId ||
+        it.id;
+      if (raw !== undefined && raw !== null) {
+        const num = parseInt(String(raw).replace(/\D/g, ''), 10);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
+      }
+    }
+    return maxNum > 0 ? String(maxNum + 1) : '1';
+  };
+
   const handleAddItem = () => {
     const cacheKey = tabCacheKeyMap[activeTab];
-    const autoId = (cacheKey && nextIds[cacheKey]) || nextIds[activeTab] || '';
+    let autoId = (cacheKey && nextIds[cacheKey]) || nextIds[activeTab] || '';
+    if (!autoId || autoId === '0') {
+      const tabItems = {
+        tests,
+        samples,
+        departments,
+        units,
+        methods,
+        doctors,
+        references,
+        branches,
+        users,
+        profiles,
+        packages,
+      }[activeTab] || [];
+      autoId = computeFallbackNextId(tabItems);
+    }
     setSelectedItem({ isNew: true, nextId: autoId });
     setEditModalOpen(true);
   };

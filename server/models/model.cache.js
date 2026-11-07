@@ -7,6 +7,8 @@ const cacheSchema = new mongoose.Schema(
     ttlSeconds: { type: Number, default: 86400 }, // 24 hours
     expiresAt: { type: Date, required: true },
     itemCount: { type: Number, default: 0 },
+    nextId: { type: String, default: null },
+    signList: { type: mongoose.Schema.Types.Mixed, default: null },
     lastFetchedAt: { type: Date, default: Date.now },
   },
   { timestamps: true }

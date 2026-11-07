@@ -96,11 +96,23 @@ export default function PatientDetailPage() {
     return patientLots.reduce((acc, l) => acc + (Number(l.amount) || 0), 0);
   }, [patientLots]);
 
-  const effectiveTotal = Number(patient?.totalBill) > 0
-    ? Number(patient.totalBill)
-    : (Number(patient?.grossTotal) > 0
-        ? Number(patient.grossTotal)
-        : (lotsTotal > 0 ? lotsTotal : 0));
+  const discountAmount = Number(patient?.discount || 0);
+  const syncedGross = Number(patient?.grossTotal || 0);
+  const syncedNet = Number(patient?.totalBill || 0);
+
+  const grossTotal = lotsTotal > 0
+    ? lotsTotal
+    : (syncedGross > 0
+        ? syncedGross
+        : (syncedNet > 0 && discountAmount > 0
+            ? syncedNet + discountAmount
+            : (syncedNet > 0 ? syncedNet : 0)));
+
+  const netBill = syncedNet > 0 && syncedNet !== grossTotal
+    ? syncedNet
+    : Math.max(0, grossTotal - discountAmount);
+
+  const effectiveTotal = grossTotal;
 
   // Accurately calculate outstanding balance due for deposit modal
   const calculateDueAmount = (pt = patient, repList = reports) => {
@@ -110,28 +122,32 @@ export default function PatientDetailPage() {
     const discount = Number(pt.discount || 0);
     const paid = Number(pt.paidBill || 0);
 
-    let baseTotal = Number(pt.totalBill || 0) > 0
-      ? Number(pt.totalBill)
-      : (Number(pt.grossTotal || 0) > 0 ? Number(pt.grossTotal) : 0);
-
-    if (baseTotal === 0 && Array.isArray(repList) && repList.length > 0) {
-      const lots = groupInvestigationsIntoLots(repList, pt, catalogProfiles, catalogPackages, catalogTests);
-      const lotsTotal = lots.reduce((acc, l) => acc + (Number(l.amount) || 0), 0);
-      if (lotsTotal > 0) baseTotal = lotsTotal;
-    }
-
-    if (baseTotal > 0) {
-      return Math.max(0, baseTotal - discount - paid);
-    }
-
     const explicitDue =
-      pt.balance !== undefined && pt.balance !== null && pt.balance !== ''
-        ? Number(pt.balance)
-        : pt.dueAmount !== undefined && pt.dueAmount !== null && pt.dueAmount !== ''
+      pt.dueAmount !== undefined && pt.dueAmount !== null && pt.dueAmount !== ''
         ? Number(pt.dueAmount)
-        : 0;
+        : (pt.balance !== undefined && pt.balance !== null && pt.balance !== ''
+            ? Number(pt.balance)
+            : null);
 
-    return Math.max(0, explicitDue);
+    if (explicitDue !== null && !isNaN(explicitDue)) {
+      return Math.max(0, explicitDue);
+    }
+
+    let baseGross = Number(pt.grossTotal || 0);
+    if (baseGross === 0 && Array.isArray(repList) && repList.length > 0) {
+      const lots = groupInvestigationsIntoLots(repList, pt, catalogProfiles, catalogPackages, catalogTests);
+      baseGross = lots.reduce((acc, l) => acc + (Number(l.amount) || 0), 0);
+    }
+    if (baseGross === 0) {
+      const rawNet = Number(pt.totalBill || 0);
+      baseGross = rawNet > 0 && discount > 0 ? rawNet + discount : rawNet;
+    }
+
+    if (baseGross > 0) {
+      return Math.max(0, baseGross - discount - paid);
+    }
+
+    return 0;
   };
 
   // Listen to sidebar trigger
@@ -262,13 +278,21 @@ export default function PatientDetailPage() {
     }
 
     const itemsSum = items.reduce((acc, it) => acc + it.amount, 0);
-    const grossTotal = itemsSum > 0 ? itemsSum : (Number(p?.grossTotal || p?.totalBill || 0));
     const discount = Number(p?.discount || 0);
     const roundoff = Number(p?.roundoff || 0);
-    const netTotal = Math.max(0, grossTotal - discount - roundoff);
+    const grossTotal = itemsSum > 0
+      ? itemsSum
+      : (Number(p?.grossTotal || 0) > 0
+          ? Number(p.grossTotal)
+          : (Number(p?.totalBill || 0) > 0 && discount > 0
+              ? Number(p.totalBill) + discount
+              : Number(p?.totalBill || 0)));
+    const netTotal = (Number(p?.totalBill || 0) > 0 && Number(p.totalBill) !== grossTotal)
+      ? Number(p.totalBill)
+      : Math.max(0, grossTotal - discount - roundoff);
     const isPaid = (p?.billPayStatus === 2 || p?.billPayStatus === '2') && netTotal > 0;
     const paid = isPaid ? netTotal : Number(p?.paidBill || 0);
-    const due = isPaid ? 0 : Math.max(0, netTotal - paid);
+    const due = isPaid ? 0 : (p?.dueAmount !== undefined && p?.dueAmount !== null ? Number(p.dueAmount) : Math.max(0, netTotal - paid));
 
     return {
       clinic: {
@@ -773,7 +797,7 @@ export default function PatientDetailPage() {
         isOpen={showDiscountModal}
         onClose={() => setShowDiscountModal(false)}
         patient={patient}
-        totalAmount={effectiveTotal}
+        totalAmount={grossTotal}
         onDiscountApplied={handleDiscountApplied}
       />
 

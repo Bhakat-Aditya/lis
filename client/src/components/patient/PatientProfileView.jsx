@@ -99,30 +99,51 @@ export default function PatientProfileView({
     ? reports.reduce((acc, r) => acc + (Number(r.rate) || 0), 0)
     : 0;
 
-  // Synced billing from patient / upstream GETBILLJSON
+  // Financial calculation aligned strictly with official LIS invoice:
+  // Gross Total = Sum of test lot rates before discount (e.g. ₹800.00)
+  // Discount = Discount Amount (e.g. ₹200.00)
+  // Net Bill = Gross Total - Discount = Total Bill (e.g. ₹600.00)
+  // Deposits = Total payments received (e.g. ₹0.00)
+  // Balance Due = Net Bill - Deposits = Outstanding Due (e.g. ₹600.00)
+  const discountAmount = Number(patient.discount || 0);
   const syncedGross = Number(patient.grossTotal || 0);
-  const syncedTotal = Number(patient.totalBill || 0);
-  const testsTotal = syncedTotal > 0
-    ? syncedTotal
+  const syncedNet = Number(patient.totalBill || 0);
+
+  const grossTotal = lotsTotal > 0
+    ? lotsTotal
     : (syncedGross > 0
         ? syncedGross
-        : (lotsTotal > 0 ? lotsTotal : (hasReports ? reportsTotal : 0)));
+        : (syncedNet > 0 && discountAmount > 0
+            ? syncedNet + discountAmount
+            : (syncedNet > 0 ? syncedNet : (hasReports ? reportsTotal : 0))));
 
-  const isBilled = testsTotal > 0 || syncedTotal > 0;
-  const discountAmount = Number(patient.discount || 0);
+  const netBill = syncedNet > 0 && syncedNet !== grossTotal
+    ? syncedNet
+    : Math.max(0, grossTotal - discountAmount);
+
   const isStatusPaid = patient.billPayStatus === 2 || patient.billPayStatus === '2';
   const rawPaid = Number(patient.paidBill || 0);
   const depositsAmount = rawPaid > 0
     ? rawPaid
-    : (isStatusPaid && testsTotal > 0 ? Math.max(0, testsTotal - discountAmount) : 0);
+    : (isStatusPaid && netBill > 0 ? netBill : 0);
 
-  const netDue = Math.max(0, testsTotal - discountAmount);
-  // Strict financial consistency: Balance Due = Total Amount - Discount - Deposits
+  const explicitDue =
+    patient.dueAmount !== undefined && patient.dueAmount !== null
+      ? Number(patient.dueAmount)
+      : (patient.balance !== undefined && patient.balance !== null
+          ? Number(patient.balance)
+          : null);
+
+  const isBilled = grossTotal > 0 || netBill > 0;
   const balanceDue = isBilled
-    ? (isStatusPaid ? 0 : Math.max(0, netDue - depositsAmount))
+    ? (isStatusPaid
+        ? 0
+        : (explicitDue !== null && !isNaN(explicitDue)
+            ? Math.max(0, explicitDue)
+            : Math.max(0, netBill - depositsAmount)))
     : 0;
 
-  const isPaid = isBilled && (isStatusPaid || (balanceDue <= 0 && depositsAmount >= netDue));
+  const isPaid = isBilled && (isStatusPaid || (balanceDue <= 0 && depositsAmount >= netBill));
   const advanceAmount = Number(patient.advance || 0);
   const paymentLines = patient.paymentLines || patient.payments || [];
 
@@ -690,7 +711,7 @@ export default function PatientProfileView({
                 <FileText className="w-5 h-5" />
               </div>
               <div className="text-base font-extrabold text-sky-600 font-mono">
-                ₹{testsTotal.toFixed(2)}
+                ₹{grossTotal.toFixed(2)}
               </div>
               <div className="text-[11px] font-semibold text-slate-500">Total Amount</div>
             </div>
@@ -923,7 +944,7 @@ export default function PatientProfileView({
                       Total:
                     </td>
                     <td className="py-2.5 px-3 text-right font-mono font-extrabold text-indigo-700">
-                      ₹{testsTotal.toFixed(2)}
+                      ₹{grossTotal.toFixed(2)}
                     </td>
                   </tr>
                 </tfoot>

@@ -424,9 +424,12 @@ class UpstreamService {
       const b = billData?.payLoadJSON?.bill;
       if (b && typeof b === 'object') {
         const total = parseFloat(b['Total Bill']) || 0;
-        const gross = parseFloat(b['Total Amount']) || total;
         const discount = parseFloat(b['Discount Amount']) || 0;
         const roundoff = parseFloat(b['Round Off']) || 0;
+        const parsedGross = parseFloat(b['Total Amount']) || 0;
+        const gross = parsedGross > 0
+          ? parsedGross
+          : (total > 0 && discount > 0 ? total + discount + roundoff : total);
         const paid = parseFloat(b['Total Payment']) || 0;
         const due = parseFloat(b['Total Outstanding']) || 0;
         const isPaid = (total > 0 && due <= 0 && paid >= total) || (total === 0 && paid === 0 && due === 0);
@@ -510,6 +513,7 @@ class UpstreamService {
         patientId: cleanId,
         isPaid,
         total,
+        gross: total > 0 && discount > 0 ? total + discount : total,
         discount,
         paid,
         due,
