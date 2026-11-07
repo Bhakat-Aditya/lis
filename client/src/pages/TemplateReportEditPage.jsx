@@ -18,7 +18,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { sortSectionKeys, orderExamObject, getDefaultTemplateSchema } from '../utils/templateSequence.js';
-import { formatDisplayDate } from '../utils/dateUtils.js';
+import { formatDisplayDate, formatAgeDisplay } from '../utils/dateUtils.js';
 
 export default function TemplateReportEditPage() {
   const { id: patientId, reportId } = useParams();
@@ -415,10 +415,7 @@ export default function TemplateReportEditPage() {
             <div className="bg-white/80 border border-blue-200/80 rounded-xl px-3.5 py-1.5 shadow-2xs min-w-[110px]">
               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Age / Sex</div>
               <div className="text-xs font-black text-slate-900 mt-0.5">
-                {patient?.age
-                  ? `${patient.age}${!String(patient.age).toLowerCase().includes('year') && !String(patient.age).toLowerCase().includes('day') ? ` ${patient.age_unit || 'Years'}` : ''}`
-                  : '-'}{' '}
-                / {patient?.gender || '-'}
+                {formatAgeDisplay(patient?.age, patient?.age_unit)} / {patient?.gender || '-'}
               </div>
             </div>
 

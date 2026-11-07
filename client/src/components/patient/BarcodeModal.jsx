@@ -1,7 +1,7 @@
 import React from 'react';
 import Modal from '../common/Modal.jsx';
 import { QrCode, Printer } from 'lucide-react';
-import { formatDisplayDate } from '../../utils/dateUtils.js';
+import { formatDisplayDate, formatAgeDisplay } from '../../utils/dateUtils.js';
 
 const formatGender = (raw) => {
   const s = String(raw || '').trim().toLowerCase();
@@ -31,7 +31,7 @@ export default function BarcodeModal({ isOpen, onClose, patient }) {
             {patient.title ? `${patient.title} ` : ''}{patient.name}
           </div>
           <div className="text-xs font-semibold text-slate-600">
-            Barcode: #{barcodeValue} • {formatGender(patient.gender)} / {patient.age || '1'} {patient.age_unit || 'Days'}
+            Barcode: #{barcodeValue} • {formatGender(patient.gender)} / {formatAgeDisplay(patient.age, patient.age_unit || 'Years')}
           </div>
 
           {/* Simulated Barcode Lines */}

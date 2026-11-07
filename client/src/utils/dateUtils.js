@@ -275,3 +275,28 @@ export const formatLogDateTime = (dateVal) => {
   return `${day}-${month}-${year} ${hour12}:${minutes}:${seconds} ${ampm}`;
 };
 
+/**
+ * Format patient age display safely preventing double units like "45 Years Years"
+ */
+export const formatAgeDisplay = (age, unit = 'Years') => {
+  if (age === undefined || age === null || age === '') return '-';
+  let str = String(age).trim();
+  if (!str || str === '-') return '-';
+
+  // Strip duplicate consecutive units e.g. "45 Years Years" -> "45 Years"
+  str = str.replace(/\b(years?|months?|days?|yrs?)\b(?:\s+\1\b)+/gi, '$1');
+
+  const lower = str.toLowerCase();
+  const hasUnit =
+    lower.includes('year') ||
+    lower.includes('month') ||
+    lower.includes('day') ||
+    lower.includes('yr');
+
+  if (hasUnit) {
+    return str;
+  }
+
+  return `${str} ${unit || 'Years'}`;
+};
+

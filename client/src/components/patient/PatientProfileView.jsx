@@ -35,7 +35,7 @@ import {
   Undo2,
   ExternalLink,
 } from 'lucide-react';
-import { formatDisplayDate } from '../../utils/dateUtils.js';
+import { formatDisplayDate, formatAgeDisplay } from '../../utils/dateUtils.js';
 import { useMaster } from '../../context/context.master.jsx';
 import { useAuth } from '../../context/context.auth.jsx';
 import { groupInvestigationsIntoLots } from '../../utils/labTestUtils.js';
@@ -296,7 +296,7 @@ export default function PatientProfileView({
               <span className="w-4 h-4 text-sky-600 font-bold text-center shrink-0">⚥</span>
               <span className="font-semibold text-slate-500 w-28 shrink-0">Gender/Age:</span>
               <span className="font-semibold text-slate-800">
-                {formatGender(patient.gender)} / {patient.age ? `${patient.age}${!String(patient.age).toLowerCase().includes('year') && !String(patient.age).toLowerCase().includes('day') ? ` ${patient.age_unit || 'Years'}` : ''}` : '-'}
+                {formatGender(patient.gender)} / {formatAgeDisplay(patient.age, patient.age_unit)}
               </span>
             </div>
 

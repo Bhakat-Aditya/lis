@@ -263,6 +263,9 @@ export const getPatientReport = async (req, res, next) => {
     const patientWithBilling = patient
       ? {
           ...patient,
+          age: patient.age
+            ? String(patient.age).trim().replace(/\b(years?|months?|days?|yrs?)\b(?:\s+\1\b)+/gi, '$1')
+            : patient.age,
           status: normalizePatientStatus(patient.status),
           grossTotal: effectiveGross > 0 ? effectiveGross : patientTotal,
           totalBill: effectiveTotal > 0 ? effectiveTotal : patientTotal,

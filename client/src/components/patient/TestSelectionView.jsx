@@ -30,6 +30,7 @@ import Modal from '../common/Modal.jsx';
 import { useMaster } from '../../context/context.master.jsx';
 import api from '../../services/api';
 import { groupInvestigationsIntoLots } from '../../utils/labTestUtils.js';
+import { formatAgeDisplay } from '../../utils/dateUtils.js';
 
 export default function TestSelectionView({
   patient,
@@ -736,7 +737,7 @@ export default function TestSelectionView({
           </span>
           <span className="text-slate-300">|</span>
           <span className="text-slate-500">
-            Age: {patient?.age || '-'} {patient?.age_unit || 'Years'}
+            Age: {formatAgeDisplay(patient?.age, patient?.age_unit)}
           </span>
           <span className="text-slate-300">|</span>
           <span className="text-slate-500">
