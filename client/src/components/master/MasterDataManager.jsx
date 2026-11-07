@@ -21,6 +21,7 @@ import {
   Plus,
   FileText,
   TestTube,
+  BookOpen,
 } from 'lucide-react';
 
 export default function MasterDataManager() {
@@ -37,6 +38,7 @@ export default function MasterDataManager() {
     references,
     branches,
     users,
+    interpretations = [],
     nextIds = {},
     signList = [],
     cacheStats,
@@ -46,6 +48,7 @@ export default function MasterDataManager() {
 
   const [activeTab, setActiveTab] = useState('tests');
   const [searchTerm, setSearchTerm] = useState('');
+  const [interpTypeFilter, setInterpTypeFilter] = useState('ALL');
   const [refreshing, setRefreshing] = useState(false);
   const [msg, setMsg] = useState('');
 
@@ -69,6 +72,7 @@ export default function MasterDataManager() {
     users: 'USER_LIST',
     profiles: 'PROFILE_LIST',
     packages: 'PKG_LIST',
+    interpretations: 'INTERPRETATION_LIST',
   };
 
   const handleEditItem = (item) => {
@@ -183,6 +187,7 @@ export default function MasterDataManager() {
     { id: 'tests', label: 'Tests', count: tests.length, icon: FlaskConical },
     { id: 'departments', label: 'Departments', count: departments.length, icon: Building },
     { id: 'templates', label: 'Templates', count: templates.length, icon: FileText },
+    { id: 'interpretations', label: 'Interpretations', count: interpretations.length, icon: BookOpen },
     { id: 'samples', label: 'Sample Types', count: samples.length, icon: TestTube },
     { id: 'profiles', label: 'Profiles', count: profiles.length, icon: Layers },
     { id: 'packages', label: 'Packages', count: packages.length, icon: FileSpreadsheet },
@@ -316,7 +321,6 @@ export default function MasterDataManager() {
                   <th className="py-2.5 px-4">Department</th>
                   <th className="py-2.5 px-4">Unit</th>
                   <th className="py-2.5 px-4">Sample Type</th>
-                  <th className="py-2.5 px-4">Ref Range</th>
                   <th className="py-2.5 px-4">Rate (₹)</th>
                   <th className="py-2.5 px-4">Status</th>
                   <th className="py-2.5 px-4 text-right">Action</th>
@@ -349,7 +353,6 @@ export default function MasterDataManager() {
                         </td>
                         <td className="py-2 px-4 font-medium text-slate-600">{resolvedUnit}</td>
                         <td className="py-2 px-4 text-slate-600">{t['Sample Type'] || 'Serum'}</td>
-                        <td className="py-2 px-4 font-mono text-slate-700">{t.RF0 || t['Ref Range'] || '-'}</td>
                         <td className="py-2 px-4 font-bold text-slate-900">₹{t.Rate || '100'}</td>
                         <td className="py-2 px-4">
                           <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
@@ -457,6 +460,156 @@ export default function MasterDataManager() {
                 )}
               </tbody>
             </table>
+          )}
+
+          {/* INTERPRETATIONS SECTION WITH RICH WRITING PANEL TRIGGER */}
+          {activeTab === 'interpretations' && (
+            <div>
+              {/* Type Filter Pills (All / Test / Profile) */}
+              <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mr-1">
+                    Target Filter:
+                  </span>
+                  {[
+                    { id: 'ALL', label: 'All Items', count: interpretations.length },
+                    { id: 'Test', label: 'Tests', count: interpretations.filter((i) => (i.Type || i.type || '').toLowerCase() === 'test').length },
+                    { id: 'Profile', label: 'Profiles', count: interpretations.filter((i) => (i.Type || i.type || '').toLowerCase() === 'profile').length },
+                  ].map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setInterpTypeFilter(f.id)}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        interpTypeFilter === f.id
+                          ? 'bg-indigo-600 text-white shadow-2xs font-bold'
+                          : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      <span>{f.label}</span>
+                      <span className={`text-[10px] px-1 rounded font-mono ${interpTypeFilter === f.id ? 'bg-indigo-800 text-indigo-100' : 'bg-slate-100 text-slate-500'}`}>
+                        {f.count}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="text-[11px] text-slate-500 italic">
+                  Click <strong>"Write / Edit Interpretation"</strong> to compose styled interpretations with rich fonts, sizes, and colors.
+                </div>
+              </div>
+
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                  <tr>
+                    <th className="py-2.5 px-4 w-20">Target ID</th>
+                    <th className="py-2.5 px-4 min-w-[200px]">Target Name</th>
+                    <th className="py-2.5 px-4 w-24">Type</th>
+                    <th className="py-2.5 px-4 min-w-[280px]">Clinical Interpretation Preview</th>
+                    <th className="py-2.5 px-4 w-24">Status</th>
+                    <th className="py-2.5 px-4 text-right w-36">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {interpretations.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-12 text-center text-slate-400">
+                        {loadingMaster ? 'Loading clinical interpretations from AWS...' : 'No interpretations found.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    interpretations
+                      .filter((item) => {
+                        // Type filter
+                        if (interpTypeFilter !== 'ALL') {
+                          const itemType = String(item.Type || item.type || '').toLowerCase();
+                          if (itemType !== interpTypeFilter.toLowerCase()) return false;
+                        }
+                        // Search filter
+                        if (!searchTerm) return true;
+                        const q = searchTerm.toLowerCase().trim();
+                        const id = String(item.ID || item.id || '').toLowerCase();
+                        const name = String(item.Name || item.name || '').toLowerCase();
+                        const text = String(item.Text || item.text || '').toLowerCase();
+                        return id.includes(q) || name.includes(q) || text.includes(q);
+                      })
+                      .map((item) => {
+                        const rawHtml = item.Text || item.text || '';
+                        const isProfile = String(item.Type || item.type || '').toLowerCase() === 'profile';
+
+                        return (
+                          <tr key={item.ID || item.id} className="hover:bg-slate-50/80 transition-colors">
+                            {/* ID */}
+                            <td className="py-2.5 px-4 font-mono font-bold text-indigo-600">
+                              {item.ID || item.id}
+                            </td>
+
+                            {/* Name */}
+                            <td className="py-2.5 px-4 font-semibold text-slate-800">
+                              {item.Name || item.name}
+                            </td>
+
+                            {/* Type badge */}
+                            <td className="py-2.5 px-4">
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                                  isProfile
+                                    ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                    : 'bg-blue-50 text-blue-700 border-blue-200'
+                                }`}
+                              >
+                                {item.Type || item.type || 'Test'}
+                              </span>
+                            </td>
+
+                            {/* Interpretation Styled Preview */}
+                            <td className="py-2.5 px-4 max-w-md">
+                              {rawHtml ? (
+                                <div className="space-y-1">
+                                  <div
+                                    className="text-xs line-clamp-2 text-slate-700 bg-slate-50/80 p-2 rounded-lg border border-slate-200/70"
+                                    dangerouslySetInnerHTML={{ __html: rawHtml }}
+                                  />
+                                </div>
+                              ) : (
+                                <span className="text-slate-400 italic text-[11px]">
+                                  No clinical interpretation recorded yet.
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Status */}
+                            <td className="py-2.5 px-4">
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                  String(item.Status || item.status || '').toLowerCase() === 'active'
+                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                    : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                }`}
+                              >
+                                {item.Status || item.status || 'Active'}
+                              </span>
+                            </td>
+
+                            {/* Action Button */}
+                            <td className="py-2.5 px-4 text-right">
+                              <button
+                                type="button"
+                                onClick={() => handleEditItem(item)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:scale-95 rounded-lg shadow-xs transition-all cursor-pointer"
+                                title="Open styled writing panel (API_UPDATE_INTERPRETATION)"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                                <span>Write / Edit</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                  )}
+                </tbody>
+              </table>
+            </div>
           )}
 
 

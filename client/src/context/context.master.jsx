@@ -19,6 +19,7 @@ export const MasterProvider = ({ children }) => {
     REFERANCE_LIST: [],
     BRANCH_LIST: [],
     USER_LIST: [],
+    INTERPRETATION_LIST: [],
   });
   const [cacheStats, setCacheStats] = useState({});
   const [loadingMaster, setLoadingMaster] = useState(false);
@@ -92,6 +93,7 @@ export const MasterProvider = ({ children }) => {
         references: masterData.REFERANCE_LIST || [],
         branches: masterData.BRANCH_LIST || [],
         users: masterData.USER_LIST || [],
+        interpretations: masterData.INTERPRETATION_LIST || [],
         signList,
         nextIds,
         cacheStats,

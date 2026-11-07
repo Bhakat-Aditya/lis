@@ -20,6 +20,7 @@ class UpstreamService {
     this.masterSid = null;
     this.masterCookie = null;
     this.lastLoginTime = null;
+    this.loginPromise = null;
     this.billingCache = new Map();
   }
 
@@ -29,24 +30,33 @@ class UpstreamService {
   async ensureMasterSession(forceRefresh = false) {
     const isExpired = !this.lastLoginTime || (Date.now() - this.lastLoginTime > 4 * 60 * 60 * 1000);
     if (!this.masterSid || forceRefresh || isExpired) {
-      try {
-        await this.loginMaster();
-      } catch (loginErr) {
-        // Fallback: recover session from MongoDB active session
-        try {
-          const { Session } = await import('../models/model.session.js');
-          const latestActive = await Session.findOne({ isActive: true }).sort({ createdAt: -1 });
-          if (latestActive?.upstreamSid) {
-            this.masterSid = latestActive.upstreamSid;
-            this.lastLoginTime = Date.now();
-            console.log(`[Upstream] Recovered master session from active MongoDB session: ${this.masterSid}`);
-            return this.masterSid;
-          }
-        } catch (dbErr) {
-          // MongoDB not accessible or no active session
-        }
-        throw loginErr;
+      if (this.loginPromise) {
+        return this.loginPromise;
       }
+      this.loginPromise = (async () => {
+        try {
+          await this.loginMaster();
+          return this.masterSid;
+        } catch (loginErr) {
+          // Fallback: recover session from MongoDB active session
+          try {
+            const { Session } = await import('../models/model.session.js');
+            const latestActive = await Session.findOne({ isActive: true }).sort({ createdAt: -1 });
+            if (latestActive?.upstreamSid) {
+              this.masterSid = latestActive.upstreamSid;
+              this.lastLoginTime = Date.now();
+              console.log(`[Upstream] Recovered master session from active MongoDB session: ${this.masterSid}`);
+              return this.masterSid;
+            }
+          } catch (dbErr) {
+            // MongoDB not accessible or no active session
+          }
+          throw loginErr;
+        } finally {
+          this.loginPromise = null;
+        }
+      })();
+      return this.loginPromise;
     }
     return this.masterSid;
   }

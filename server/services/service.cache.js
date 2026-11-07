@@ -32,6 +32,7 @@ export const CACHE_KEYS = {
   REFERANCE_LIST: 'REFERANCE_LIST',
   BRANCH_LIST: 'BRANCH_LIST',
   USER_LIST: 'USER_LIST',
+  INTERPRETATION_LIST: 'INTERPRETATION_LIST',
 };
 
 // Upstream API mapping for each cache key
@@ -62,7 +63,11 @@ export const API_MAPPING = {
   },
   [CACHE_KEYS.TEMPLATE_LIST]: {
     api: 'GETTEMPLATELIST',
-    extract: (data) => data?.payLoadJSON?.templateList || data?.payLoadJSON?.templates || data?.payLoadJSON?.interpretations || [],
+    extract: (data) => data?.payLoadJSON?.templateList || data?.payLoadJSON?.templates || [],
+  },
+  [CACHE_KEYS.INTERPRETATION_LIST]: {
+    api: 'GETINTERPRETATIONLIST',
+    extract: (data) => data?.payLoadJSON?.interpretations || [],
   },
   [CACHE_KEYS.SAMPLE_LIST]: {
     api: 'GETSAMPLELIST',

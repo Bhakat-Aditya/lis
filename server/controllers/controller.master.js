@@ -423,6 +423,7 @@ export const updateInterpretation = async (req, res, next) => {
         upstream: upstreamRes,
       });
     }
+    await cacheService.invalidate(CACHE_KEYS.INTERPRETATION_LIST);
     await cacheService.invalidate(CACHE_KEYS.TEMPLATE_LIST);
     return res.json({ STATUS: 'SUCCESS', Message: upstreamRes?.Message || 'Interpretation updated successfully', upstream: upstreamRes });
   } catch (err) {
@@ -491,6 +492,7 @@ export const updateTemplate = async (req, res, next) => {
         upstream: upstreamRes,
       });
     }
+    await cacheService.invalidate(CACHE_KEYS.INTERPRETATION_LIST);
     await cacheService.invalidate(CACHE_KEYS.TEMPLATE_LIST);
     return res.json({
       STATUS: 'SUCCESS',

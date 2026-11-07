@@ -29,5 +29,23 @@
       "receivedAt": "2026-10-27T15:00:21.546Z",
       "testName": ""
     }
+  },
+  "P264": {
+    "P264R13": {
+      "status": "DELETED",
+      "testName": "BILIRUBIN INDIRECT",
+      "profileName": "5",
+      "deptName": "D2",
+      "rate": "",
+      "deletedAt": "2026-11-07T01:47:19.104Z"
+    },
+    "P264R17": {
+      "status": "DELETED",
+      "testName": "TOTAL PROTEIN, SERUM",
+      "profileName": "5",
+      "deptName": "D2",
+      "rate": "200",
+      "deletedAt": "2026-11-07T01:48:09.840Z"
+    }
   }
 }

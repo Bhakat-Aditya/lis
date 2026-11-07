@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Modal from '../common/Modal.jsx';
 import { useMaster } from '../../context/context.master.jsx';
+import InterpretationRichEditor from './InterpretationRichEditor.jsx';
 import {
   Save,
   Loader2,
@@ -204,6 +205,31 @@ function SignatureSelector({ signList = [], value = '', onChange }) {
   );
 }
 
+/**
+ * Safely parse a reference range string (e.g. "12-18", "4000-11000", "<6", "-")
+ * into min and max components for the demographic brackets.
+ */
+function parseRangeString(rfStr, fallbackL = '', fallbackH = '') {
+  if (
+    (fallbackL !== undefined && fallbackL !== null && String(fallbackL).trim() !== '') ||
+    (fallbackH !== undefined && fallbackH !== null && String(fallbackH).trim() !== '')
+  ) {
+    return { min: String(fallbackL || '').trim(), max: String(fallbackH || '').trim() };
+  }
+  const raw = String(rfStr || '').trim();
+  if (!raw || raw === '-') return { min: '', max: '' };
+  if (raw.includes('-')) {
+    const parts = raw.split('-');
+    if (parts.length === 2) {
+      return { min: parts[0].trim(), max: parts[1].trim() };
+    }
+    if (raw.startsWith('-') && parts.length === 3) {
+      return { min: `-${parts[1].trim()}`, max: parts[2].trim() };
+    }
+  }
+  return { min: '', max: raw };
+}
+
 export default function MasterEditModal({
   isOpen,
   onClose,
@@ -248,6 +274,14 @@ export default function MasterEditModal({
     setSuccessMsg('');
 
     if (category === 'tests') {
+      const rf0 = parseRangeString(item?.RF0 || item?.['Ref Range'], item?.rg0l, item?.rg0h);
+      const rf1 = parseRangeString(item?.RF1, item?.rg1l, item?.rg1h);
+      const rf2 = parseRangeString(item?.RF2, item?.rg2l, item?.rg2h);
+      const rf3 = parseRangeString(item?.RF3, item?.rg3l, item?.rg3h);
+      const rf4 = parseRangeString(item?.RF4, item?.rg4l, item?.rg4h);
+      const rf5 = parseRangeString(item?.RF5, item?.rg5l, item?.rg5h);
+      const rf6 = parseRangeString(item?.RF6, item?.rg6l, item?.rg6h);
+
       setFormData({
         TEST_ID: item?.['Test Id'] || item?.id || item?.nextId || '',
         TEST_NAME: item?.Name || item?.name || '',
@@ -261,10 +295,20 @@ export default function MasterEditModal({
         TEST_RATE1: item?.Rate1 || item?.rate1 || '',
         TEST_RATE2: item?.Rate2 || item?.rate2 || '',
         TEST_COMMENT: item?.Comment || item?.comment || '',
-        rg0l: item?.rg0l || '',
-        rg0h: item?.rg0h || item?.RF0 || item?.['Ref Range'] || '',
-        rg1l: item?.rg1l || '',
-        rg1h: item?.rg1h || item?.RF1 || '',
+        rg0l: rf0.min,
+        rg0h: rf0.max,
+        rg1l: rf1.min,
+        rg1h: rf1.max,
+        rg2l: rf2.min,
+        rg2h: rf2.max,
+        rg3l: rf3.min,
+        rg3h: rf3.max,
+        rg4l: rf4.min,
+        rg4h: rf4.max,
+        rg5l: rf5.min,
+        rg5h: rf5.max,
+        rg6l: rf6.min,
+        rg6h: rf6.max,
       });
     } else if (category === 'profiles') {
       setFormData({
@@ -371,6 +415,14 @@ export default function MasterEditModal({
         status: item?.status || item?.Status || 'Active',
         sign: item?.sign || '',
       });
+    } else if (category === 'interpretations') {
+      setFormData({
+        id: item?.ID || item?.id || '',
+        name: item?.Name || item?.name || '',
+        type: item?.Type || item?.type || 'Test',
+        text: item?.Text || item?.text || '',
+        status: item?.Status || item?.status || 'Active',
+      });
     }
   }, [isOpen, category, item, departments, units, methods]);
 
@@ -432,6 +484,8 @@ export default function MasterEditModal({
         return isEditing ? `Edit Sample Type (${formData.name || formData.id || ''})` : 'Add New Sample Type';
       case 'templates':
         return isEditing ? `Edit Master Template Report (${formData.reportId || ''})` : 'Add New Template Report';
+      case 'interpretations':
+        return isEditing ? `Edit Clinical Interpretation (${formData.name || formData.id || ''})` : 'Add Clinical Interpretation';
       default:
         return 'Edit Master Catalog Item';
     }
@@ -457,6 +511,7 @@ export default function MasterEditModal({
         users: 'user',
         samples: 'sample',
         templates: 'template',
+        interpretations: 'interpretation',
       };
 
       const apiType = routeTypeMap[category];
@@ -490,7 +545,7 @@ export default function MasterEditModal({
       isOpen={isOpen}
       onClose={onClose}
       title={getCategoryTitle()}
-      maxWidth="max-w-3xl"
+      maxWidth={category === 'interpretations' ? 'max-w-4xl' : 'max-w-3xl'}
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
@@ -663,28 +718,196 @@ export default function MasterEditModal({
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                  Ref Range Low (rg0l)
+                  Special Rate 1 (₹)
                 </label>
                 <input
-                  type="text"
-                  value={formData.rg0l || ''}
-                  onChange={(e) => handleChange('rg0l', e.target.value)}
-                  placeholder="e.g. 12.0"
-                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-mono"
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={formData.TEST_RATE1 || ''}
+                  onChange={(e) => handleChange('TEST_RATE1', e.target.value)}
+                  placeholder="Optional rate 1"
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg text-slate-900"
                 />
               </div>
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                  Ref Range High / Text (rg0h)
+                  Special Rate 2 (₹)
                 </label>
                 <input
-                  type="text"
-                  value={formData.rg0h || ''}
-                  onChange={(e) => handleChange('rg0h', e.target.value)}
-                  placeholder="e.g. 16.0 or 12.0 - 16.0"
-                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-mono"
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={formData.TEST_RATE2 || ''}
+                  onChange={(e) => handleChange('TEST_RATE2', e.target.value)}
+                  placeholder="Optional rate 2"
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg text-slate-900"
                 />
+              </div>
+            </div>
+
+            {/* REFERENCE RANGES (MIN - MAX) - Exact UI matching specification */}
+            <div className="space-y-3 pt-2 border-t border-slate-200">
+              <label className="block text-[11px] font-extrabold text-slate-600 uppercase tracking-wider">
+                Reference Ranges (Min - Max)
+              </label>
+
+              {/* Default Card */}
+              <div className="bg-slate-50/70 border border-slate-200 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs">
+                <span className="font-bold text-slate-800 text-sm">Default</span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={formData.rg0l || ''}
+                    onChange={(e) => handleChange('rg0l', e.target.value)}
+                    placeholder="Min"
+                    className="w-20 sm:w-24 text-center px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none shadow-2xs"
+                  />
+                  <span className="text-slate-400 font-bold">-</span>
+                  <input
+                    type="text"
+                    value={formData.rg0h || ''}
+                    onChange={(e) => handleChange('rg0h', e.target.value)}
+                    placeholder="Max"
+                    className="w-20 sm:w-24 text-center px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none shadow-2xs"
+                  />
+                </div>
+              </div>
+
+              {/* Demographics Grid (2 Columns: Newborn/Child, Adult Male/Adult Female, Senior/Super Senior) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                {/* Newborn */}
+                <div className="border border-slate-200 rounded-xl p-2.5 bg-white flex items-center justify-between gap-2 shadow-2xs hover:border-slate-300 transition-colors">
+                  <span className="font-semibold text-slate-700 text-xs">Newborn</span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <input
+                      type="text"
+                      value={formData.rg1l || ''}
+                      onChange={(e) => handleChange('rg1l', e.target.value)}
+                      placeholder="Min"
+                      className="w-16 sm:w-20 text-center px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                    />
+                    <span className="text-slate-400 text-xs font-bold">-</span>
+                    <input
+                      type="text"
+                      value={formData.rg1h || ''}
+                      onChange={(e) => handleChange('rg1h', e.target.value)}
+                      placeholder="Max"
+                      className="w-16 sm:w-20 text-center px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Child */}
+                <div className="border border-slate-200 rounded-xl p-2.5 bg-white flex items-center justify-between gap-2 shadow-2xs hover:border-slate-300 transition-colors">
+                  <span className="font-semibold text-slate-700 text-xs">Child</span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <input
+                      type="text"
+                      value={formData.rg2l || ''}
+                      onChange={(e) => handleChange('rg2l', e.target.value)}
+                      placeholder="Min"
+                      className="w-16 sm:w-20 text-center px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                    />
+                    <span className="text-slate-400 text-xs font-bold">-</span>
+                    <input
+                      type="text"
+                      value={formData.rg2h || ''}
+                      onChange={(e) => handleChange('rg2h', e.target.value)}
+                      placeholder="Max"
+                      className="w-16 sm:w-20 text-center px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Adult Male */}
+                <div className="border border-slate-200 rounded-xl p-2.5 bg-white flex items-center justify-between gap-2 shadow-2xs hover:border-slate-300 transition-colors">
+                  <span className="font-semibold text-slate-700 text-xs">Adult Male</span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <input
+                      type="text"
+                      value={formData.rg3l || ''}
+                      onChange={(e) => handleChange('rg3l', e.target.value)}
+                      placeholder="Min"
+                      className="w-16 sm:w-20 text-center px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                    />
+                    <span className="text-slate-400 text-xs font-bold">-</span>
+                    <input
+                      type="text"
+                      value={formData.rg3h || ''}
+                      onChange={(e) => handleChange('rg3h', e.target.value)}
+                      placeholder="Max"
+                      className="w-16 sm:w-20 text-center px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Adult Female */}
+                <div className="border border-slate-200 rounded-xl p-2.5 bg-white flex items-center justify-between gap-2 shadow-2xs hover:border-slate-300 transition-colors">
+                  <span className="font-semibold text-slate-700 text-xs">Adult Female</span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <input
+                      type="text"
+                      value={formData.rg4l || ''}
+                      onChange={(e) => handleChange('rg4l', e.target.value)}
+                      placeholder="Min"
+                      className="w-16 sm:w-20 text-center px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                    />
+                    <span className="text-slate-400 text-xs font-bold">-</span>
+                    <input
+                      type="text"
+                      value={formData.rg4h || ''}
+                      onChange={(e) => handleChange('rg4h', e.target.value)}
+                      placeholder="Max"
+                      className="w-16 sm:w-20 text-center px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Senior */}
+                <div className="border border-slate-200 rounded-xl p-2.5 bg-white flex items-center justify-between gap-2 shadow-2xs hover:border-slate-300 transition-colors">
+                  <span className="font-semibold text-slate-700 text-xs">Senior</span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <input
+                      type="text"
+                      value={formData.rg5l || ''}
+                      onChange={(e) => handleChange('rg5l', e.target.value)}
+                      placeholder="Min"
+                      className="w-16 sm:w-20 text-center px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                    />
+                    <span className="text-slate-400 text-xs font-bold">-</span>
+                    <input
+                      type="text"
+                      value={formData.rg5h || ''}
+                      onChange={(e) => handleChange('rg5h', e.target.value)}
+                      placeholder="Max"
+                      className="w-16 sm:w-20 text-center px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Super Senior */}
+                <div className="border border-slate-200 rounded-xl p-2.5 bg-white flex items-center justify-between gap-2 shadow-2xs hover:border-slate-300 transition-colors">
+                  <span className="font-semibold text-slate-700 text-xs">Super Senior</span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <input
+                      type="text"
+                      value={formData.rg6l || ''}
+                      onChange={(e) => handleChange('rg6l', e.target.value)}
+                      placeholder="Min"
+                      className="w-16 sm:w-20 text-center px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                    />
+                    <span className="text-slate-400 text-xs font-bold">-</span>
+                    <input
+                      type="text"
+                      value={formData.rg6h || ''}
+                      onChange={(e) => handleChange('rg6h', e.target.value)}
+                      placeholder="Max"
+                      className="w-16 sm:w-20 text-center px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1785,6 +2008,70 @@ export default function MasterEditModal({
               <p className="text-[11px] text-purple-700 leading-relaxed">
                 Template reports are full-page reports selectable during Patient Test Ordering. Results are edited through the dedicated full-page template dialog with dynamic section rows in Patient Result Entry.
               </p>
+            </div>
+          </div>
+        )}
+
+        {/* 11. INTERPRETATIONS FORM WITH STYLED WRITING PANEL */}
+        {category === 'interpretations' && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Target ID (Locked)
+                </label>
+                <input
+                  type="text"
+                  readOnly
+                  value={formData.id || ''}
+                  className="w-full px-3 py-1.5 text-xs bg-slate-100 border border-slate-200 rounded-lg font-mono font-bold text-indigo-700 cursor-not-allowed"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Target Name
+                </label>
+                <input
+                  type="text"
+                  value={formData.name || ''}
+                  onChange={(e) => handleChange('name', e.target.value)}
+                  placeholder="e.g. Test - HEMOGLOBIN; HB"
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-semibold text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Status
+                </label>
+                <select
+                  value={formData.status || 'Active'}
+                  onChange={(e) => handleChange('status', e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-bold"
+                >
+                  <option value="Active">Active</option>
+                  <option value="Deactive">Deactive</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Rich Writing Panel */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <label className="block text-[11px] font-extrabold text-slate-700 uppercase tracking-wide">
+                  Clinical Interpretation Writing Panel
+                </label>
+                <span className="text-[11px] text-slate-500">
+                  Styles, fonts, colors, and formatting are saved directly into the diagnostic engine.
+                </span>
+              </div>
+              <InterpretationRichEditor
+                value={formData.text || ''}
+                onChange={(html) => handleChange('text', html)}
+                placeholder="Write the clinical significance, methodology, diagnostic interpretations, and normal guidance here with rich colors, font styles, and sizes..."
+                minHeight="280px"
+              />
             </div>
           </div>
         )}

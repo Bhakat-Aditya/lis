@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import api from '../services/api.js';
 import {
@@ -24,16 +24,17 @@ export default function TemplateReportEditPage() {
   const { id: patientId, reportId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const queryName = searchParams.get('name') || '';
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!location.state?.patient);
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Patient Demographic Information
-  const [patient, setPatient] = useState(null);
+  // Patient Demographic Information (prefilled from router state if available)
+  const [patient, setPatient] = useState(location.state?.patient || null);
 
   // Template Data State
   const [headingName, setHeadingName] = useState(queryName || 'HbA1C Report');
@@ -390,19 +391,36 @@ export default function TemplateReportEditPage() {
           {/* Left: Barcode Pill & Patient Name */}
           <div className="flex items-center gap-3.5">
             <div className="w-14 h-14 rounded-full bg-blue-600 text-white flex items-center justify-center font-extrabold font-mono text-sm shadow-md ring-4 ring-blue-100 shrink-0">
-              {patient?.slNo || patient?.barcode || cleanPid || 'ID'}
+              {patient?.patientId || cleanPid || 'ID'}
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight uppercase">
-                {patient?.name
-                  ? `${patient.title ? patient.title + ' ' : ''}${patient.name}`
-                  : (patient ? `Patient (${cleanPid})` : (loading ? 'Loading Patient Details...' : `Patient (${cleanPid})`))}
-              </h2>
-              <div className="flex items-center gap-2 text-xs text-slate-500 font-medium mt-0.5">
-                <Calendar className="w-3.5 h-3.5 text-blue-600" />
-                <span>
-                  {formatDisplayDate(patient?.regDate || patient?.collectionDate || patient?.date)}
-                </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight uppercase">
+                  {patient?.name
+                    ? `${patient.title ? patient.title + ' ' : ''}${patient.name}`
+                    : (patient ? `Patient (${cleanPid})` : (loading ? 'Loading Patient Details...' : `Patient (${cleanPid})`))}
+                </h2>
+                {(patient?.slNo || patient?.barcode) && (
+                  <span className="font-mono text-xs font-bold text-blue-700 bg-blue-100/80 border border-blue-200 px-2 py-0.5 rounded-md">
+                    #{patient.slNo || patient.barcode}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-xs text-slate-500 font-medium mt-0.5 flex-wrap">
+                <div className="flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                  <span>
+                    {formatDisplayDate(patient?.regDate || patient?.collectionDate || patient?.date)}
+                  </span>
+                </div>
+                {patient?.sampleTime && (
+                  <>
+                    <span>•</span>
+                    <span className="text-[11px] text-amber-700 font-semibold">
+                      Sample: {patient.sampleTime}
+                    </span>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -423,8 +441,8 @@ export default function TemplateReportEditPage() {
             {/* Referred By */}
             <div className="bg-white/80 border border-blue-200/80 rounded-xl px-3.5 py-1.5 shadow-2xs min-w-[110px]">
               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Referred</div>
-              <div className="text-xs font-black text-rose-600 uppercase mt-0.5 truncate max-w-[150px]" title={patient?.referedDr || patient?.doctor || 'SELF'}>
-                {patient?.referedDr || patient?.doctor || 'SELF'}
+              <div className="text-xs font-black text-rose-600 uppercase mt-0.5 truncate max-w-[150px]" title={patient?.referedDr || patient?.doctor || patient?.referDr || 'SELF'}>
+                {patient?.referedDr || patient?.doctor || patient?.referDr || 'SELF'}
               </div>
             </div>
 
@@ -449,7 +467,7 @@ export default function TemplateReportEditPage() {
                 >
                   <CreditCard className="w-3 h-3" />
                   <span>
-                    {isPaid ? 'PAID' : (patient?.dueAmount !== undefined && Number(patient.dueAmount) > 0 ? `DUE ₹${patient.dueAmount}` : 'UNPAID')}
+                    {isPaid ? 'PAID' : (patient?.dueAmount !== undefined && Number(patient.dueAmount) > 0 ? `DUE ₹${patient.dueAmount}` : (patient?.totalBill && Number(patient.totalBill) > 0 ? `DUE ₹${patient.totalBill}` : 'UNPAID'))}
                   </span>
                 </span>
               </div>

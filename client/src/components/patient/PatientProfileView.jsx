@@ -263,7 +263,7 @@ export default function PatientProfileView({
               <span className="w-4 h-4 text-sky-600 font-bold text-center shrink-0">⚥</span>
               <span className="font-semibold text-slate-500 w-28 shrink-0">Gender/Age:</span>
               <span className="font-semibold text-slate-800">
-                {formatGender(patient.gender)} / {patient.age || '1'}{!String(patient.age || '').toLowerCase().includes('year') && !String(patient.age || '').toLowerCase().includes('day') ? ` ${patient.age_unit || 'Days'}` : ''}
+                {formatGender(patient.gender)} / {patient.age ? `${patient.age}${!String(patient.age).toLowerCase().includes('year') && !String(patient.age).toLowerCase().includes('day') ? ` ${patient.age_unit || 'Years'}` : ''}` : '-'}
               </span>
             </div>
 
@@ -287,14 +287,14 @@ export default function PatientProfileView({
               <User className="w-4 h-4 text-sky-600 shrink-0" />
               <span className="font-semibold text-slate-500 w-28 shrink-0">Referred By:</span>
               <span className="font-semibold text-slate-800 truncate">
-                {patient.referedDr || 'D. A . KHAN MD PEDIATRICS'}
+                {patient.referedDr || patient.doctor || patient.referDr || 'Self'}
               </span>
             </div>
 
             <div className="flex items-center gap-2">
               <span className="w-4 h-4 text-sky-600 font-bold text-center shrink-0">🏥</span>
               <span className="font-semibold text-slate-500 w-28 shrink-0">Center:</span>
-              <span className="font-semibold text-slate-800">{patient.center || 'Main'}</span>
+              <span className="font-semibold text-slate-800">{patient.center || patient.branch || 'Main'}</span>
             </div>
           </div>
         </div>
