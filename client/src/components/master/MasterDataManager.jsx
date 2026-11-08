@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMaster } from '../../context/context.master.jsx';
 import MasterEditModal from './MasterEditModal.jsx';
 import TemplateReportModal from '../results/TemplateReportModal.jsx';
-import { openUpstreamTemplateEditor } from '../../utils/templateSequence.js';
 import {
   Database,
   RefreshCw,
@@ -46,11 +46,26 @@ export default function MasterDataManager() {
     refreshCache,
   } = useMaster();
 
-  const [activeTab, setActiveTab] = useState('tests');
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'tests');
   const [searchTerm, setSearchTerm] = useState('');
   const [interpTypeFilter, setInterpTypeFilter] = useState('ALL');
   const [refreshing, setRefreshing] = useState(false);
   const [msg, setMsg] = useState('');
+
+  // Keep search params in sync when switching tabs
+  const handleTabSelect = (tabId) => {
+    setActiveTab(tabId);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('tab', tabId);
+        return next;
+      },
+      { replace: true }
+    );
+  };
 
   // Edit / Add modal state
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -86,7 +101,7 @@ export default function MasterDataManager() {
   };
 
   const handleEditPrefillData = (tmpl) => {
-    // For master data list template edit use patient id : P14
+    // Master data template blueprints are keyed under repository patient id P14
     const patientId = 'P14';
     let reportId = tmpl.reportId;
     if (!reportId && tmpl.templatesId) {
@@ -94,11 +109,11 @@ export default function MasterDataManager() {
       reportId = `P14R${num}`;
     }
     if (!reportId) reportId = 'P14R1';
-    openUpstreamTemplateEditor({
-      patientId,
-      reportId,
-      name: tmpl.TEMPLATE_NAME || tmpl.name,
-    });
+    const tmplName = tmpl.TEMPLATE_NAME || tmpl.name || 'Template Report';
+    const tmplId = tmpl.templatesId || tmpl.id || '';
+    navigate(
+      `/patients/${patientId}/template/${reportId}?name=${encodeURIComponent(tmplName)}&templateId=${encodeURIComponent(tmplId)}&from=master`
+    );
   };
 
   const computeFallbackNextId = (items = []) => {
@@ -295,7 +310,7 @@ export default function MasterDataManager() {
               <button
                 key={t.id}
                 onClick={() => {
-                  setActiveTab(t.id);
+                  handleTabSelect(t.id);
                   setSearchTerm('');
                 }}
                 className={`flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${

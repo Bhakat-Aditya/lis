@@ -86,6 +86,7 @@ export default function App() {
                     <Route path="/patients" element={<PatientsWrapper />} />
                     <Route path="/patients/:id" element={<PatientDetailPage />} />
                     <Route path="/patients/:id/template/:reportId" element={<TemplateReportEditPage />} />
+                    <Route path="/master/template/:reportId" element={<TemplateReportEditPage />} />
                     <Route path="/results" element={<ResultsPage />} />
                     <Route path="/approvals" element={<ApprovalsPage />} />
                     <Route path="/billing" element={<BillingPage />} />

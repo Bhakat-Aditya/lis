@@ -682,10 +682,16 @@ export default function TemplateReportsEditor({
     setGlobalError('');
     setGlobalSuccess('');
 
+    const targetPatientId = patient?.patientId || patient?.id || '';
     try {
       const res = await api.post(
-        `/reports/template-data?reportId=${encodeURIComponent(reportId)}`,
-        item.resultJson
+        `/reports/template-data?reportId=${encodeURIComponent(reportId)}&patientId=${encodeURIComponent(targetPatientId)}`,
+        {
+          ...item.resultJson,
+          patientId: targetPatientId,
+          reportId,
+          templateId: item.templatesId,
+        }
       );
 
       if (res.data?.STATUS === 'SUCCESS' || res.data?.StatusCode === '0000') {
@@ -723,8 +729,11 @@ export default function TemplateReportsEditor({
 
     try {
       // 1. Prepare batch payload
+      const targetPatientId = patient?.patientId || patient?.id || '';
       const batchPayload = dirtyReports.map((r) => ({
         reportId: r.reportId,
+        patientId: targetPatientId || r.patientId,
+        templateId: r.templatesId,
         resultJSON: r.resultJson,
       }));
 
@@ -742,7 +751,15 @@ export default function TemplateReportsEditor({
         console.warn('[TemplateReportsEditor] Batch endpoint failed, falling back to parallel updates:', batchErr.message);
         await Promise.all(
           batchPayload.map((p) =>
-            api.post(`/reports/template-data?reportId=${encodeURIComponent(p.reportId)}`, p.resultJSON)
+            api.post(
+              `/reports/template-data?reportId=${encodeURIComponent(p.reportId)}&patientId=${encodeURIComponent(p.patientId || '')}`,
+              {
+                ...p.resultJSON,
+                patientId: p.patientId,
+                reportId: p.reportId,
+                templateId: p.templateId,
+              }
+            )
           )
         );
         successCount = batchPayload.length;

@@ -630,6 +630,184 @@ class UpstreamService {
     this.billingCache.delete(clean);
     this.billingCache.delete(alt);
   }
+
+  /**
+   * Sync and persist template findings directly to upstream SaveTemplateData servlet.
+   * Scrapes parameter labels from editTemplateV2.jsp and submits updated values via POST.
+   */
+  async saveTemplateData(patientId, reportId, resultJSON, templateId = null, sid = null) {
+    if (!patientId || !reportId || !resultJSON) {
+      return { success: false, message: 'Missing required parameters' };
+    }
+
+    const cleanPatientId = String(patientId).trim().toUpperCase();
+    const cleanReportId = String(reportId).trim();
+    let activeSid = sid || await this.ensureMasterSession();
+
+    try {
+      // 1. Fetch form from editTemplateV2.jsp
+      const editUrl = `${this.baseUrl}/editTemplateV2.jsp;jsessionid=${activeSid}?patientId=${encodeURIComponent(cleanPatientId)}&reportId=${encodeURIComponent(cleanReportId)}`;
+      let getRes = await axios.get(editUrl, {
+        headers: { Cookie: `JSESSIONID=${activeSid}` },
+        timeout: 10000,
+        maxRedirects: 0,
+        validateStatus: () => true,
+      });
+
+      // Handle session expiry on GET
+      if (getRes.status === 302 && getRes.headers?.location?.includes('login.jsp')) {
+        activeSid = await this.ensureMasterSession(true);
+        const retryUrl = `${this.baseUrl}/editTemplateV2.jsp;jsessionid=${activeSid}?patientId=${encodeURIComponent(cleanPatientId)}&reportId=${encodeURIComponent(cleanReportId)}`;
+        getRes = await axios.get(retryUrl, {
+          headers: { Cookie: `JSESSIONID=${activeSid}` },
+          timeout: 10000,
+          maxRedirects: 0,
+          validateStatus: () => true,
+        });
+      }
+
+      const html = typeof getRes.data === 'string' ? getRes.data : '';
+      const regFormMatch = html.match(/<form id="regForm"[\s\S]*?<\/form>/i);
+      if (!regFormMatch) {
+        console.warn(`[Upstream] regForm not found in editTemplateV2.jsp for ${cleanReportId}`);
+        return { success: false, message: 'Template form not found upstream' };
+      }
+
+      const formHtml = regFormMatch[0];
+      const inputs = [...formHtml.matchAll(/<(input|textarea|select)\s+[^>]*name=["']([^"']+)["'][^>]*>/gi)];
+
+      // 1. Group inputs by clinical role (Blue: Name/Label, Red: Value/Paragraph, Green: Unit)
+      const paramsList = [];
+      let currentParam = null;
+      const inputDict = {};
+
+      for (const inp of inputs) {
+        const raw = inp[0];
+        const name = inp[2];
+        const isBlue =
+          raw.includes('#0000ff') &&
+          (raw.includes('border: 3px solid #0000ff') ||
+            raw.includes('border: 6px solid #0000ff') ||
+            raw.includes('border: 8px solid #0000ff'));
+        const isRed = raw.includes('#ff1a1a');
+        const isGreen = raw.includes('#00cc00');
+        const valMatch = raw.match(/value=["']([^"']*)["']/i);
+        let val = valMatch ? valMatch[1] : '';
+        if (inp[1].toLowerCase() === 'textarea') {
+          const textMatch = raw.match(/>([\s\S]*?)<\/textarea>/i);
+          if (textMatch) val = textMatch[1].trim();
+        }
+        inputDict[name] = val;
+
+        if (isBlue) {
+          currentParam = { labelField: name, label: val, valueField: null, value: '', unitField: null, unit: '' };
+          paramsList.push(currentParam);
+        } else if (isRed && currentParam) {
+          currentParam.valueField = name;
+          currentParam.value = val;
+        } else if (isGreen && currentParam) {
+          currentParam.unitField = name;
+          currentParam.unit = val;
+        }
+      }
+
+      // 2. Flatten incoming clinical items from resultJSON.Exam
+      const incomingItems = [];
+      if (resultJSON.Exam && typeof resultJSON.Exam === 'object') {
+        for (const [sectionKey, items] of Object.entries(resultJSON.Exam)) {
+          if (Array.isArray(items)) {
+            for (const it of items) {
+              if (it && typeof it === 'object') incomingItems.push(it);
+            }
+          }
+        }
+      }
+
+      // Build key-value maps for fallback matching
+      const valuesMap = new Map();
+      const unitsMap = new Map();
+      for (const it of incomingItems) {
+        const k = String(it.Name || it.name || '').trim().toLowerCase();
+        if (k) {
+          valuesMap.set(k, String(it.Value ?? it.value ?? ''));
+          if (it.Unit !== undefined || it.unit !== undefined) {
+            unitsMap.set(k, String(it.Unit ?? it.unit ?? ''));
+          }
+        }
+      }
+
+      // 3. Apply updates to parameters (Blue = Name, Red = Value/Paragraph, Green = Unit)
+      paramsList.forEach((param, pIdx) => {
+        const normLabel = String(param.label || '').trim().toLowerCase();
+        let matched = incomingItems.find(
+          (it) => it && String(it.originalName || it.Name || it.name || '').trim().toLowerCase() === normLabel
+        );
+        if (!matched && incomingItems[pIdx]) {
+          matched = incomingItems[pIdx];
+        }
+
+        if (matched) {
+          // Blue Box: Parameter Name
+          const newName = matched.Name ?? matched.name;
+          if (newName !== undefined && param.labelField) {
+            inputDict[param.labelField] = String(newName);
+          }
+          // Red Box: Observation / Paragraph Finding
+          const newVal = matched.Value ?? matched.value;
+          if (newVal !== undefined && param.valueField) {
+            inputDict[param.valueField] = String(newVal);
+          }
+          // Green Box: Unit
+          const newUnit = matched.Unit ?? matched.unit;
+          if (newUnit !== undefined && param.unitField) {
+            inputDict[param.unitField] = String(newUnit);
+          }
+        } else {
+          // Fallback map lookup by label
+          if (param.valueField && valuesMap.has(normLabel)) {
+            inputDict[param.valueField] = valuesMap.get(normLabel);
+          }
+          if (param.unitField && unitsMap.has(normLabel)) {
+            inputDict[param.unitField] = unitsMap.get(normLabel);
+          }
+        }
+      });
+
+      // 4. Update title in data1
+      if (inputDict['data1'] !== undefined) {
+        inputDict['data1'] = resultJSON.TEMPLATE_NAME || resultJSON.headingName || inputDict['data1'];
+      }
+
+      // Build form payload
+      const postData = new URLSearchParams();
+      for (const [name, val] of Object.entries(inputDict)) {
+        postData.append(name, val ?? '');
+      }
+
+      // 2. Submit to SaveTemplateData servlet
+      const saveUrl = `${this.baseUrl}/SaveTemplateData;jsessionid=${activeSid}`;
+      const saveRes = await axios.post(saveUrl, postData.toString(), {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Cookie': `JSESSIONID=${activeSid}`,
+        },
+        timeout: 15000,
+        maxRedirects: 0,
+        validateStatus: () => true,
+      });
+
+      const isOk = saveRes.status === 302 || saveRes.status === 200;
+      console.log(`[Upstream] SaveTemplateData for ${cleanReportId} status: ${saveRes.status}`);
+      return {
+        success: isOk,
+        status: saveRes.status,
+        message: isOk ? 'Template Saved' : 'Upstream Save Failed',
+      };
+    } catch (err) {
+      console.warn(`[Upstream] SaveTemplateData error for ${cleanReportId}:`, err.message);
+      return { success: false, message: err.message };
+    }
+  }
 }
 
 export const upstreamService = new UpstreamService();

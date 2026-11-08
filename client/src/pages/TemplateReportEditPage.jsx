@@ -21,20 +21,36 @@ import { sortSectionKeys, orderExamObject, getDefaultTemplateSchema } from '../u
 import { formatDisplayDate, formatAgeDisplay } from '../utils/dateUtils.js';
 
 export default function TemplateReportEditPage() {
-  const { id: patientId, reportId } = useParams();
+  const { id: patientIdParam, reportId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
 
+  const isMasterTemplate =
+    String(patientIdParam || '').toUpperCase() === 'P14' ||
+    searchParams.get('from') === 'master' ||
+    location.pathname.startsWith('/master/template');
+
+  const patientId = patientIdParam || (isMasterTemplate ? 'P14' : '');
   const queryName = searchParams.get('name') || '';
 
-  const [loading, setLoading] = useState(!location.state?.patient);
+  const [loading, setLoading] = useState(!location.state?.patient && !isMasterTemplate);
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
   // Patient Demographic Information (prefilled from router state if available)
-  const [patient, setPatient] = useState(location.state?.patient || null);
+  const [patient, setPatient] = useState(
+    location.state?.patient ||
+      (isMasterTemplate
+        ? {
+            name: 'Master Template Blueprint',
+            patientId: 'P14',
+            barcode: searchParams.get('templateId') || reportId,
+            doctor: 'MASTER CATALOG',
+          }
+        : null)
+  );
 
   // Template Data State
   const [headingName, setHeadingName] = useState(queryName || 'HbA1C Report');
@@ -98,10 +114,17 @@ export default function TemplateReportEditPage() {
         // 1. Fetch Patient Info & Templates directly via /reports/patient-report
         try {
           const ptRes = await api.get('/reports/patient-report', {
-            params: { patientId: cleanPid, withBilling: 'true' },
+            params: { patientId: cleanPid, withBilling: isMasterTemplate ? 'false' : 'true' },
           });
           if (isMounted && ptRes.data?.patient) {
-            loadedPatient = ptRes.data.patient;
+            loadedPatient = isMasterTemplate
+              ? {
+                  name: 'Master Template Blueprint',
+                  patientId: 'P14',
+                  barcode: searchParams.get('templateId') || reportId,
+                  doctor: 'MASTER CATALOG',
+                }
+              : ptRes.data.patient;
             setPatient(loadedPatient);
           }
           if (Array.isArray(ptRes.data?.templates)) {
@@ -323,14 +346,27 @@ export default function TemplateReportEditPage() {
 
     try {
       const res = await api.post(
-        `/reports/template-data?reportId=${encodeURIComponent(reportId)}`,
-        compiledJson
+        `/reports/template-data?reportId=${encodeURIComponent(reportId)}&patientId=${encodeURIComponent(patientId)}`,
+        {
+          ...compiledJson,
+          patientId,
+          reportId,
+          templateId: searchParams.get('templateId') || '',
+        }
       );
 
       if (res.data?.STATUS === 'SUCCESS' || res.data?.StatusCode === '0000') {
-        setSuccessMsg('Template Report Saved Successfully!');
+        setSuccessMsg(
+          isMasterTemplate
+            ? 'Master Template Blueprint Saved Successfully!'
+            : 'Template Report Saved Successfully!'
+        );
         setTimeout(() => {
-          navigate(`/patients/${patientId}?tab=results`);
+          if (isMasterTemplate) {
+            navigate('/master?tab=templates');
+          } else {
+            navigate(`/patients/${patientId}?tab=results`);
+          }
         }, 900);
       } else {
         throw new Error(res.data?.Message || 'Failed to save template report');
@@ -348,29 +384,77 @@ export default function TemplateReportEditPage() {
   return (
     <div className="space-y-4 pb-12 animate-in fade-in duration-300">
       <Helmet>
-        <title>Edit Template Report - {headingName} | LIS Portal</title>
+        <title>{isMasterTemplate ? `Master Blueprint - ${headingName}` : `Edit Template Report - ${headingName}`} | LIS Portal</title>
       </Helmet>
 
       {/* Top Navigation Row */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <button
           type="button"
-          onClick={() => navigate(`/patients/${patientId}?tab=results`)}
+          onClick={() => {
+            if (isMasterTemplate) {
+              navigate('/master?tab=templates');
+            } else {
+              navigate(`/patients/${patientId}?tab=results`);
+            }
+          }}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold shadow-2xs transition-colors cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Back to Patient Reports</span>
+          <span>{isMasterTemplate ? 'Back to Master Catalog (Templates)' : 'Back to Patient Reports'}</span>
         </button>
 
         <div className="flex items-center gap-2">
           <span className="text-xs font-mono font-bold text-slate-400">
-            Template Report #{reportId}
+            {isMasterTemplate ? `Master Template Blueprint #${reportId}` : `Template Report #${reportId}`}
           </span>
         </div>
       </div>
 
-      {/* 1. REAL PATIENT DEMOGRAPHIC BANNER */}
-      <div className="bg-gradient-to-r from-blue-50/90 via-indigo-50/70 to-blue-50/50 border border-blue-200/90 rounded-2xl p-4 shadow-xs">
+      {/* 1. MASTER BLUEPRINT BANNER OR REAL PATIENT DEMOGRAPHIC BANNER */}
+      {isMasterTemplate ? (
+        <div className="bg-gradient-to-r from-purple-50/95 via-indigo-50/85 to-blue-50/75 border border-purple-200/90 rounded-2xl p-4 shadow-xs">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-700 text-white flex items-center justify-center font-extrabold font-mono text-sm shadow-md ring-4 ring-purple-100 shrink-0">
+                <FileText className="w-7 h-7" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight uppercase">
+                    {headingName}
+                  </h2>
+                  <span className="font-mono text-xs font-bold text-purple-700 bg-purple-100/90 border border-purple-300 px-2 py-0.5 rounded-md">
+                    Master #{searchParams.get('templateId') || reportId}
+                  </span>
+                  <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100/90 border border-emerald-300 px-2 py-0.5 rounded-md">
+                    Master Blueprint
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 font-medium mt-1">
+                  Master Catalog Blueprint • Configure default parameter names (Blue), prefilled observation paragraphs (Red), and units (Green) applied when this examination is added to any patient.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
+              <div className="bg-white/90 border border-purple-200/90 rounded-xl px-3.5 py-2 shadow-2xs text-left min-w-[130px]">
+                <div className="text-[10px] font-bold text-purple-600 uppercase tracking-wider">Catalog Key</div>
+                <div className="text-xs font-mono font-black text-slate-800 mt-0.5">
+                  P14 • {reportId}
+                </div>
+              </div>
+              <div className="bg-white/90 border border-emerald-200/90 rounded-xl px-3.5 py-2 shadow-2xs text-left min-w-[140px]">
+                <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Catalog Scope</div>
+                <div className="text-xs font-black text-slate-800 mt-0.5">
+                  Applies to All Patients
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-gradient-to-r from-blue-50/90 via-indigo-50/70 to-blue-50/50 border border-blue-200/90 rounded-2xl p-4 shadow-xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           {/* Left: Barcode Pill & Patient Name */}
           <div className="flex items-center gap-3.5">
@@ -456,6 +540,7 @@ export default function TemplateReportEditPage() {
           </div>
         </div>
       </div>
+    )}
 
       {/* Notifications */}
       {successMsg && (
@@ -514,10 +599,19 @@ export default function TemplateReportEditPage() {
               <div className="space-y-2">
                 {hba1cResult.map((row, idx) => (
                   <div key={idx} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                    {/* 1. Parameter Label (Blue Border) */}
-                    <div className="sm:w-64 border-2 border-blue-600 rounded-lg px-3 py-1.5 font-bold text-xs text-blue-900 bg-blue-50/20 shrink-0">
-                      {row.name}
-                    </div>
+                    {/* 1. BLUE BOX: Editable Parameter Name */}
+                    <input
+                      type="text"
+                      value={row.name || ''}
+                      onChange={(e) => {
+                        const next = [...hba1cResult];
+                        next[idx].name = e.target.value;
+                        setHba1cResult(next);
+                      }}
+                      placeholder="Parameter Name"
+                      title="Click to edit parameter name (Blue Box)"
+                      className="sm:w-64 border-2 border-blue-600 rounded-lg px-3 py-1.5 font-bold text-xs text-blue-900 bg-blue-50/20 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 shrink-0 shadow-2xs transition-colors"
+                    />
 
                     {/* 2. Operator Dropdown (Blue Border) */}
                     <select
@@ -537,7 +631,7 @@ export default function TemplateReportEditPage() {
                       <option value="≤">≤</option>
                     </select>
 
-                    {/* 3. Value Input (Red Border) */}
+                    {/* 3. RED BOX: Value Input */}
                     <input
                       type="text"
                       value={row.value || ''}
@@ -547,18 +641,37 @@ export default function TemplateReportEditPage() {
                         setHba1cResult(next);
                       }}
                       placeholder="Value"
-                      className="w-full sm:w-36 border-2 border-rose-500 rounded-lg px-3 py-1.5 text-xs font-mono font-bold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-rose-400"
+                      title="Enter finding / value (Red Box)"
+                      className="w-full sm:w-36 border-2 border-rose-500 rounded-lg px-3 py-1.5 text-xs font-mono font-bold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-rose-400 shadow-2xs"
                     />
 
-                    {/* 4. Unit Box (Green Border) */}
-                    <div className="sm:w-36 border-2 border-emerald-500 rounded-lg px-3 py-1.5 font-bold text-xs text-emerald-800 bg-emerald-50/20 text-center shrink-0">
-                      {row.unit || '-'}
-                    </div>
+                    {/* 4. GREEN BOX: Editable Unit */}
+                    <input
+                      type="text"
+                      value={row.unit || ''}
+                      onChange={(e) => {
+                        const next = [...hba1cResult];
+                        next[idx].unit = e.target.value;
+                        setHba1cResult(next);
+                      }}
+                      placeholder="Unit"
+                      title="Click to edit unit (Green Box)"
+                      className="w-28 sm:w-36 border-2 border-emerald-500 rounded-lg px-3 py-1.5 font-bold text-xs text-emerald-800 bg-emerald-50/20 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400 text-center shrink-0 shadow-2xs transition-colors"
+                    />
 
-                    {/* 5. Ref Range Box (Amber Border) */}
-                    <div className="sm:w-44 border-2 border-amber-500 rounded-lg px-3 py-1.5 font-bold text-xs text-amber-900 bg-amber-50/20 text-center shrink-0">
-                      {row.refRange || '-'}
-                    </div>
+                    {/* 5. AMBER BOX: Editable Ref Range */}
+                    <input
+                      type="text"
+                      value={row.refRange || ''}
+                      onChange={(e) => {
+                        const next = [...hba1cResult];
+                        next[idx].refRange = e.target.value;
+                        setHba1cResult(next);
+                      }}
+                      placeholder="Ref Range"
+                      title="Click to edit reference range"
+                      className="sm:w-44 border-2 border-amber-500 rounded-lg px-3 py-1.5 font-bold text-xs text-amber-900 bg-amber-50/20 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 text-center shrink-0 shadow-2xs transition-colors"
+                    />
                   </div>
                 ))}
               </div>
@@ -686,26 +799,35 @@ export default function TemplateReportEditPage() {
 
               <div className="space-y-2">
                 {summaryResult.map((row, idx) => (
-                  <div key={idx} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                    {/* Row Name (Blue Border) */}
-                    <div className="sm:w-64 border-2 border-blue-600 rounded-lg px-3 py-1.5 font-bold text-xs text-blue-900 bg-blue-50/20 shrink-0">
-                      {row.name}
-                    </div>
-
-                    {/* Value 1 (Red Border) */}
+                  <div key={idx} className="flex flex-col sm:flex-row items-stretch sm:items-start gap-2">
+                    {/* 1. BLUE BOX: Editable Row Name */}
                     <input
                       type="text"
+                      value={row.name || ''}
+                      onChange={(e) => {
+                        const next = [...summaryResult];
+                        next[idx].name = e.target.value;
+                        setSummaryResult(next);
+                      }}
+                      placeholder="Parameter Name"
+                      title="Click to edit parameter name (Blue Box)"
+                      className="sm:w-64 border-2 border-blue-600 rounded-lg px-3 py-2 font-bold text-xs text-blue-900 bg-blue-50/20 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 shrink-0 shadow-2xs transition-colors"
+                    />
+
+                    {/* 2. RED BOX: Multi-line Paragraph Observation */}
+                    <textarea
+                      rows={2}
                       value={row.val1 || ''}
                       onChange={(e) => {
                         const next = [...summaryResult];
                         next[idx].val1 = e.target.value;
                         setSummaryResult(next);
                       }}
-                      className="w-full sm:w-72 border-2 border-rose-500 rounded-lg px-3 py-1.5 text-xs font-mono font-bold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-rose-400"
-                      placeholder="Reading / Value"
+                      className="flex-1 min-w-[240px] w-full border-2 border-rose-500 rounded-lg px-3 py-2 text-xs font-mono font-bold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-rose-400 resize-y min-h-[42px] leading-relaxed shadow-2xs"
+                      placeholder="Reading / Observation"
                     />
 
-                    {/* Value 2 (Green Border) */}
+                    {/* 3. GREEN BOX: Editable Unit / Suffix */}
                     <input
                       type="text"
                       value={row.val2 || ''}
@@ -714,8 +836,9 @@ export default function TemplateReportEditPage() {
                         next[idx].val2 = e.target.value;
                         setSummaryResult(next);
                       }}
-                      className="w-full sm:w-72 border-2 border-emerald-500 rounded-lg px-3 py-1.5 text-xs font-mono font-bold text-emerald-900 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                      placeholder="Normalized / Equivalent"
+                      className="w-28 sm:w-36 border-2 border-emerald-500 rounded-lg px-3 py-2 text-xs font-mono font-bold text-emerald-900 bg-emerald-50/20 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400 text-center shrink-0 shadow-2xs"
+                      placeholder="Unit"
+                      title="Click to edit unit (Green Box)"
                     />
                   </div>
                 ))}
@@ -723,10 +846,19 @@ export default function TemplateReportEditPage() {
                 {/* Others 1, 2, 3 Textareas */}
                 <div className="pt-2 space-y-2">
                   {others.map((item, idx) => (
-                    <div key={idx} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                      <div className="sm:w-64 border-2 border-blue-600 rounded-lg px-3 py-2 font-bold text-xs text-blue-900 bg-blue-50/20 shrink-0">
-                        {item.name}
-                      </div>
+                    <div key={idx} className="flex flex-col sm:flex-row items-stretch sm:items-start gap-2">
+                      <input
+                        type="text"
+                        value={item.name || ''}
+                        onChange={(e) => {
+                          const next = [...others];
+                          next[idx].name = e.target.value;
+                          setOthers(next);
+                        }}
+                        placeholder="Section / Note Name"
+                        title="Click to edit section name (Blue Box)"
+                        className="sm:w-64 border-2 border-blue-600 rounded-lg px-3 py-2 font-bold text-xs text-blue-900 bg-blue-50/20 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 shrink-0 shadow-2xs transition-colors"
+                      />
                       <textarea
                         rows={2}
                         value={item.value || ''}
@@ -735,7 +867,7 @@ export default function TemplateReportEditPage() {
                           next[idx].value = e.target.value;
                           setOthers(next);
                         }}
-                        className="w-full border-2 border-rose-500 rounded-lg p-2 text-xs font-mono font-medium text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-rose-400"
+                        className="flex-1 w-full border-2 border-rose-500 rounded-lg p-2 text-xs font-mono font-bold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-rose-400 resize-y min-h-[42px] shadow-2xs"
                         placeholder={`Enter ${item.name} observation...`}
                       />
                     </div>
@@ -752,10 +884,19 @@ export default function TemplateReportEditPage() {
 
               <div className="space-y-2">
                 {drawingData.map((item, idx) => (
-                  <div key={idx} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                    <div className="sm:w-64 border-2 border-blue-600 rounded-lg px-3 py-2 font-bold text-xs text-blue-900 bg-blue-50/20 shrink-0">
-                      {item.name}
-                    </div>
+                  <div key={idx} className="flex flex-col sm:flex-row items-stretch sm:items-start gap-2">
+                    <input
+                      type="text"
+                      value={item.name || ''}
+                      onChange={(e) => {
+                        const next = [...drawingData];
+                        next[idx].name = e.target.value;
+                        setDrawingData(next);
+                      }}
+                      placeholder="Data Label"
+                      title="Click to edit data label (Blue Box)"
+                      className="sm:w-64 border-2 border-blue-600 rounded-lg px-3 py-2 font-bold text-xs text-blue-900 bg-blue-50/20 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 shrink-0 shadow-2xs transition-colors"
+                    />
                     <textarea
                       rows={2}
                       value={item.value || ''}
@@ -779,49 +920,139 @@ export default function TemplateReportEditPage() {
           <div className="space-y-6">
             {generalExam &&
               sortSectionKeys(Object.keys(generalExam), headingName).map((sectionName) => (
-                <div key={sectionName} className="space-y-2">
-                  <h3 className="text-xs font-black text-blue-700 uppercase tracking-wide">
-                    {sectionName}
-                  </h3>
+                <div key={sectionName} className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-black text-blue-700 uppercase tracking-wide">
+                      {sectionName}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextExam = { ...generalExam };
+                        if (!Array.isArray(nextExam[sectionName])) nextExam[sectionName] = [];
+                        nextExam[sectionName].push({ Name: '', Value: '', Unit: '' });
+                        setGeneralExam(nextExam);
+                      }}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50/80 hover:bg-blue-100 px-2 py-0.5 rounded-md transition-colors cursor-pointer"
+                      title={`Add parameter to ${sectionName}`}
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Add Item</span>
+                    </button>
+                  </div>
 
-                  <div className="space-y-2">
-                    {(generalExam[sectionName] || []).map((item, idx) => (
-                      <div key={idx} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                        <div className="sm:w-64 border-2 border-blue-600 rounded-lg px-3 py-1.5 font-bold text-xs text-blue-900 bg-blue-50/20 shrink-0">
-                          {item.Name || `Item ${idx + 1}`}
+                  <div className="space-y-2.5">
+                    {(generalExam[sectionName] || []).map((item, idx) => {
+                      const hasUnit =
+                        item.Unit !== undefined &&
+                        item.Unit !== null &&
+                        (item.Unit !== '' || item.showUnitInput);
+                      const hasRefRange =
+                        item.RefRange !== undefined &&
+                        item.RefRange !== null &&
+                        item.RefRange !== '';
+
+                      return (
+                        <div key={idx} className="flex flex-col sm:flex-row items-stretch sm:items-start gap-2">
+                          {/* 1. BLUE BOX: Editable Parameter Name */}
+                          <input
+                            type="text"
+                            value={item.Name || ''}
+                            onChange={(e) => {
+                              const nextExam = { ...generalExam };
+                              nextExam[sectionName][idx].Name = e.target.value;
+                              setGeneralExam(nextExam);
+                            }}
+                            placeholder="Parameter Name"
+                            title="Click to edit parameter name (Blue Box)"
+                            className="sm:w-64 border-2 border-blue-600 rounded-lg px-3 py-2 font-bold text-xs text-blue-900 bg-blue-50/20 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 shrink-0 shadow-2xs transition-colors"
+                          />
+
+                          {/* 2. RED BOX: Multi-line Paragraph Observation / Finding */}
+                          <textarea
+                            rows={2}
+                            value={item.Value || ''}
+                            onChange={(e) => {
+                              const nextExam = { ...generalExam };
+                              nextExam[sectionName][idx].Value = e.target.value;
+                              setGeneralExam(nextExam);
+                            }}
+                            placeholder="Observation / Finding"
+                            title="Enter observation or multi-line clinical paragraph (Red Box)"
+                            className="flex-1 min-w-[280px] w-full border-2 border-rose-500 rounded-lg px-3 py-2 text-xs font-mono font-bold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-rose-400 resize-y min-h-[42px] leading-relaxed shadow-2xs transition-colors"
+                          />
+
+                          {/* 3. GREEN BOX: Editable Unit */}
+                          {hasUnit ? (
+                            <input
+                              type="text"
+                              value={item.Unit || ''}
+                              onChange={(e) => {
+                                const nextExam = { ...generalExam };
+                                nextExam[sectionName][idx].Unit = e.target.value;
+                                setGeneralExam(nextExam);
+                              }}
+                              placeholder="Unit (/CU.mm)"
+                              title="Click to edit unit (Green Box)"
+                              className="w-28 sm:w-32 border-2 border-emerald-500 rounded-lg px-3 py-2 font-bold text-xs text-emerald-800 bg-emerald-50/20 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400 text-center shrink-0 shadow-2xs transition-colors"
+                            />
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextExam = { ...generalExam };
+                                nextExam[sectionName][idx].Unit = '';
+                                nextExam[sectionName][idx].showUnitInput = true;
+                                setGeneralExam(nextExam);
+                              }}
+                              title="Add unit to this examination parameter"
+                              className="self-center px-2.5 py-1.5 text-[11px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50/80 hover:bg-emerald-100 rounded-lg border border-dashed border-emerald-400 transition-colors cursor-pointer shrink-0"
+                            >
+                              + Unit
+                            </button>
+                          )}
+
+                          {/* 4. AMBER BOX: Editable Ref Range (if present) */}
+                          {hasRefRange && (
+                            <input
+                              type="text"
+                              value={item.RefRange || ''}
+                              onChange={(e) => {
+                                const nextExam = { ...generalExam };
+                                nextExam[sectionName][idx].RefRange = e.target.value;
+                                setGeneralExam(nextExam);
+                              }}
+                              placeholder="Ref Range"
+                              title="Click to edit reference range"
+                              className="sm:w-36 border-2 border-amber-500 rounded-lg px-3 py-2 font-bold text-xs text-amber-900 bg-amber-50/20 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 text-center shrink-0 shadow-2xs transition-colors"
+                            />
+                          )}
+
+                          {/* Delete Item (if more than 1 item in section) */}
+                          {(generalExam[sectionName] || []).length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextExam = { ...generalExam };
+                                nextExam[sectionName] = nextExam[sectionName].filter((_, i) => i !== idx);
+                                setGeneralExam(nextExam);
+                              }}
+                              title="Delete this parameter"
+                              className="self-center p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer shrink-0"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
-
-                        <input
-                          type="text"
-                          value={item.Value || ''}
-                          onChange={(e) => {
-                            const nextExam = { ...generalExam };
-                            nextExam[sectionName][idx].Value = e.target.value;
-                            setGeneralExam(nextExam);
-                          }}
-                          placeholder="Observation / Finding"
-                          className="w-full sm:w-96 border-2 border-rose-500 rounded-lg px-3 py-1.5 text-xs font-mono font-bold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-rose-400"
-                        />
-
-                        {item.Unit && (
-                          <div className="sm:w-32 border-2 border-emerald-500 rounded-lg px-3 py-1.5 font-bold text-xs text-emerald-800 bg-emerald-50/20 text-center shrink-0">
-                            {item.Unit}
-                          </div>
-                        )}
-                        {item.RefRange && (
-                          <div className="sm:w-40 border-2 border-amber-500 rounded-lg px-3 py-1.5 font-bold text-xs text-amber-900 bg-amber-50/20 text-center shrink-0">
-                            {item.RefRange}
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               ))}
           </div>
         )}
 
-        {/* 3. SAVE BUTTON (MATCHING IMAGE 1) */}
+        {/* 3. SAVE BUTTON */}
         <div className="pt-4 border-t flex items-center justify-between gap-3">
           <button
             type="button"
@@ -830,12 +1061,18 @@ export default function TemplateReportEditPage() {
             className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-extrabold text-xs shadow-md transition-all cursor-pointer disabled:opacity-50"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            <span>Save Report</span>
+            <span>{isMasterTemplate ? 'Save Master Blueprint' : 'Save Report'}</span>
           </button>
 
           <button
             type="button"
-            onClick={() => navigate(`/patients/${patientId}?tab=results`)}
+            onClick={() => {
+              if (isMasterTemplate) {
+                navigate('/master?tab=templates');
+              } else {
+                navigate(`/patients/${patientId}?tab=results`);
+              }
+            }}
             className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
           >
             Cancel
