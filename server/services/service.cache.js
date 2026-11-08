@@ -79,7 +79,12 @@ export const API_MAPPING = {
   },
   [CACHE_KEYS.REFERANCE_LIST]: {
     api: 'GETREFERLIST',
-    extract: (data) => data?.payLoadJSON?.refers || [],
+    extract: (data) =>
+      (data?.payLoadJSON?.refers || []).map((r) => ({
+        ...r,
+        'Refer Id': r['Refer Id'] || r['Doct Id'] || r.id || '',
+        id: r.id || r['Refer Id'] || r['Doct Id'] || '',
+      })),
   },
   [CACHE_KEYS.BRANCH_LIST]: {
     api: 'GETBRANCHLIST',

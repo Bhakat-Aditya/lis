@@ -27,6 +27,10 @@ import {
   ArrowRight,
   ExternalLink,
   Activity,
+  Download,
+  FileDown,
+  Printer,
+  Cpu,
 } from 'lucide-react';
 import { sortSectionKeys, orderExamObject } from '../../utils/templateSequence.js';
 
@@ -298,6 +302,8 @@ export default function TemplateReportsEditor({
   onDeleteReport,
   deletingId,
   onOpenModal,
+  onDownloadResult,
+  downloadingId,
 }) {
   const navigate = useNavigate();
 
@@ -310,6 +316,59 @@ export default function TemplateReportsEditor({
   const [globalError, setGlobalError] = useState('');
   const [newSectionNameMap, setNewSectionNameMap] = useState({});
   const [addingSectionForId, setAddingSectionForId] = useState(null);
+  const [localDownloadingId, setLocalDownloadingId] = useState(null);
+  const activeDownloadingId = downloadingId || localDownloadingId;
+
+  // Individual Template Report Download Result Handler (DOWNLOADRESULT)
+  const handleDownload = async (tmpl) => {
+    const rId = String(tmpl.reportId || tmpl.templatesId || tmpl.id || '').trim();
+    if (!rId) return;
+    const targetPid = patient?.patientId || patient?.slNo;
+    const tmplName = tmpl.testName || tmpl.TEMPLATE_NAME || `Template (${rId})`;
+    setLocalDownloadingId(rId);
+    setGlobalError('');
+    setGlobalSuccess('');
+
+    try {
+      const res = await api.post('/reports/download-result', {
+        patientId: targetPid,
+        reportId: rId,
+        reportType: 1,
+      });
+
+      if (res.data?.STATUS === 'FAILED' || res.data?.StatusCode === '1211') {
+        const msg = res.data?.Message || 'Technical Error - 1211';
+        setGlobalError(
+          `Analyzer Machine (DOWNLOADRESULT): ${msg}. (Equipment has not transmitted findings for ${tmplName} [#${rId}] yet).`
+        );
+        return;
+      }
+
+      setGlobalSuccess(`Result for "${tmplName}" downloaded from analyzer equipment successfully!`);
+      if (onRefresh) await onRefresh(true);
+    } catch (err) {
+      const msg = err.response?.data?.Message || err.message || 'Failed to download reading from analyzer';
+      setGlobalError(`Analyzer Machine (DOWNLOADRESULT): ${msg}`);
+    } finally {
+      setLocalDownloadingId(null);
+    }
+  };
+
+  // Download official diagnostic report PDF
+  const handleDownloadPdf = () => {
+    const rawPid = patient?.patientId || patient?.slNo;
+    const cleanPid = rawPid
+      ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
+      : '';
+    const targetUrl = patient?.printPDFUrl || patient?.reportUrl;
+    if (targetUrl) {
+      window.open(targetUrl, '_blank');
+    } else if (cleanPid) {
+      window.open(`/api/reports/pdf?patientId=${encodeURIComponent(cleanPid)}&addHeader=true&download=true`, '_blank');
+    } else {
+      setGlobalError('No report PDF available for this patient yet.');
+    }
+  };
 
   // Core state: Map of reportId -> { reportId, testName, status, resultJson, loading, saving, isDirty, error }
   const [reportsState, setReportsState] = useState({});
@@ -898,6 +957,17 @@ export default function TemplateReportsEditor({
             </div>
           )}
 
+          {/* Download Full Patient Diagnostic Report PDF */}
+          <button
+            type="button"
+            onClick={handleDownloadPdf}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
+            title="Download official patient diagnostic report PDF"
+          >
+            <FileDown className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Download PDF</span>
+          </button>
+
           {/* SAVE ALL BUTTON */}
           <button
             type="button"
@@ -1112,8 +1182,8 @@ export default function TemplateReportsEditor({
                       </div>
                     </div>
 
-                    {/* Bottom Action Buttons: Dedicated Template Editor + Quick Inline */}
-                    <div className="mt-5 pt-3 border-t border-slate-100">
+                    {/* Bottom Action Buttons */}
+                    <div className="mt-5 pt-3 border-t border-slate-100 space-y-2">
                       <div className="flex items-center gap-2">
                         {/* 1. HERO BUTTON: Dedicated My Template Editor */}
                         <button
@@ -1124,7 +1194,7 @@ export default function TemplateReportsEditor({
                               { state: { patient } }
                             );
                           }}
-                          className="flex-1 py-2.5 px-4 bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 active:scale-95 text-white font-bold text-xs sm:text-sm rounded-xl shadow-xs hover:shadow-md transition-all cursor-pointer text-center flex items-center justify-center gap-2"
+                          className="flex-1 py-2.5 px-3 bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 active:scale-95 text-white font-bold text-xs sm:text-sm rounded-xl shadow-xs hover:shadow-md transition-all cursor-pointer text-center flex items-center justify-center gap-2"
                           title="Open full-page dedicated template findings editor"
                         >
                           <FileEdit className="w-4 h-4" />
@@ -1143,6 +1213,38 @@ export default function TemplateReportsEditor({
                         >
                           <FileCheck2 className="w-4 h-4" />
                           <span>Inline</span>
+                        </button>
+                      </div>
+
+                      {/* Secondary Row: Machine Sync (DOWNLOADRESULT) & PDF Download */}
+                      <div className="flex items-center gap-2 pt-1 border-t border-slate-50">
+                        {/* A. Download from Machine Analyzer (DOWNLOADRESULT) */}
+                        {tmpl.possibleDownload !== false && (
+                          <button
+                            type="button"
+                            onClick={() => handleDownload(tmpl)}
+                            disabled={activeDownloadingId === rId}
+                            className="flex-1 py-1.5 px-2 bg-slate-50 hover:bg-violet-50 active:scale-95 text-slate-700 hover:text-violet-700 font-bold text-[11px] rounded-lg border border-slate-200 hover:border-violet-300 transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
+                            title="Download instrument reading from analyzer equipment (DOWNLOADRESULT)"
+                          >
+                            {activeDownloadingId === rId ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-600" />
+                            ) : (
+                              <Cpu className="w-3.5 h-3.5 text-violet-600" />
+                            )}
+                            <span>From Analyzer</span>
+                          </button>
+                        )}
+
+                        {/* B. Download / Print Report PDF */}
+                        <button
+                          type="button"
+                          onClick={handleDownloadPdf}
+                          className="flex-1 py-1.5 px-2 bg-slate-50 hover:bg-emerald-50 active:scale-95 text-slate-700 hover:text-emerald-700 font-bold text-[11px] rounded-lg border border-slate-200 hover:border-emerald-300 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                          title="Download / View official patient report PDF"
+                        >
+                          <FileDown className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Download PDF</span>
                         </button>
                       </div>
                     </div>
@@ -1266,6 +1368,24 @@ export default function TemplateReportsEditor({
                       <FileEdit className="w-3.5 h-3.5" />
                       <span className="hidden sm:inline">Template Editor</span>
                     </button>
+
+                    {/* Download Result from Analyzer (DOWNLOADRESULT) - Checking possibleDownload !== false */}
+                    {tmpl.possibleDownload !== false && (
+                      <button
+                        type="button"
+                        onClick={() => handleDownload(tmpl)}
+                        disabled={activeDownloadingId === rId}
+                        className="p-1.5 px-2 bg-violet-50 hover:bg-violet-100 active:scale-95 text-violet-700 rounded-lg border border-violet-200 transition-all cursor-pointer flex items-center gap-1 text-xs font-bold shadow-2xs disabled:opacity-50"
+                        title="Download Result from Analyzer Equipment (DOWNLOADRESULT)"
+                      >
+                        {activeDownloadingId === rId ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-600" />
+                        ) : (
+                          <Download className="w-3.5 h-3.5 text-violet-600" />
+                        )}
+                        <span className="hidden sm:inline">Download</span>
+                      </button>
+                    )}
 
                     {/* Delete Report Button */}
                     {onDeleteReport && (
@@ -1606,6 +1726,24 @@ export default function TemplateReportsEditor({
                             <FileEdit className="w-3.5 h-3.5" />
                             <span className="hidden md:inline">Editor</span>
                           </button>
+
+                          {/* Download Result from Analyzer (DOWNLOADRESULT) - Checking possibleDownload !== false */}
+                          {tmpl.possibleDownload !== false && (
+                            <button
+                              type="button"
+                              onClick={() => handleDownload(tmpl)}
+                              disabled={activeDownloadingId === rId}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 bg-violet-50 hover:bg-violet-100 active:scale-95 text-violet-700 rounded-lg text-xs font-bold border border-violet-200 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                              title="Download Result from Analyzer Equipment (DOWNLOADRESULT)"
+                            >
+                              {activeDownloadingId === rId ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-600" />
+                              ) : (
+                                <Download className="w-3.5 h-3.5 text-violet-600" />
+                              )}
+                              <span className="hidden md:inline">Download</span>
+                            </button>
+                          )}
 
                           <button
                             type="button"

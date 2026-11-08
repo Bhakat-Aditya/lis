@@ -211,6 +211,9 @@ export const getPatientReport = async (req, res, next) => {
         status: statusOverride || t.status || (isDel ? 'DELETED' : 'SAVED'),
         isDeleted: isDel,
         resultJsonParsed: parsed,
+        possibleDownload: t.possibleDownload !== undefined
+          ? toBoolFlag(t.possibleDownload, true)
+          : true,
       };
     });
 

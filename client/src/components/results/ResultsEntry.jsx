@@ -1715,6 +1715,8 @@ export default function ResultsEntry({
           onRefresh={onRefresh}
           onDeleteReport={handleDeleteTemplateReport}
           deletingId={deletingId}
+          onDownloadResult={handleDownloadResult}
+          downloadingId={downloadingId}
         />
       )}
 

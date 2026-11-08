@@ -1011,13 +1011,13 @@ export default function MasterDataManager() {
                       if (!searchTerm) return true;
                       const q = searchTerm.toLowerCase().trim();
                       const name = String(r.Name || r.name || '').toLowerCase();
-                      const id = String(r['Refer Id'] || r.id || '').toLowerCase();
+                      const id = String(r['Refer Id'] || r['Doct Id'] || r.referId || r.id || '').toLowerCase();
                       const addr = String(r.Address || r.address || '').toLowerCase();
                       const contact = String(r.Contact || r.contact || '').toLowerCase();
                       return name.includes(q) || id.includes(q) || addr.includes(q) || contact.includes(q);
                     })
                     .map((r, idx) => {
-                      const referId = r['Refer Id'] || r.id || (idx + 1);
+                      const referId = r['Refer Id'] || r['Doct Id'] || r.referId || r.id || (idx + 1);
                       const name = r.Name || r.name || '-';
                       const address = r.Address || r.address || '-';
                       const contact = r.Contact || r.contact || '-';

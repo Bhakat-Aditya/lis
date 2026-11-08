@@ -16,6 +16,9 @@ import {
   Trash2,
   RefreshCw,
   ExternalLink,
+  Download,
+  FileDown,
+  Cpu,
 } from 'lucide-react';
 import { sortSectionKeys, orderExamObject, getDefaultTemplateSchema } from '../utils/templateSequence.js';
 import { formatDisplayDate, formatAgeDisplay } from '../utils/dateUtils.js';
@@ -36,6 +39,7 @@ export default function TemplateReportEditPage() {
 
   const [loading, setLoading] = useState(!location.state?.patient && !isMasterTemplate);
   const [saving, setSaving] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -378,6 +382,55 @@ export default function TemplateReportEditPage() {
     }
   };
 
+  // Download Result from Analyzer Equipment (DOWNLOADRESULT)
+  const handleDownloadAnalyzerResult = async () => {
+    if (!reportId || !patientId) return;
+    setDownloading(true);
+    setErrorMsg('');
+    setSuccessMsg('');
+    try {
+      const res = await api.post('/reports/download-result', {
+        patientId,
+        reportId,
+        reportType: 1,
+      });
+      if (res.data?.STATUS === 'FAILED' || res.data?.StatusCode === '1211') {
+        const msg = res.data?.Message || 'Technical Error - 1211';
+        setErrorMsg(
+          `Analyzer Machine (DOWNLOADRESULT): ${msg}. Equipment has not transmitted findings for ${headingName} (#${reportId}) yet.`
+        );
+        return;
+      }
+      setSuccessMsg('Result downloaded from analyzer equipment successfully!');
+      // Reload template data
+      const repRes = await api.get('/reports/template-json', {
+        params: { reportId, templateName: headingName, patientId },
+      });
+      const rep = repRes.data?.templateReport || repRes.data?.payLoadJSON?.TemplateReport;
+      const fetchedJson = rep?.resultJSON || rep?.resultJson;
+      if (fetchedJson && typeof fetchedJson === 'object' && fetchedJson.Exam) {
+        setGeneralExam(orderExamObject(fetchedJson.Exam, headingName));
+      }
+    } catch (err) {
+      const msg = err.response?.data?.Message || err.message || 'Failed to download reading from analyzer';
+      setErrorMsg(`Analyzer Machine (DOWNLOADRESULT): ${msg}`);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  // Download official diagnostic report PDF
+  const handleDownloadPdf = () => {
+    const targetUrl = patient?.printPDFUrl || patient?.reportUrl;
+    if (targetUrl) {
+      window.open(targetUrl, '_blank');
+    } else if (cleanPid) {
+      window.open(`/api/reports/pdf?patientId=${encodeURIComponent(cleanPid)}&addHeader=true&download=true`, '_blank');
+    } else {
+      setErrorMsg('No report PDF available for this patient yet.');
+    }
+  };
+
   const isPaid = patient?.billPayStatus === 2 || patient?.billPayStatus === '2' || (patient && Number(patient.dueAmount) <= 0 && Number(patient.totalBill) > 0);
   const cleanPid = patientId ? (String(patientId).toUpperCase().startsWith('P') ? patientId : `P${patientId}`) : '';
 
@@ -404,7 +457,38 @@ export default function TemplateReportEditPage() {
           <span>{isMasterTemplate ? 'Back to Master Catalog (Templates)' : 'Back to Patient Reports'}</span>
         </button>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {!isMasterTemplate && (
+            <>
+              {/* Machine Analyzer Sync (DOWNLOADRESULT) */}
+              <button
+                type="button"
+                onClick={handleDownloadAnalyzerResult}
+                disabled={downloading || saving}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-50 hover:bg-violet-100 active:scale-95 text-violet-700 border border-violet-200 font-bold text-xs shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                title="Download instrument reading from analyzer equipment (DOWNLOADRESULT)"
+              >
+                {downloading ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-600" />
+                ) : (
+                  <Cpu className="w-3.5 h-3.5 text-violet-600" />
+                )}
+                <span>From Analyzer</span>
+              </button>
+
+              {/* Download Report PDF */}
+              <button
+                type="button"
+                onClick={handleDownloadPdf}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-800 border border-emerald-300 font-bold text-xs shadow-2xs transition-all cursor-pointer"
+                title="Download official patient diagnostic report PDF"
+              >
+                <FileDown className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Download PDF</span>
+              </button>
+            </>
+          )}
+
           <span className="text-xs font-mono font-bold text-slate-400">
             {isMasterTemplate ? `Master Template Blueprint #${reportId}` : `Template Report #${reportId}`}
           </span>
@@ -1052,17 +1136,48 @@ export default function TemplateReportEditPage() {
           </div>
         )}
 
-        {/* 3. SAVE BUTTON */}
-        <div className="pt-4 border-t flex items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-extrabold text-xs shadow-md transition-all cursor-pointer disabled:opacity-50"
-          >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            <span>{isMasterTemplate ? 'Save Master Blueprint' : 'Save Report'}</span>
-          </button>
+        {/* 3. SAVE & ACTION BUTTONS */}
+        <div className="pt-4 border-t flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-extrabold text-xs shadow-md transition-all cursor-pointer disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              <span>{isMasterTemplate ? 'Save Master Blueprint' : 'Save Report'}</span>
+            </button>
+
+            {!isMasterTemplate && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleDownloadAnalyzerResult}
+                  disabled={downloading || saving}
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-violet-50 hover:bg-violet-100 active:scale-95 text-violet-700 border border-violet-200 font-bold text-xs shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                  title="Download instrument reading from analyzer equipment (DOWNLOADRESULT)"
+                >
+                  {downloading ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-violet-600" />
+                  ) : (
+                    <Cpu className="w-4 h-4 text-violet-600" />
+                  )}
+                  <span>From Analyzer</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadPdf}
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-800 border border-emerald-300 font-bold text-xs shadow-2xs transition-all cursor-pointer"
+                  title="Download official patient diagnostic report PDF"
+                >
+                  <FileDown className="w-4 h-4 text-emerald-600" />
+                  <span>Download Report PDF</span>
+                </button>
+              </>
+            )}
+          </div>
 
           <button
             type="button"

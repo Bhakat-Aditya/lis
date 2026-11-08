@@ -323,7 +323,7 @@ export const updateReference = async (req, res, next) => {
   try {
     const params = {
       sampleId: req.body.sampleId || '101.3',
-      id: req.body.id ?? req.body.referId ?? req.body['Refer Id'] ?? '',
+      id: req.body.id ?? req.body.referId ?? req.body['Refer Id'] ?? req.body['Doct Id'] ?? req.body.doctId ?? '',
       name: req.body.name ?? req.body.Name ?? '',
       address: req.body.address ?? req.body.Address ?? '',
       contact: req.body.contact ?? req.body.Contact ?? '',
