@@ -456,7 +456,7 @@ export default function MasterEditModal({
         email: item?.email || '',
         password: '',
         access: currentAccess,
-        accessbranch: item?.accessBranch || item?.accessbranch || '',
+        accessbranch: String(currentAccess || '').trim().toLowerCase() === 'branch' ? (item?.accessBranch || item?.accessbranch || '') : '',
         status: item?.status || item?.Status || 'Active',
       });
     } else if (category === 'samples') {
@@ -1847,14 +1847,25 @@ export default function MasterEditModal({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Access Level, Branch (Conditional on 'Branch' role), and Status */}
+            <div
+              className={`grid grid-cols-1 ${
+                String(formData.access || '').trim().toLowerCase() === 'branch' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'
+              } gap-3`}
+            >
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
                   Access Level / Role *
                 </label>
                 <select
                   value={formData.access || 'Settings'}
-                  onChange={(e) => handleChange('access', e.target.value)}
+                  onChange={(e) => {
+                    const nextRole = e.target.value;
+                    handleChange('access', nextRole);
+                    if (String(nextRole).trim().toLowerCase() !== 'branch') {
+                      handleChange('accessbranch', '');
+                    }
+                  }}
                   className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-bold text-indigo-700"
                 >
                   {ACCESS_ROLE_OPTIONS.map((r) => (
@@ -1865,23 +1876,26 @@ export default function MasterEditModal({
                 </select>
               </div>
 
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                  Access Branch
-                </label>
-                <select
-                  value={formData.accessbranch || ''}
-                  onChange={(e) => handleChange('accessbranch', e.target.value)}
-                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg"
-                >
-                  <option value="">All Branches</option>
-                  {branches.map((b) => (
-                    <option key={b.branchId || b.id} value={b.branchId || b.id}>
-                      {b.name || b.Name} (#{b.branchId || b.id})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {/* Show ACCESS BRANCH dropdown ONLY when Access Level / Role is 'Branch' */}
+              {String(formData.access || '').trim().toLowerCase() === 'branch' && (
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    Access Branch
+                  </label>
+                  <select
+                    value={formData.accessbranch || ''}
+                    onChange={(e) => handleChange('accessbranch', e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-semibold text-slate-800"
+                  >
+                    <option value="">All Branches</option>
+                    {branches.map((b) => (
+                      <option key={b.branchId || b.id} value={b.branchId || b.id}>
+                        {b.name || b.Name} (#{b.branchId || b.id})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">

@@ -377,6 +377,9 @@ export const updateBranch = async (req, res, next) => {
 
 export const updateUser = async (req, res, next) => {
   try {
+    const effectiveAccess = req.body.access ?? (typeof req.body.accessPermissionJson === 'object' ? req.body.accessPermissionJson?.accessType : req.body.accessPermissionJson) ?? 'Settings';
+    const isBranchRole = String(effectiveAccess).trim().toLowerCase() === 'branch';
+
     const params = {
       id: req.body.id ?? req.body.userId ?? req.body.UserId ?? '',
       login: req.body.login ?? req.body.loginId ?? '',
@@ -384,8 +387,8 @@ export const updateUser = async (req, res, next) => {
       mobile: req.body.mobile ?? req.body.Mobile ?? '',
       email: req.body.email ?? req.body.Email ?? '',
       password: req.body.password || '',
-      access: req.body.access ?? (typeof req.body.accessPermissionJson === 'object' ? req.body.accessPermissionJson?.accessType : req.body.accessPermissionJson) ?? 'Settings',
-      accessbranch: req.body.accessbranch ?? req.body.accessBranch ?? '',
+      access: effectiveAccess,
+      accessbranch: isBranchRole ? (req.body.accessbranch ?? req.body.accessBranch ?? '') : '',
       status: req.body.status ?? req.body.Status ?? 'Active',
       ...req.body,
     };

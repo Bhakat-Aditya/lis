@@ -280,23 +280,34 @@ export const formatLogDateTime = (dateVal) => {
  */
 export const formatAgeDisplay = (age, unit = 'Years') => {
   if (age === undefined || age === null || age === '') return '-';
-  let str = String(age).trim();
+  const str = String(age).trim();
   if (!str || str === '-') return '-';
 
-  // Strip duplicate consecutive units e.g. "45 Years Years" -> "45 Years"
-  str = str.replace(/\b(years?|months?|days?|yrs?)\b(?:\s+\1\b)+/gi, '$1');
+  const numMatch = str.match(/^([\d.]+)/);
+  if (!numMatch) {
+    return str.replace(/\b(years?|months?|days?|yrs?)\b(?:\s+\1\b)+/gi, '$1');
+  }
+  const num = numMatch[1];
 
-  const lower = str.toLowerCase();
-  const hasUnit =
-    lower.includes('year') ||
-    lower.includes('month') ||
-    lower.includes('day') ||
-    lower.includes('yr');
-
-  if (hasUnit) {
-    return str;
+  const strLower = str.toLowerCase();
+  let resolvedUnit = '';
+  if (strLower.includes('month')) {
+    resolvedUnit = 'Months';
+  } else if (strLower.includes('day')) {
+    resolvedUnit = 'Days';
+  } else if (strLower.includes('year') || strLower.includes('yr')) {
+    resolvedUnit = 'Years';
+  } else {
+    const unitLower = String(unit || '').toLowerCase();
+    if (unitLower.includes('month')) {
+      resolvedUnit = 'Months';
+    } else if (unitLower.includes('day')) {
+      resolvedUnit = 'Days';
+    } else {
+      resolvedUnit = 'Years';
+    }
   }
 
-  return `${str} ${unit || 'Years'}`;
+  return `${num} ${resolvedUnit}`;
 };
 
