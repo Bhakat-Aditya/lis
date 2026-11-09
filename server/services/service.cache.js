@@ -9,11 +9,61 @@ import {
 } from './service.defaults.js';
 
 export const DEFAULT_SIGNATURES = [
-  { id: '1', name: 'Dr. P. K. Ghosh', designation: 'Consultant Pathologist (MD, DNB)' },
-  { id: '2', name: 'Dr. S. Bhattacharya', designation: 'Consultant Microbiologist (MD)' },
-  { id: '3', name: 'Dr. A. K. Roy', designation: 'Consultant Biochemist (Ph.D, FACB)' },
-  { id: '4', name: 'Dr. M. Sen', designation: 'Senior Pathologist (MD Pathology)' },
-  { id: '5', name: 'Dr. S. K. Das', designation: 'Chief Medical Director' },
+  {
+    id: '1',
+    Id: 1,
+    name: 'Bio-Chemistry',
+    Name: 'Bio-Chemistry',
+    post: 'Bio-Chemistry',
+    Post: 'Bio-Chemistry',
+    designation: 'Bio-Chemistry',
+    image: 'https://lis.newlifecaremidnapore.com/lifecare/Bio-Chemistry.png',
+    'Sign Image Source': 'https://lis.newlifecaremidnapore.com/lifecare/Bio-Chemistry.png',
+  },
+  {
+    id: '2',
+    Id: 2,
+    name: 'Technician',
+    Name: 'Technician',
+    post: 'Technician',
+    Post: 'Technician',
+    designation: 'Technician',
+    image: 'https://lis.newlifecaremidnapore.com/lifecare/Bishakha.png',
+    'Sign Image Source': 'https://lis.newlifecaremidnapore.com/lifecare/Bishakha.png',
+  },
+  {
+    id: '3',
+    Id: 3,
+    name: 'Microbiologist',
+    Name: 'Microbiologist',
+    post: 'Microbiologist',
+    Post: 'Microbiologist',
+    designation: 'Microbiologist',
+    image: 'https://lis.newlifecaremidnapore.com/lifecare/Microbiologist.png',
+    'Sign Image Source': 'https://lis.newlifecaremidnapore.com/lifecare/Microbiologist.png',
+  },
+  {
+    id: '4',
+    Id: 4,
+    name: 'Pathologist',
+    Name: 'Pathologist',
+    post: 'Pathologist',
+    Post: 'Pathologist',
+    designation: 'Pathologist',
+    image: 'https://lis.newlifecaremidnapore.com/lifecare/PATHOLOGIST.png',
+    'Sign Image Source': 'https://lis.newlifecaremidnapore.com/lifecare/PATHOLOGIST.png',
+  },
+  {
+    id: '5',
+    Id: 5,
+    name: 'Verification',
+    Name: 'Verification',
+    post: 'Verification',
+    Post: 'Verification',
+    designation: 'Verification',
+    image: 'https://lis.newlifecaremidnapore.com/lifecare/Signature.png',
+    'Sign Image Source': 'https://lis.newlifecaremidnapore.com/lifecare/Signature.png',
+  },
 ];
 
 export { DEFAULT_SAMPLES, DEFAULT_TEMPLATES, ALL_CLINICAL_DEFAULTS };
@@ -205,8 +255,18 @@ class MasterCacheService {
         if (rawData?.payLoadJSON?.nextId !== undefined && rawData?.payLoadJSON?.nextId !== null) {
           nextId = String(rawData.payLoadJSON.nextId);
         }
-        if (Array.isArray(rawData?.payLoadJSON?.signList)) {
-          signList = rawData.payLoadJSON.signList;
+        if (Array.isArray(rawData?.payLoadJSON?.signList) && rawData.payLoadJSON.signList.length > 0) {
+          signList = rawData.payLoadJSON.signList.map((s) => ({
+            id: String(s.Id ?? s.id ?? ''),
+            Id: Number(s.Id ?? s.id ?? 0),
+            name: s.Name ?? s.name ?? s.Post ?? s.designation ?? '',
+            Name: s.Name ?? s.name ?? s.Post ?? s.designation ?? '',
+            post: s.Post ?? s.post ?? s.designation ?? '',
+            Post: s.Post ?? s.post ?? s.designation ?? '',
+            designation: s.Post ?? s.post ?? s.designation ?? '',
+            image: s['Sign Image Source'] ?? s.image ?? '',
+            'Sign Image Source': s['Sign Image Source'] ?? s.image ?? '',
+          }));
         }
       } else {
         console.warn(`[Cache] Upstream response not successful for ${cacheKey}: ${rawData?.Message || rawData?.StatusCode}`);
@@ -217,6 +277,36 @@ class MasterCacheService {
 
     if (!signList && (cacheKey === CACHE_KEYS.DEPT_LIST || cacheKey === CACHE_KEYS.TEMPLATE_LIST)) {
       signList = DEFAULT_SIGNATURES;
+    }
+
+    // Template signatures: merge any locally assigned or saved template signatures
+    if (cacheKey === CACHE_KEYS.TEMPLATE_LIST && Array.isArray(items) && items.length > 0) {
+      let prevItems = this.cache.get(CACHE_KEYS.TEMPLATE_LIST) || [];
+      if (!Array.isArray(prevItems) || prevItems.length === 0) {
+        try {
+          if (CacheModel?.findOne) {
+            const dbDoc = await CacheModel.findOne({ key: CACHE_KEYS.TEMPLATE_LIST });
+            if (dbDoc && Array.isArray(dbDoc.data)) prevItems = dbDoc.data;
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+      const prevMap = new Map();
+      if (Array.isArray(prevItems)) {
+        prevItems.forEach((p) => {
+          const k = String(p.templatesId || p.reportId || p.id || '').toUpperCase();
+          if (p.sign) prevMap.set(k, p.sign);
+        });
+      }
+      items = items.map((t) => {
+        const k = String(t.templatesId || t.reportId || t.id || '').toUpperCase();
+        const existingSign = t.sign || prevMap.get(k) || '';
+        return {
+          ...t,
+          sign: existingSign,
+        };
+      });
     }
 
     // 1. If upstream failed or returned 0, preserve existing memory cache if valid
@@ -340,7 +430,19 @@ class MasterCacheService {
               api: API_MAPPING[doc.key]?.api || '',
               itemCount: doc.data.length,
               nextId: resolvedNextId,
-              signList: doc.signList || (doc.key === CACHE_KEYS.DEPT_LIST || doc.key === CACHE_KEYS.TEMPLATE_LIST ? DEFAULT_SIGNATURES : null),
+              signList: (Array.isArray(doc.signList) && doc.signList.length > 0 && !String(doc.signList[0]?.name || doc.signList[0]?.Name || '').includes('Ghosh'))
+                ? doc.signList.map((s) => ({
+                    id: String(s.Id ?? s.id ?? ''),
+                    Id: Number(s.Id ?? s.id ?? 0),
+                    name: s.Name ?? s.name ?? s.Post ?? s.designation ?? '',
+                    Name: s.Name ?? s.name ?? s.Post ?? s.designation ?? '',
+                    post: s.Post ?? s.post ?? s.designation ?? '',
+                    Post: s.Post ?? s.post ?? s.designation ?? '',
+                    designation: s.Post ?? s.post ?? s.designation ?? '',
+                    image: s['Sign Image Source'] ?? s.image ?? '',
+                    'Sign Image Source': s['Sign Image Source'] ?? s.image ?? '',
+                  }))
+                : (doc.key === CACHE_KEYS.DEPT_LIST || doc.key === CACHE_KEYS.TEMPLATE_LIST ? DEFAULT_SIGNATURES : null),
             });
           }
         }

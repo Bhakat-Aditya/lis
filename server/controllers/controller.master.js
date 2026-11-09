@@ -1,4 +1,4 @@
-import { cacheService, CACHE_KEYS, computeNextIdForList } from '../services/service.cache.js';
+import { cacheService, CACHE_KEYS, computeNextIdForList, DEFAULT_SIGNATURES } from '../services/service.cache.js';
 import { upstreamService } from '../services/service.upstream.js';
 
 export const getMasterList = async (req, res, next) => {
@@ -55,6 +55,10 @@ export const getAllMasterData = async (req, res, next) => {
         }
       })
     );
+
+    if (!globalSignList || globalSignList.length === 0) {
+      globalSignList = DEFAULT_SIGNATURES;
+    }
 
     return res.json({
       STATUS: 'SUCCESS',
@@ -514,6 +518,7 @@ export const updateTemplate = async (req, res, next) => {
             rate: params.price || list[idx].rate,
             status: params.status || list[idx].status,
             Status: params.status || list[idx].Status,
+            sign: params.sign !== undefined ? params.sign : (list[idx].sign || ''),
           };
           cacheService.cache.set(CACHE_KEYS.TEMPLATE_LIST, list, 3600);
           try {

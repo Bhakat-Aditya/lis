@@ -5,6 +5,7 @@ import { reportOverrideService } from '../services/service.reportOverride.js';
 import { invalidatePatientListCache } from './controller.patient.js';
 import { cacheService, CACHE_KEYS } from '../services/service.cache.js';
 import { orderExamObject } from '../services/service.templateSequence.js';
+import { templateStore } from '../services/service.templateStore.js';
 
 // Deduplication and short-lived cache (5s) to eliminate duplicate calls
 const reportCache = new Map();
@@ -41,6 +42,21 @@ export const getPatientReport = async (req, res, next) => {
     const cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    // Check if patient was deleted
+    try {
+      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
+      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      if (isDeleted) {
+        return res.status(404).json({
+          STATUS: 'FAILED',
+          StatusCode: '404',
+          Message: `Patient #${cleanPatientId} has been deleted from active directory.`,
+        });
+      }
+    } catch (e) {
+      // Continue
+    }
 
     // 1. Check cache (5s TTL to prevent duplicate calls from multiple component mounts)
     const isFresh = req.query.fresh === 'true' || req.query.sync === 'true';
@@ -197,13 +213,106 @@ export const getPatientReport = async (req, res, next) => {
       } else {
         parsed = t.resultJson;
       }
-      // If local in-memory store has more recent or populated resultJSON, merge it
-      if (localTemplateReports.has(rid)) {
-        const stored = localTemplateReports.get(rid);
-        if (stored?.resultJSON) {
-          if (!parsed || !parsed.Exam || Object.keys(parsed.Exam).length === 0) {
-            parsed = stored.resultJSON;
+      // If persistent template store has customizations (units, ref ranges, values, or custom items), merge them
+      const cleanRid = String(rid).trim().toUpperCase();
+      const masterRid = cleanRid.startsWith('P') ? `P14R${cleanRid.replace(/^P\d*R/i, '')}` : cleanRid;
+      const storedReport = templateStore.get(cleanRid) || templateStore.get(masterRid);
+      if (storedReport?.resultJSON) {
+        if (!parsed || !parsed.Exam || Object.keys(parsed.Exam).length === 0) {
+          parsed = storedReport.resultJSON;
+        } else {
+          // Deep merge Exam so units, ref ranges, and custom items are preserved
+          const mergedExam = templateStore.mergeExam(parsed.Exam, storedReport.resultJSON.Exam);
+          parsed = {
+            ...parsed,
+            Exam: mergedExam,
+            others: storedReport.resultJSON.others || parsed.others,
+            drawingData: storedReport.resultJSON.drawingData || parsed.drawingData,
+          };
+        }
+      }
+
+      // Ensure specialized HbA1c schema fields are normalized from Exam if missing
+      if (parsed && typeof parsed === 'object') {
+        const tmplName = String(t.TEMPLATE_NAME || t.testName || parsed.TEMPLATE_NAME || parsed.headingName || '').toUpperCase();
+        const isHb = tmplName.includes('HBA1C') || tmplName.includes('GLYCATED') || Boolean(parsed.Exam?.PeakData) || Boolean(parsed.Exam?.['Peak Data']) || Boolean(parsed.peakDataTable);
+        if (isHb) {
+          parsed.templateType = 'HBA1C';
+          const exam = parsed.Exam || {};
+          let extractedHb = null;
+          if (exam.Result || exam['HbA1C Result']) {
+            const arr = exam.Result || exam['HbA1C Result'];
+            if (Array.isArray(arr)) {
+              extractedHb = arr.map((r, idx) => ({
+                name: r.Name || r.name || (idx === 0 ? 'Glycated Haemoglobin (HbA1c)' : 'Estimated Average Glucose (eAG)'),
+                operator: r.Method || r.method || r.operator || '-',
+                value: r.Value !== undefined ? String(r.Value) : (r.value !== undefined ? String(r.value) : ''),
+                unit: r.Unit || r.unit || (idx === 0 ? '% ofTotal Hb' : 'mg/dL'),
+                refRange: r['Ref Range'] || r.RefRange || r.refRange || (idx === 0 ? '<6%' : ''),
+              }));
+            }
           }
+          let extractedPeaks = null;
+          if (exam.PeakData || exam['Peak Data']) {
+            const arr = exam.PeakData || exam['Peak Data'];
+            const defaultPeaks = ['HbA1C(IFCC)', 'eAG[ADA]', 'Others 1', 'Others 2', 'Others 3', 'Peak Data', 'Graph Data'];
+            if (Array.isArray(arr)) {
+              extractedPeaks = arr.map((p, idx) => ({
+                peak: p.Peak || p.peak || p.Name || p.name || defaultPeaks[idx] || `Peak ${idx + 1}`,
+                time: p.Time !== undefined ? String(p.Time) : (p.time !== undefined ? String(p.time) : ''),
+                abs: p.ABS !== undefined ? String(p.ABS) : (p.abs !== undefined ? String(p.abs) : ''),
+                area: p.Area !== undefined ? String(p.Area) : (p.area !== undefined ? String(p.area) : ''),
+                result: p.Result !== undefined ? String(p.Result) : (p.result !== undefined ? String(p.result) : ''),
+                refRange: p['Ref Range'] || p.RefRange || p.refRange || '',
+              }));
+            }
+          }
+          let extractedSummary = null;
+          if (exam['Final Result'] || exam['Summary Result']) {
+            const arr = exam['Final Result'] || exam['Summary Result'];
+            const defaultSummary = ['TotalArea', 'HbA1C(NGSP)', 'eAG(ADA)', 'HbA1C(IFCC)', 'eAG[ADA]'];
+            if (Array.isArray(arr)) {
+              extractedSummary = arr.map((s, idx) => ({
+                name: s.Name || s.name || defaultSummary[idx] || `Summary ${idx + 1}`,
+                val1: s.val1 !== undefined ? String(s.val1) : (s.Value !== undefined ? String(s.Value) : (s.value !== undefined ? String(s.value) : '')),
+                val2: s.val2 !== undefined ? String(s.val2) : (s.Unit !== undefined ? String(s.Unit) : (s.unit !== undefined ? String(s.unit) : '')),
+              }));
+            }
+          }
+
+          // Merge with stored values: upstream clinical findings take precedence over stored blank values
+          const sJson = storedReport?.resultJSON || {};
+          parsed.hba1cResult = templateStore.mergeHbA1c(
+            extractedHb || parsed.hba1cResult,
+            sJson.hba1cResult || sJson.Exam?.Result || sJson.Exam?.['HbA1C Result']
+          );
+          parsed.peakDataTable = templateStore.mergePeaks(
+            extractedPeaks || parsed.peakDataTable,
+            sJson.peakDataTable || sJson.Exam?.PeakData || sJson.Exam?.['Peak Data']
+          );
+          parsed.summaryResult = templateStore.mergeSummary(
+            extractedSummary || parsed.summaryResult,
+            sJson.summaryResult || sJson.Exam?.['Final Result'] || sJson.Exam?.['Summary Result']
+          );
+        }
+
+        // Also ensure Exam sections order is strictly maintained with Others at the bottom
+        if (parsed.Exam && typeof parsed.Exam === 'object') {
+          parsed.Exam = orderExamObject(parsed.Exam, tmplName);
+        }
+
+        // Keep local persistent template store in sync with the fresh upstream lab values
+        if (storedReport && cleanRid) {
+          templateStore.set(cleanRid, {
+            ...storedReport,
+            reportId: cleanRid,
+            patientId: cleanPatientId,
+            resultJSON: {
+              ...storedReport.resultJSON,
+              ...parsed,
+            },
+            status: storedReport.status || 'SAVED',
+          });
         }
       }
       return {
@@ -509,6 +618,21 @@ export const updateReport = async (req, res, next) => {
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
 
+    // Check if patient was deleted
+    try {
+      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
+      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      if (isDeleted) {
+        return res.status(404).json({
+          STATUS: 'FAILED',
+          StatusCode: '404',
+          Message: `Patient #${cleanPatientId} has been deleted from active directory.`,
+        });
+      }
+    } catch (e) {
+      // Continue
+    }
+
     // Rule 4: Microbiology User can only update specific live Microbiology Dept investigations
     if (req.user?.role === 'Microbiology') {
       const isMicro =
@@ -663,6 +787,21 @@ export const receiveSample = async (req, res, next) => {
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
 
+    // Check if patient was deleted
+    try {
+      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
+      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      if (isDeleted) {
+        return res.status(404).json({
+          STATUS: 'FAILED',
+          StatusCode: '404',
+          Message: `Patient #${cleanPatientId} has been deleted from active directory.`,
+        });
+      }
+    } catch (e) {
+      // Continue
+    }
+
     const upstreamData = await upstreamService.post('RECEIVESAMPLE', { patientId: cleanPatientId }, null, req.user?.upstreamSid);
     invalidateReportCache(cleanPatientId);
     return res.json({
@@ -687,6 +826,21 @@ export const verifyReport = async (req, res, next) => {
     const cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    // Check if patient was deleted
+    try {
+      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
+      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      if (isDeleted) {
+        return res.status(404).json({
+          STATUS: 'FAILED',
+          StatusCode: '404',
+          Message: `Patient #${cleanPatientId} has been deleted from active directory.`,
+        });
+      }
+    } catch (e) {
+      // Continue
+    }
 
     let resolvedReportId = '';
     if (reportId && String(reportId).trim() !== 'undefined') {
@@ -732,6 +886,21 @@ export const approveReport = async (req, res, next) => {
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
 
+    // Check if patient was deleted
+    try {
+      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
+      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      if (isDeleted) {
+        return res.status(404).json({
+          STATUS: 'FAILED',
+          StatusCode: '404',
+          Message: `Patient #${cleanPatientId} has been deleted from active directory.`,
+        });
+      }
+    } catch (e) {
+      // Continue
+    }
+
     let resolvedReportId = '';
     if (reportId && String(reportId).trim() !== 'undefined') {
       resolvedReportId = Array.isArray(reportId) ? reportId.join(',') : String(reportId).trim();
@@ -776,6 +945,21 @@ export const rejectReport = async (req, res, next) => {
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
 
+    // Check if patient was deleted
+    try {
+      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
+      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      if (isDeleted) {
+        return res.status(404).json({
+          STATUS: 'FAILED',
+          StatusCode: '404',
+          Message: `Patient #${cleanPatientId} has been deleted from active directory.`,
+        });
+      }
+    } catch (e) {
+      // Continue
+    }
+
     const params = {
       patientId: cleanPatientId,
       reason: reason || 'Flagged for recollection / re-test',
@@ -809,6 +993,21 @@ export const releaseReport = async (req, res, next) => {
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
 
+    // Check if patient was deleted
+    try {
+      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
+      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      if (isDeleted) {
+        return res.status(404).json({
+          STATUS: 'FAILED',
+          StatusCode: '404',
+          Message: `Patient #${cleanPatientId} has been deleted from active directory.`,
+        });
+      }
+    } catch (e) {
+      // Continue
+    }
+
     const upstreamData = await upstreamService.post('RELEASEREPORT', { patientId: cleanPatientId }, null, req.user?.upstreamSid);
     invalidateReportCache(cleanPatientId);
     return res.json({
@@ -839,6 +1038,21 @@ export const recallReport = async (req, res, next) => {
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
 
+    // Check if patient was deleted
+    try {
+      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
+      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      if (isDeleted) {
+        return res.status(404).json({
+          STATUS: 'FAILED',
+          StatusCode: '404',
+          Message: `Patient #${cleanPatientId} has been deleted from active directory.`,
+        });
+      }
+    } catch (e) {
+      // Continue
+    }
+
     const upstreamData = await upstreamService.recallReport(cleanPatientId, req.user?.upstreamSid);
     invalidateReportCache(cleanPatientId);
     return res.json({
@@ -867,6 +1081,21 @@ export const calculateResult = async (req, res, next) => {
     const cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    // Check if patient was deleted
+    try {
+      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
+      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      if (isDeleted) {
+        return res.status(404).json({
+          STATUS: 'FAILED',
+          StatusCode: '404',
+          Message: `Patient #${cleanPatientId} has been deleted from active directory.`,
+        });
+      }
+    } catch (e) {
+      // Continue
+    }
 
     const upstreamData = await upstreamService.post(
       'CALCULATERESULT',
@@ -908,6 +1137,21 @@ export const setDefaultResult = async (req, res, next) => {
     const cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    // Check if patient was deleted
+    try {
+      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
+      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      if (isDeleted) {
+        return res.status(404).json({
+          STATUS: 'FAILED',
+          StatusCode: '404',
+          Message: `Patient #${cleanPatientId} has been deleted from active directory.`,
+        });
+      }
+    } catch (e) {
+      // Continue
+    }
 
     const numVersion = Number(resultVersion) || 1;
 
@@ -987,6 +1231,21 @@ export const downloadResult = async (req, res, next) => {
     const cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    // Check if patient was deleted
+    try {
+      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
+      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      if (isDeleted) {
+        return res.status(404).json({
+          STATUS: 'FAILED',
+          StatusCode: '404',
+          Message: `Patient #${cleanPatientId} has been deleted from active directory.`,
+        });
+      }
+    } catch (e) {
+      // Continue
+    }
     const cleanReportId = String(reportId).trim();
     const resolvedReportType = String(reportType || 1);
 
@@ -1035,6 +1294,21 @@ export const uploadOrder = async (req, res, next) => {
     const cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    // Check if patient was deleted
+    try {
+      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
+      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      if (isDeleted) {
+        return res.status(404).json({
+          STATUS: 'FAILED',
+          StatusCode: '404',
+          Message: `Patient #${cleanPatientId} has been deleted from active directory.`,
+        });
+      }
+    } catch (e) {
+      // Continue
+    }
     const cleanReportId = String(reportId).trim();
     const resolvedReportType = String(reportType || 1);
 
@@ -1076,6 +1350,21 @@ export const sendWhatsApp = async (req, res, next) => {
     const cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    // Check if patient was deleted
+    try {
+      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
+      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      if (isDeleted) {
+        return res.status(404).json({
+          STATUS: 'FAILED',
+          StatusCode: '404',
+          Message: `Patient #${cleanPatientId} has been deleted from active directory.`,
+        });
+      }
+    } catch (e) {
+      // Continue
+    }
 
     // Valid sendType values: onboardingMsg | patientReportMsg | doctorReportMsg | agentReportMsg
     const validSendTypes = ['onboardingMsg', 'patientReportMsg', 'doctorReportMsg', 'agentReportMsg'];
@@ -1156,6 +1445,21 @@ export const streamReportPdf = async (req, res, next) => {
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
 
+    // Check if patient was deleted
+    try {
+      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
+      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      if (isDeleted) {
+        return res.status(404).json({
+          STATUS: 'FAILED',
+          StatusCode: '404',
+          Message: `Patient #${cleanPatientId} has been deleted from active directory.`,
+        });
+      }
+    } catch (e) {
+      // Continue
+    }
+
     const upstreamData = await upstreamService.get(
       'GETPATIENTREPORT',
       { patientId: cleanPatientId },
@@ -1213,6 +1517,21 @@ export const deleteReport = async (req, res, next) => {
     const cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    // Check if patient was deleted
+    try {
+      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
+      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      if (isDeleted) {
+        return res.status(404).json({
+          STATUS: 'FAILED',
+          StatusCode: '404',
+          Message: `Patient #${cleanPatientId} has been deleted from active directory.`,
+        });
+      }
+    } catch (e) {
+      // Continue
+    }
     const cleanReportId = String(reportId).trim();
     const isTemplate =
       String(reportType) === '2' ||
@@ -1296,6 +1615,21 @@ export const restoreReport = async (req, res, next) => {
     const cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    // Check if patient was deleted
+    try {
+      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
+      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      if (isDeleted) {
+        return res.status(404).json({
+          STATUS: 'FAILED',
+          StatusCode: '404',
+          Message: `Patient #${cleanPatientId} has been deleted from active directory.`,
+        });
+      }
+    } catch (e) {
+      // Continue
+    }
     const cleanReportId = String(reportId).trim();
     const resolvedReportType = String(reportType || 1);
 
@@ -1581,9 +1915,6 @@ export const getDefaultTemplateResultJson = (templateName = 'STOOL EXAMINATION')
   };
 };
 
-// In-memory store for template reports updated locally
-const localTemplateReports = new Map();
-
 /**
  * Fetch structured full-page template JSON (API_GET_TEMPLATE_JSON="GETTEMPLATEJSON")
  * /GetAPIServlet?api=GETTEMPLATEJSON&reportId=P14R3
@@ -1596,21 +1927,9 @@ export const getTemplateJson = async (req, res, next) => {
     }
 
     const cleanReportId = String(reportId).trim();
+    const stored = templateStore.get(cleanReportId);
 
-    // 1. Check local in-memory store
-    if (localTemplateReports.has(cleanReportId)) {
-      const stored = localTemplateReports.get(cleanReportId);
-      return res.json({
-        STATUS: 'SUCCESS',
-        StatusCode: '0000',
-        payLoadJSON: {
-          TemplateReport: stored,
-        },
-        templateReport: stored,
-      });
-    }
-
-    // 2. Fetch from upstream GETTEMPLATEJSON
+    // 1. Fetch from upstream GETTEMPLATEJSON
     try {
       const upstreamRes = await upstreamService.get(
         'GETTEMPLATEJSON',
@@ -1618,14 +1937,66 @@ export const getTemplateJson = async (req, res, next) => {
         req.user?.upstreamSid
       );
       if (upstreamRes?.payLoadJSON?.TemplateReport) {
-        const report = { ...upstreamRes.payLoadJSON.TemplateReport };
-        if (report.resultJSON && typeof report.resultJSON === 'object' && report.resultJSON.Exam) {
-          report.resultJSON = {
-            ...report.resultJSON,
-            Exam: orderExamObject(report.resultJSON.Exam, report.TEMPLATE_NAME || templateName),
-          };
+        let report = { ...upstreamRes.payLoadJSON.TemplateReport };
+        let rJson = report.resultJSON;
+        if (typeof rJson === 'string') {
+          try {
+            rJson = JSON.parse(rJson);
+          } catch {
+            rJson = null;
+          }
         }
-        localTemplateReports.set(cleanReportId, report);
+        if (rJson && typeof rJson === 'object' && rJson.Exam) {
+          const orderedExam = orderExamObject(rJson.Exam, report.TEMPLATE_NAME || templateName);
+          rJson.Exam = orderedExam;
+          const isHb =
+            String(report.TEMPLATE_NAME || templateName).toUpperCase().includes('HBA1C') ||
+            Boolean(orderedExam.PeakData) ||
+            Boolean(orderedExam['Peak Data']);
+
+          if (isHb) {
+            rJson.templateType = 'HBA1C';
+            if (!rJson.hba1cResult && (orderedExam.Result || orderedExam['HbA1C Result'])) {
+              const rArr = orderedExam.Result || orderedExam['HbA1C Result'];
+              rJson.hba1cResult = rArr.map((r, idx) => ({
+                name: r.Name || r.name || (idx === 0 ? 'Glycated Haemoglobin (HbA1c)' : 'Estimated Average Glucose (eAG)'),
+                operator: r.Method || r.method || r.operator || '-',
+                value: r.Value !== undefined ? String(r.Value) : (r.value !== undefined ? String(r.value) : ''),
+                unit: r.Unit || r.unit || (idx === 0 ? '% ofTotal Hb' : 'mg/dL'),
+                refRange: r['Ref Range'] || r.RefRange || r.refRange || (idx === 0 ? '<6%' : ''),
+              }));
+            }
+            if (!rJson.peakDataTable && (orderedExam.PeakData || orderedExam['Peak Data'])) {
+              const pArr = orderedExam.PeakData || orderedExam['Peak Data'];
+              const defaultPeaks = ['HbA1C(IFCC)', 'eAG[ADA]', 'Others 1', 'Others 2', 'Others 3', 'Peak Data', 'Graph Data'];
+              rJson.peakDataTable = pArr.map((p, idx) => ({
+                peak: p.Peak || p.peak || p.Name || p.name || defaultPeaks[idx] || `Peak ${idx + 1}`,
+                time: p.Time !== undefined ? String(p.Time) : (p.time !== undefined ? String(p.time) : ''),
+                abs: p.ABS !== undefined ? String(p.ABS) : (p.abs !== undefined ? String(p.abs) : ''),
+                area: p.Area !== undefined ? String(p.Area) : (p.area !== undefined ? String(p.area) : ''),
+                result: p.Result !== undefined ? String(p.Result) : (p.result !== undefined ? String(p.result) : ''),
+                refRange: p['Ref Range'] || p.RefRange || p.refRange || '',
+              }));
+            }
+            if (!rJson.summaryResult && (orderedExam['Final Result'] || orderedExam['Summary Result'])) {
+              const sArr = orderedExam['Final Result'] || orderedExam['Summary Result'];
+              const defaultSummary = ['TotalArea', 'HbA1C(NGSP)', 'eAG(ADA)', 'HbA1C(IFCC)', 'eAG[ADA]'];
+              rJson.summaryResult = sArr.map((s, idx) => ({
+                name: s.Name || s.name || defaultSummary[idx] || `Summary ${idx + 1}`,
+                val1: s.val1 !== undefined ? String(s.val1) : (s.Value !== undefined ? String(s.Value) : (s.value !== undefined ? String(s.value) : '')),
+                val2: s.val2 !== undefined ? String(s.val2) : (s.Unit !== undefined ? String(s.Unit) : (s.unit !== undefined ? String(s.unit) : '')),
+              }));
+            }
+          }
+          report.resultJSON = rJson;
+        }
+
+        // Deep merge with stored persistent customizations (units, custom rows, ref ranges)
+        if (stored) {
+          report = templateStore.mergeTemplateReport(report, stored);
+        }
+        templateStore.set(cleanReportId, report);
+
         return res.json({
           STATUS: 'SUCCESS',
           StatusCode: '0000',
@@ -1635,6 +2006,18 @@ export const getTemplateJson = async (req, res, next) => {
       }
     } catch (upstreamErr) {
       console.warn(`[getTemplateJson] Upstream GETTEMPLATEJSON warning for ${cleanReportId}:`, upstreamErr.message);
+    }
+
+    // 2. If upstream fails but stored report is available from disk, return it
+    if (stored) {
+      return res.json({
+        STATUS: 'SUCCESS',
+        StatusCode: '0000',
+        payLoadJSON: {
+          TemplateReport: stored,
+        },
+        templateReport: stored,
+      });
     }
 
     // 3. Fallback: generate standard structured resultJSON
@@ -1647,7 +2030,7 @@ export const getTemplateJson = async (req, res, next) => {
       templatesDate: new Date().toISOString().slice(0, 10),
       status: 'Active',
     };
-    localTemplateReports.set(cleanReportId, fallbackReport);
+    templateStore.set(cleanReportId, fallbackReport);
 
     return res.json({
       STATUS: 'SUCCESS',
@@ -1682,8 +2065,15 @@ export const updateTemplateData = async (req, res, next) => {
     }
 
     const templateName = rawResultJSON.TEMPLATE_NAME || rawResultJSON.headingName || '';
+    const isHbA1C =
+      String(templateName).toUpperCase().includes('HBA1C') ||
+      rawResultJSON.templateType === 'HBA1C' ||
+      rawResultJSON.peakDataTable !== undefined ||
+      Boolean(rawResultJSON.Exam?.PeakData);
+
     const resultJSON = {
       ...rawResultJSON,
+      templateType: isHbA1C ? 'HBA1C' : (rawResultJSON.templateType || 'GENERAL'),
       Exam: rawResultJSON.Exam ? orderExamObject(rawResultJSON.Exam, templateName) : rawResultJSON.Exam,
     };
 
@@ -1727,8 +2117,8 @@ export const updateTemplateData = async (req, res, next) => {
       // Non-fatal
     }
 
-    // 3. Update local in-memory store
-    const existing = localTemplateReports.get(cleanReportId) || {};
+    // 3. Update persistent template store
+    const existing = templateStore.get(cleanReportId) || {};
     const updatedReport = {
       ...existing,
       reportId: cleanReportId,
@@ -1738,7 +2128,7 @@ export const updateTemplateData = async (req, res, next) => {
       status: 'SAVED',
       templatesDate: new Date().toISOString().slice(0, 10),
     };
-    localTemplateReports.set(cleanReportId, updatedReport);
+    templateStore.set(cleanReportId, updatedReport);
 
     // Invalidate report cache
     invalidateReportCache(targetPid);
@@ -1833,8 +2223,8 @@ export const updateTemplateBatchData = async (req, res, next) => {
         // Non-fatal
       }
 
-      // 3. Update local in-memory store
-      const existing = localTemplateReports.get(cleanReportId) || {};
+      // 3. Update persistent template store
+      const existing = templateStore.get(cleanReportId) || {};
       const updatedReport = {
         ...existing,
         reportId: cleanReportId,
@@ -1844,7 +2234,7 @@ export const updateTemplateBatchData = async (req, res, next) => {
         status: 'SAVED',
         templatesDate: new Date().toISOString().slice(0, 10),
       };
-      localTemplateReports.set(cleanReportId, updatedReport);
+      templateStore.set(cleanReportId, updatedReport);
       invalidateReportCache(targetPid);
       results.push({ reportId: cleanReportId, status: 'SUCCESS' });
       updatedCount++;

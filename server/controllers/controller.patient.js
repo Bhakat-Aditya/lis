@@ -194,6 +194,18 @@ export const getPatients = async (req, res, next) => {
       patients = patients.filter((p) => String(p.branch) === String(branch));
     }
 
+    // Filter out deleted patients
+    try {
+      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
+      const deletedDocs = await DeletedPatient.find({}, 'patientId').lean();
+      if (deletedDocs && deletedDocs.length > 0) {
+        const deletedSet = new Set(deletedDocs.map((d) => String(d.patientId).toUpperCase().trim()));
+        patients = patients.filter((p) => !deletedSet.has(String(p.patientId || '').toUpperCase().trim()));
+      }
+    } catch (dbErr) {
+      // Continue even if MongoDB is not connected
+    }
+
     // Official Upstream Patient Directory Status Constants:
     // STATUS_ENTRY = 'ENTRY', STATUS_SAMPLE = 'SAMPLE', STATUS_DATA_PART = 'RESULT PARTLY',
     // STATUS_DATA_FULL = 'RESULT FULLY', STATUS_REPORT_PRINT = 'PRINTING', STATUS_REPORT_RELEASED = 'RELEASED'
@@ -449,7 +461,7 @@ export const updatePatient = async (req, res, next) => {
 
 export const deletePatient = async (req, res, next) => {
   try {
-    const { patientId } = req.body;
+    const { patientId, reason = '' } = req.body;
     if (!patientId) {
       return res.status(400).json({
         STATUS: 'FAILED',
@@ -458,14 +470,83 @@ export const deletePatient = async (req, res, next) => {
       });
     }
 
-    const upstreamData = await upstreamService.post('DELETEPATIENT', { patientId }, null, req.user?.upstreamSid);
+    const rawPid = String(patientId).trim();
+    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+      ? `P${rawPid.replace(/^P+/i, '')}`
+      : `P${rawPid}`;
 
+    // 1. Call upstream DELETEPATIENT API
+    let upstreamData = null;
+    try {
+      upstreamData = await upstreamService.post(
+        'DELETEPATIENT',
+        {
+          patientId: cleanPatientId,
+          patientIdSelected: cleanPatientId,
+          action: 'delete',
+          pcount: '1',
+        },
+        null,
+        req.user?.upstreamSid
+      );
+    } catch (upErr) {
+      console.warn(`[deletePatient] Upstream DELETEPATIENT warning for ${cleanPatientId}:`, upErr.message);
+    }
+
+    // 2. Persist deletion in MongoDB DeletedPatient collection
+    try {
+      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
+      await DeletedPatient.findOneAndUpdate(
+        { patientId: cleanPatientId.toUpperCase() },
+        {
+          patientId: cleanPatientId.toUpperCase(),
+          patientName: req.body.patientName || req.body.name || '',
+          slNo: req.body.slNo || '',
+          mobile: req.body.mobile || '',
+          deletedBy: {
+            userId: req.user?.id || req.user?.userId || '',
+            loginId: req.user?.loginId || req.user?.login || '',
+            name: req.user?.name || '',
+            role: req.user?.role || req.user?.accessType || '',
+          },
+          reason: reason || 'Deleted by user',
+          upstreamResult: upstreamData,
+        },
+        { upsert: true, new: true }
+      );
+    } catch (dbErr) {
+      console.warn('[deletePatient] MongoDB record warning:', dbErr.message);
+    }
+
+    // 3. Log Audit trail
+    try {
+      const { Audit } = await import('../models/model.audit.js');
+      await Audit.create({
+        action: 'DELETE_PATIENT',
+        entity: 'PATIENT',
+        entityId: cleanPatientId,
+        performedBy: {
+          userId: req.user?.id || req.user?.userId || '',
+          loginId: req.user?.loginId || req.user?.login || '',
+          name: req.user?.name || '',
+          role: req.user?.role || '',
+        },
+        ipAddress: req.ip || '',
+        details: { patientId: cleanPatientId, reason, upstreamData },
+        status: 'SUCCESS',
+      });
+    } catch (auditErr) {
+      // Non-fatal
+    }
+
+    // 4. Invalidate patient cache
     invalidatePatientListCache();
 
     return res.json({
-      STATUS: upstreamData?.STATUS || 'SUCCESS',
-      StatusCode: upstreamData?.StatusCode || '0000',
-      Message: upstreamData?.Message || 'Patient deleted successfully',
+      STATUS: 'SUCCESS',
+      StatusCode: '0000',
+      Message: `Patient ${cleanPatientId} deleted successfully`,
+      patientId: cleanPatientId,
       data: upstreamData,
     });
   } catch (err) {

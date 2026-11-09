@@ -676,21 +676,11 @@ class UpstreamService {
       const formHtml = regFormMatch[0];
       const inputs = [...formHtml.matchAll(/<(input|textarea|select)\s+[^>]*name=["']([^"']+)["'][^>]*>/gi)];
 
-      // 1. Group inputs by clinical role (Blue: Name/Label, Red: Value/Paragraph, Green: Unit)
-      const paramsList = [];
-      let currentParam = null;
+      // 1. Extract existing form state from inputs
       const inputDict = {};
-
       for (const inp of inputs) {
         const raw = inp[0];
         const name = inp[2];
-        const isBlue =
-          raw.includes('#0000ff') &&
-          (raw.includes('border: 3px solid #0000ff') ||
-            raw.includes('border: 6px solid #0000ff') ||
-            raw.includes('border: 8px solid #0000ff'));
-        const isRed = raw.includes('#ff1a1a');
-        const isGreen = raw.includes('#00cc00');
         const valMatch = raw.match(/value=["']([^"']*)["']/i);
         let val = valMatch ? valMatch[1] : '';
         if (inp[1].toLowerCase() === 'textarea') {
@@ -698,90 +688,175 @@ class UpstreamService {
           if (textMatch) val = textMatch[1].trim();
         }
         inputDict[name] = val;
-
-        if (isBlue) {
-          currentParam = { labelField: name, label: val, valueField: null, value: '', unitField: null, unit: '' };
-          paramsList.push(currentParam);
-        } else if (isRed && currentParam) {
-          currentParam.valueField = name;
-          currentParam.value = val;
-        } else if (isGreen && currentParam) {
-          currentParam.unitField = name;
-          currentParam.unit = val;
-        }
       }
 
-      // 2. Flatten incoming clinical items from resultJSON.Exam
-      const incomingItems = [];
-      if (resultJSON.Exam && typeof resultJSON.Exam === 'object') {
-        for (const [sectionKey, items] of Object.entries(resultJSON.Exam)) {
-          if (Array.isArray(items)) {
-            for (const it of items) {
-              if (it && typeof it === 'object') incomingItems.push(it);
+      const templateName = String(resultJSON.TEMPLATE_NAME || resultJSON.headingName || inputDict['data1'] || '').trim();
+      const isHbA1c =
+        templateName.toUpperCase().includes('HBA1C') ||
+        resultJSON.templateType === 'HBA1C' ||
+        inputDict['Peak'] !== undefined ||
+        inputDict['data12'] === 'HbA1C(IFCC)';
+
+      if (isHbA1c) {
+        // =========================================================================
+        // SPECIALIZED HBA1C TEMPLATE MAPPING (MATCHING OFFICIAL JSP SCHEMA)
+        // =========================================================================
+        // A. Heading
+        if (inputDict['data1'] !== undefined) {
+          inputDict['data1'] = templateName || 'HBA1C REPORT';
+        }
+
+        // B. HbA1C Result Section
+        const resArr = resultJSON.hba1cResult || resultJSON.Exam?.Result || resultJSON.Exam?.['HbA1C Result'] || [];
+        if (resArr[0]) {
+          const r0 = resArr[0];
+          inputDict['data2'] = r0.name || r0.Name || 'Glycated Haemoglobin (HbA1c)';
+          inputDict['data3'] = r0.operator || r0.Method || r0.method || '-';
+          inputDict['data4'] = r0.value !== undefined ? String(r0.value) : (r0.Value !== undefined ? String(r0.Value) : '');
+          inputDict['data5'] = r0.unit || r0.Unit || '% ofTotal Hb';
+          inputDict['data6'] = r0.refRange || r0.RefRange || r0['Ref Range'] || '<6%';
+        }
+        if (resArr[1]) {
+          const r1 = resArr[1];
+          inputDict['data7'] = r1.name || r1.Name || 'Estimated Average Glucose (eAG)';
+          inputDict['data8'] = r1.operator || r1.Method || r1.method || '-';
+          inputDict['data9'] = r1.value !== undefined ? String(r1.value) : (r1.Value !== undefined ? String(r1.Value) : '');
+          inputDict['data10'] = r1.unit || r1.Unit || 'mg/dL';
+          inputDict['data11'] = r1.refRange || r1.RefRange || r1['Ref Range'] || '';
+        }
+
+        // C. Peak Data Table (7 rows: data12 through data53)
+        const peakArr = resultJSON.peakDataTable || resultJSON.Exam?.PeakData || resultJSON.Exam?.['Peak Data'] || [];
+        const defaultPeaks = ['HbA1C(IFCC)', 'eAG[ADA]', 'Others 1', 'Others 2', 'Others 3', 'Peak Data', 'Graph Data'];
+        for (let i = 0; i < 7; i++) {
+          const base = 12 + i * 6;
+          const row = peakArr[i] || {};
+          inputDict[`data${base}`] = row.peak || row.Peak || row.name || row.Name || defaultPeaks[i];
+          inputDict[`data${base + 1}`] = row.time !== undefined ? String(row.time) : (row.Time !== undefined ? String(row.Time) : '');
+          inputDict[`data${base + 2}`] = row.abs !== undefined ? String(row.abs) : (row.ABS !== undefined ? String(row.ABS) : '');
+          inputDict[`data${base + 3}`] = row.area !== undefined ? String(row.area) : (row.Area !== undefined ? String(row.Area) : '');
+          inputDict[`data${base + 4}`] = row.result !== undefined ? String(row.result) : (row.Result !== undefined ? String(row.Result) : '');
+          inputDict[`data${base + 5}`] = row.refRange || row.RefRange || row['Ref Range'] || '';
+        }
+
+        // D. Summary Result (5 rows: data54 through data68)
+        const sumArr = resultJSON.summaryResult || resultJSON.Exam?.['Final Result'] || resultJSON.Exam?.['Summary Result'] || [];
+        const defaultSummary = ['TotalArea', 'HbA1C(NGSP)', 'eAG(ADA)', 'HbA1C(IFCC)', 'eAG[ADA]'];
+        for (let i = 0; i < 5; i++) {
+          const base = 54 + i * 3;
+          const row = sumArr[i] || {};
+          inputDict[`data${base}`] = row.name || row.Name || defaultSummary[i];
+          inputDict[`data${base + 1}`] = row.val1 !== undefined ? String(row.val1) : (row.Value !== undefined ? String(row.Value) : (row.value !== undefined ? String(row.value) : ''));
+          inputDict[`data${base + 2}`] = row.val2 !== undefined ? String(row.val2) : (row.Unit !== undefined ? String(row.Unit) : (row.unit !== undefined ? String(row.unit) : ''));
+        }
+
+        // E. Others (3 rows: data69 through data74)
+        const othArr = resultJSON.others || resultJSON.Exam?.Others || [];
+        for (let i = 0; i < 3; i++) {
+          const base = 69 + i * 2;
+          const row = othArr[i] || {};
+          inputDict[`data${base}`] = row.name || row.Name || `Others ${i + 1}`;
+          inputDict[`data${base + 1}`] = row.value !== undefined ? String(row.value) : (row.Value !== undefined ? String(row.Value) : '');
+        }
+      } else {
+        // =========================================================================
+        // GENERAL CLINICAL TEMPLATES (URINE, STOOL, SEMEN, CSF, HISTOPATHOLOGY, ETC.)
+        // =========================================================================
+        if (inputDict['data1'] !== undefined) {
+          inputDict['data1'] = templateName;
+        }
+
+        // Flatten incoming clinical items from resultJSON.Exam
+        const incomingItems = [];
+        if (resultJSON.Exam && typeof resultJSON.Exam === 'object') {
+          for (const [sectionKey, items] of Object.entries(resultJSON.Exam)) {
+            if (Array.isArray(items)) {
+              for (const it of items) {
+                if (it && typeof it === 'object') incomingItems.push(it);
+              }
             }
           }
         }
-      }
 
-      // Build key-value maps for fallback matching
-      const valuesMap = new Map();
-      const unitsMap = new Map();
-      for (const it of incomingItems) {
-        const k = String(it.Name || it.name || '').trim().toLowerCase();
-        if (k) {
-          valuesMap.set(k, String(it.Value ?? it.value ?? ''));
-          if (it.Unit !== undefined || it.unit !== undefined) {
-            unitsMap.set(k, String(it.Unit ?? it.unit ?? ''));
+        // Group inputs by clinical parameter roles
+        // Only actual text inputs with blue styling signify parameter names (avoiding <select> or drawing tags)
+        const paramsList = [];
+        let currentParam = null;
+
+        for (const inp of inputs) {
+          const raw = inp[0];
+          const tag = inp[1].toLowerCase();
+          const name = inp[2];
+          const valMatch = raw.match(/value=["']([^"']*)["']/i);
+          let val = valMatch ? valMatch[1] : '';
+
+          const isBlueInput =
+            tag === 'input' &&
+            raw.includes('#0000ff') &&
+            !name.startsWith('drawing') &&
+            (raw.includes('border: 3px solid #0000ff') ||
+              raw.includes('border: 6px solid #0000ff') ||
+              raw.includes('border: 8px solid #0000ff'));
+          const isRed = raw.includes('#ff1a1a');
+          const isGreen = raw.includes('#00cc00');
+          const isOrange = raw.includes('#ff8000');
+
+          if (isBlueInput) {
+            currentParam = { labelField: name, label: val, valueField: null, unitField: null, refRangeField: null };
+            paramsList.push(currentParam);
+          } else if (isRed && currentParam && !currentParam.valueField) {
+            currentParam.valueField = name;
+          } else if (isGreen && currentParam && !currentParam.unitField) {
+            currentParam.unitField = name;
+          } else if (isOrange && currentParam && !currentParam.refRangeField) {
+            currentParam.refRangeField = name;
           }
         }
+
+        // Apply clinical findings to parameter inputs
+        paramsList.forEach((param, pIdx) => {
+          const normLabel = String(param.label || '').trim().toLowerCase();
+          let matched = incomingItems.find(
+            (it) => it && String(it.originalName || it.Name || it.name || '').trim().toLowerCase() === normLabel
+          );
+          if (!matched && incomingItems[pIdx]) {
+            matched = incomingItems[pIdx];
+          }
+
+          if (matched) {
+            const newName = matched.Name ?? matched.name;
+            if (newName !== undefined && param.labelField) {
+              inputDict[param.labelField] = String(newName);
+            }
+            const newVal = matched.Value ?? matched.value;
+            if (newVal !== undefined && param.valueField) {
+              inputDict[param.valueField] = String(newVal);
+            }
+            const newUnit = matched.Unit ?? matched.unit;
+            if (newUnit !== undefined && param.unitField) {
+              inputDict[param.unitField] = String(newUnit);
+            }
+            const newRefRange = matched.RefRange ?? matched['Ref Range'] ?? matched.refRange;
+            if (newRefRange !== undefined && param.refRangeField) {
+              inputDict[param.refRangeField] = String(newRefRange);
+            }
+          }
+        });
       }
 
-      // 3. Apply updates to parameters (Blue = Name, Red = Value/Paragraph, Green = Unit)
-      paramsList.forEach((param, pIdx) => {
-        const normLabel = String(param.label || '').trim().toLowerCase();
-        let matched = incomingItems.find(
-          (it) => it && String(it.originalName || it.Name || it.name || '').trim().toLowerCase() === normLabel
-        );
-        if (!matched && incomingItems[pIdx]) {
-          matched = incomingItems[pIdx];
-        }
-
-        if (matched) {
-          // Blue Box: Parameter Name
-          const newName = matched.Name ?? matched.name;
-          if (newName !== undefined && param.labelField) {
-            inputDict[param.labelField] = String(newName);
-          }
-          // Red Box: Observation / Paragraph Finding
-          const newVal = matched.Value ?? matched.value;
-          if (newVal !== undefined && param.valueField) {
-            inputDict[param.valueField] = String(newVal);
-          }
-          // Green Box: Unit
-          const newUnit = matched.Unit ?? matched.unit;
-          if (newUnit !== undefined && param.unitField) {
-            inputDict[param.unitField] = String(newUnit);
-          }
-        } else {
-          // Fallback map lookup by label
-          if (param.valueField && valuesMap.has(normLabel)) {
-            inputDict[param.valueField] = valuesMap.get(normLabel);
-          }
-          if (param.unitField && unitsMap.has(normLabel)) {
-            inputDict[param.unitField] = unitsMap.get(normLabel);
-          }
-        }
-      });
-
-      // 4. Update title in data1
-      if (inputDict['data1'] !== undefined) {
-        inputDict['data1'] = resultJSON.TEMPLATE_NAME || resultJSON.headingName || inputDict['data1'];
-      }
-
-      // Build form payload
+      // Build form payload in exact document sequence to support duplicate tag names like drawing1/drawing2
       const postData = new URLSearchParams();
-      for (const [name, val] of Object.entries(inputDict)) {
-        postData.append(name, val ?? '');
+      let drawingIdx = 0;
+      for (const inp of inputs) {
+        const name = inp[2];
+        if (name === 'drawing2') {
+          const drawArr = resultJSON.drawingData || resultJSON.Exam?.['Drawing Data'] || [];
+          const it = drawArr[drawingIdx++];
+          const val = it ? (it.value !== undefined ? String(it.value) : (it.Value !== undefined ? String(it.Value) : '')) : '';
+          postData.append(name, val);
+        } else {
+          postData.append(name, inputDict[name] ?? '');
+        }
       }
 
       // 2. Submit to SaveTemplateData servlet

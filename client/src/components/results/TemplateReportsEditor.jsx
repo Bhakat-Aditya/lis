@@ -32,7 +32,7 @@ import {
   Printer,
   Cpu,
 } from 'lucide-react';
-import { sortSectionKeys, orderExamObject } from '../../utils/templateSequence.js';
+import { sortSectionKeys, orderExamObject, openUpstreamTemplateEditor } from '../../utils/templateSequence.js';
 
 /**
  * Standard default examination result schema for full-page template reports
@@ -1195,10 +1195,27 @@ export default function TemplateReportsEditor({
                             );
                           }}
                           className="flex-1 py-2.5 px-3 bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 active:scale-95 text-white font-bold text-xs sm:text-sm rounded-xl shadow-xs hover:shadow-md transition-all cursor-pointer text-center flex items-center justify-center gap-2"
-                          title="Open full-page dedicated template findings editor"
+                          title="Open full-page dedicated template findings editor (My Editor)"
                         >
                           <FileEdit className="w-4 h-4" />
-                          <span>Template Editor</span>
+                          <span>My Editor</span>
+                        </button>
+
+                        {/* 1b. Upstream AWS Template Editor */}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            openUpstreamTemplateEditor({
+                              patientId: cleanPid,
+                              reportId: rId,
+                              name: testName,
+                            })
+                          }
+                          className="py-2.5 px-3 bg-amber-50 hover:bg-amber-100 active:scale-95 text-amber-800 border border-amber-300 font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
+                          title="Open official AWS template editor (editTemplateV2.jsp) in new window"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5 text-amber-700" />
+                          <span>AWS Editor</span>
                         </button>
 
                         {/* 2. Quick Inline Drawer Button */}
@@ -1349,7 +1366,7 @@ export default function TemplateReportsEditor({
                       <span className="hidden sm:inline">{isItemSaving ? 'Saving...' : isItemDirty ? 'Save' : 'Saved'}</span>
                     </button>
 
-                    {/* Dedicated Full-Page Template Editor Button */}
+                    {/* Dedicated Full-Page Template Editor Button (My Editor) */}
                     <button
                       type="button"
                       onClick={() => {
@@ -1363,10 +1380,31 @@ export default function TemplateReportsEditor({
                         );
                       }}
                       className="p-1.5 px-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white rounded-lg transition-all cursor-pointer flex items-center gap-1 text-xs font-bold shadow-2xs active:scale-95"
-                      title="Open full-page dedicated template findings editor"
+                      title="Open full-page dedicated template findings editor (My Editor)"
                     >
                       <FileEdit className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Template Editor</span>
+                      <span className="hidden sm:inline">My Editor</span>
+                    </button>
+
+                    {/* Upstream AWS Template Editor Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const rawPid = patient?.patientId || patient?.slNo || '';
+                        const cleanPid = String(rawPid).toUpperCase().startsWith('P')
+                          ? `P${String(rawPid).replace(/^P+/i, '')}`
+                          : `P${rawPid}`;
+                        openUpstreamTemplateEditor({
+                          patientId: cleanPid,
+                          reportId: rId,
+                          name: tmpl.testName || tmpl.TEMPLATE_NAME,
+                        });
+                      }}
+                      className="p-1.5 px-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg transition-all cursor-pointer flex items-center gap-1 text-xs font-bold shadow-2xs active:scale-95"
+                      title="Open official AWS template editor (editTemplateV2.jsp) in new window"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 text-amber-700" />
+                      <span className="hidden sm:inline">AWS Editor</span>
                     </button>
 
                     {/* Download Result from Analyzer (DOWNLOADRESULT) - Checking possibleDownload !== false */}
@@ -1721,10 +1759,31 @@ export default function TemplateReportsEditor({
                               );
                             }}
                             className="inline-flex items-center gap-1 px-2.5 py-1 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer"
-                            title="Open full-page dedicated template findings editor"
+                            title="Open full-page dedicated template findings editor (My Editor)"
                           >
                             <FileEdit className="w-3.5 h-3.5" />
-                            <span className="hidden md:inline">Editor</span>
+                            <span className="hidden md:inline">My Editor</span>
+                          </button>
+
+                          {/* Upstream AWS Template Editor */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const rawPid = patient?.patientId || patient?.slNo || '';
+                              const cleanPid = String(rawPid).toUpperCase().startsWith('P')
+                                ? `P${String(rawPid).replace(/^P+/i, '')}`
+                                : `P${rawPid}`;
+                              openUpstreamTemplateEditor({
+                                patientId: cleanPid,
+                                reportId: rId,
+                                name: tmpl.testName || tmpl.TEMPLATE_NAME,
+                              });
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 hover:bg-amber-100 active:scale-95 text-amber-800 rounded-lg text-xs font-bold border border-amber-300 shadow-2xs transition-all cursor-pointer"
+                            title="Open official AWS template editor (editTemplateV2.jsp) in new window"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5 text-amber-700" />
+                            <span className="hidden md:inline">AWS Editor</span>
                           </button>
 
                           {/* Download Result from Analyzer (DOWNLOADRESULT) - Checking possibleDownload !== false */}

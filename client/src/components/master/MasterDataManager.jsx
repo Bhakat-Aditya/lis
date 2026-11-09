@@ -22,7 +22,9 @@ import {
   FileText,
   TestTube,
   BookOpen,
+  ExternalLink,
 } from 'lucide-react';
+import { openUpstreamTemplateEditor } from '../../utils/templateSequence.js';
 
 export default function MasterDataManager() {
   const {
@@ -114,6 +116,18 @@ export default function MasterDataManager() {
     navigate(
       `/patients/${patientId}/template/${reportId}?name=${encodeURIComponent(tmplName)}&templateId=${encodeURIComponent(tmplId)}&from=master`
     );
+  };
+
+  const handleOpenAwsEditor = (tmpl) => {
+    const patientId = 'P14';
+    let reportId = tmpl.reportId;
+    if (!reportId && tmpl.templatesId) {
+      const num = String(tmpl.templatesId).replace(/^T/i, '');
+      reportId = `P14R${num}`;
+    }
+    if (!reportId) reportId = 'P14R1';
+    const tmplName = tmpl.TEMPLATE_NAME || tmpl.name || 'Template Report';
+    openUpstreamTemplateEditor({ patientId, reportId, name: tmplName });
   };
 
   const computeFallbackNextId = (items = []) => {
@@ -235,6 +249,47 @@ export default function MasterDataManager() {
     });
     return map;
   }, [profiles]);
+
+  const renderSignatureBadges = (signStr) => {
+    if (!signStr || !String(signStr).trim()) {
+      return <span className="text-slate-400 italic text-[11px]">-</span>;
+    }
+    const ids = String(signStr)
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (ids.length === 0) return <span className="text-slate-400 italic text-[11px]">-</span>;
+
+    const normalize = (s) => ({
+      id: String(s?.Id ?? s?.id ?? ''),
+      name: s?.Name ?? s?.name ?? s?.Post ?? s?.designation ?? `Sign #${s?.Id || s?.id}`,
+      role: s?.Post ?? s?.post ?? s?.designation ?? '',
+      image: s?.['Sign Image Source'] ?? s?.image ?? '',
+    });
+
+    const normList = (Array.isArray(signList) ? signList : []).map(normalize);
+
+    return (
+      <div className="flex items-center gap-1 flex-wrap">
+        {ids.map((id, idx) => {
+          const found = normList.find((s) => String(s.id) === String(id));
+          const name = found?.name || `Sign #${id}`;
+          return (
+            <span
+              key={`${id}-${idx}`}
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200"
+              title={`Sequence #${idx + 1}: ${name} (ID: ${id})`}
+            >
+              <span className="w-3.5 h-3.5 rounded-full bg-indigo-600 text-white text-[9px] font-bold flex items-center justify-center shrink-0">
+                {idx + 1}
+              </span>
+              <span className="truncate max-w-[90px]">{name}</span>
+            </span>
+          );
+        })}
+      </div>
+    );
+  };
 
   const handleRefresh = async (key = null) => {
     setRefreshing(true);
@@ -446,6 +501,7 @@ export default function MasterDataManager() {
                 <tr>
                   <th className="py-2.5 px-4 w-24">Template ID</th>
                   <th className="py-2.5 px-4">Template Report Name</th>
+                  <th className="py-2.5 px-4">Signatures</th>
                   <th className="py-2.5 px-4">Report Structure</th>
                   <th className="py-2.5 px-4">Sync Date</th>
                   <th className="py-2.5 px-4">Status</th>
@@ -455,7 +511,7 @@ export default function MasterDataManager() {
               <tbody className="divide-y divide-slate-100">
                 {templates.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-6 text-center text-slate-400">
+                    <td colSpan={7} className="py-6 text-center text-slate-400">
                       No master template reports loaded.
                     </td>
                   </tr>
@@ -476,6 +532,7 @@ export default function MasterDataManager() {
                         <td className="py-2 px-4">
                           <span className="font-bold text-slate-900">{tmpl.TEMPLATE_NAME || tmpl.name}</span>
                         </td>
+                        <td className="py-2 px-4">{renderSignatureBadges(tmpl.sign)}</td>
                         <td className="py-2 px-4 text-slate-600">
                           <span className="bg-purple-50 text-purple-800 border border-purple-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
                             Full-Page Report Structure
@@ -506,15 +563,26 @@ export default function MasterDataManager() {
                               <span>Edit Basic</span>
                             </button>
 
-                            {/* Option 2: API_UPDATE_TEMPLATE_DATA (prefill findings schema) */}
+                            {/* Option 2: Custom Modern Editor (My Editor) */}
                             <button
                               type="button"
                               onClick={() => handleEditPrefillData(tmpl)}
                               className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 rounded-md border border-purple-200 transition-colors cursor-pointer"
-                              title="Edit prefill template findings data - API_UPDATE_TEMPLATE_DATA"
+                              title="Edit prefill template findings data in custom modern editor"
                             >
                               <FileText className="w-3 h-3" />
-                              <span>Edit Prefill Data</span>
+                              <span>My Editor</span>
+                            </button>
+
+                            {/* Option 3: Upstream AWS Template Editor */}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenAwsEditor(tmpl)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 rounded-md border border-amber-300 transition-colors cursor-pointer"
+                              title="Open official AWS template editor (editTemplateV2.jsp) in new window"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              <span>AWS Editor</span>
                             </button>
                           </div>
                         </td>
@@ -1072,6 +1140,7 @@ export default function MasterDataManager() {
                   <th className="py-2.5 px-4 w-20">Dept ID</th>
                   <th className="py-2.5 px-4">Department Name</th>
                   <th className="py-2.5 px-4">Short Name</th>
+                  <th className="py-2.5 px-4">Signatures</th>
                   <th className="py-2.5 px-4">Status</th>
                   <th className="py-2.5 px-4 text-right">Action</th>
                 </tr>
@@ -1091,6 +1160,7 @@ export default function MasterDataManager() {
                       <td className="py-2 px-4 font-mono font-bold text-indigo-600">{dept['Dept Id']}</td>
                       <td className="py-2 px-4 font-semibold text-slate-800">{dept.Name}</td>
                       <td className="py-2 px-4 text-slate-500 font-medium">{dept['Short Name'] || '-'}</td>
+                      <td className="py-2 px-4">{renderSignatureBadges(dept.sign)}</td>
                       <td className="py-2 px-4">
                         <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
                           {dept.Status || 'Active'}

@@ -69,7 +69,11 @@ router.post(
   addMultipleTests
 );
 
-// Delete Patient record (Restricted to Super)
-router.post('/delete', requireRoles([ROLES.SUPER]), deletePatient);
+// Rule 1 & 2: Delete Patient record (Accessible to Super, Receptionist, Office, Branch, Setting)
+router.post(
+  '/delete',
+  requireRoles([ROLES.SUPER, ROLES.RECEPTIONIST, ROLES.OFFICE, ROLES.BRANCH, ROLES.SETTING]),
+  deletePatient
+);
 
 export default router;

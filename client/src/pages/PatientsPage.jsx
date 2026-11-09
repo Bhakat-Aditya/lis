@@ -24,6 +24,7 @@ import {
   FlaskConical,
   Filter,
   Edit,
+  Trash2,
   Package,
   Layers,
   ListTree,
@@ -43,6 +44,7 @@ import {
   sortPatientsByRecent,
 } from '../utils/dateUtils.js';
 import BillPreviewModal from '../components/billing/BillPreviewModal.jsx';
+import ConfirmationModal from '../components/common/ConfirmationModal.jsx';
 import PatientEditModal from '../components/patient/PatientEditModal.jsx';
 
 // Upstream LIS Payment Constants
@@ -155,6 +157,10 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
   const [toDate, setToDate] = useState(todayStr);
   const [previewBillPatient, setPreviewBillPatient] = useState(null);
   const [editingPatient, setEditingPatient] = useState(null);
+  const [deletingPatient, setDeletingPatient] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteSuccess, setDeleteSuccess] = useState('');
   const [latestFoundDate, setLatestFoundDate] = useState(null);
   const [searchTerm, setSearchTerm] = useState(urlSearch);
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('ALL');
@@ -242,6 +248,39 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
     } else if (mode === 'last7days') {
       setFromDate(past7DaysStr);
       setToDate(todayStr);
+    }
+  };
+
+  const handleDeletePatient = async () => {
+    if (!deletingPatient) return;
+    setDeleteLoading(true);
+    setDeleteError('');
+    try {
+      const pid = deletingPatient.patientId || deletingPatient.id;
+      const res = await api.post('/patients/delete', {
+        patientId: pid,
+        patientName: deletingPatient.name,
+        slNo: deletingPatient.slNo,
+        mobile: deletingPatient.mobile,
+      });
+
+      if (res.data?.STATUS === 'FAILED') {
+        throw new Error(res.data?.Message || 'Failed to delete patient');
+      }
+
+      setDeleteSuccess(`Patient ${deletingPatient.name || pid} deleted successfully.`);
+      setPatients((prev) =>
+        prev.filter((p) => String(p.patientId || p.id).toUpperCase() !== String(pid).toUpperCase())
+      );
+      if (expandedRowId && String(expandedRowId).toUpperCase() === String(pid).toUpperCase()) {
+        setExpandedRowId(null);
+      }
+      setDeletingPatient(null);
+      setTimeout(() => setDeleteSuccess(''), 4000);
+    } catch (err) {
+      setDeleteError(err.response?.data?.Message || err.message || 'Error deleting patient');
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -392,6 +431,20 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
           content="Diagnostic worklist and patient records management in Lab Expert."
         />
       </Helmet>
+
+      {/* Delete Patient Feedback Banner */}
+      {deleteSuccess && (
+        <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 px-4 py-2.5 rounded-lg text-xs font-semibold flex items-center justify-between shadow-2xs">
+          <span>✓ {deleteSuccess}</span>
+          <button onClick={() => setDeleteSuccess('')} className="text-emerald-600 hover:text-emerald-900 font-bold ml-2 cursor-pointer">×</button>
+        </div>
+      )}
+      {deleteError && (
+        <div className="bg-rose-50 border border-rose-300 text-rose-800 px-4 py-2.5 rounded-lg text-xs font-semibold flex items-center justify-between shadow-2xs">
+          <span>⚠️ {deleteError}</span>
+          <button onClick={() => setDeleteError('')} className="text-rose-600 hover:text-rose-900 font-bold ml-2 cursor-pointer">×</button>
+        </div>
+      )}
 
       {/* Top Search & Date Filter Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-white px-3.5 py-2.5 rounded-lg border border-slate-200 shadow-2xs">
@@ -754,6 +807,17 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                               className="p-1 text-slate-500 hover:text-blue-600 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-lg transition-all cursor-pointer shadow-2xs"
                             >
                               <Edit className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeletingPatient(p);
+                              }}
+                              title="Delete Patient Record"
+                              className="p-1 text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 hover:border-rose-300 rounded-lg transition-all cursor-pointer shadow-2xs"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </td>
@@ -1163,6 +1227,16 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                                     <FileText className="w-3.5 h-3.5" />
                                     <span>AWS Bill Preview</span>
                                   </button>
+
+                                  {/* Delete Patient Record Action */}
+                                  <button
+                                    onClick={() => setDeletingPatient(p)}
+                                    className="w-full flex items-center justify-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold py-1.5 px-3 rounded-lg shadow-xs cursor-pointer transition-all"
+                                    title="Delete this patient record"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <span>Delete Patient</span>
+                                  </button>
                                 </div>
 
                               </div>
@@ -1243,6 +1317,25 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
           }}
         />
       )}
+
+      {/* Delete Patient Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={Boolean(deletingPatient)}
+        onClose={() => {
+          if (!deleteLoading) {
+            setDeletingPatient(null);
+            setDeleteError('');
+          }
+        }}
+        onConfirm={handleDeletePatient}
+        title="Delete Patient Record?"
+        message={`Are you sure you want to delete patient "${deletingPatient?.name || deletingPatient?.patientId || ''}" (ID: ${deletingPatient?.patientId || deletingPatient?.id})? This will remove the patient from active worklists and diagnostic reports.`}
+        confirmText="Delete Patient"
+        cancelText="Cancel"
+        variant="danger"
+        icon="trash"
+        loading={deleteLoading}
+      />
     </section>
   );
 }

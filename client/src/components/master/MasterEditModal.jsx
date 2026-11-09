@@ -51,12 +51,26 @@ function SignatureSelector({ signList = [], value = '', onChange }) {
     .map((s) => s.trim())
     .filter(Boolean);
 
+  const normalize = (s) => {
+    const id = String(s?.Id ?? s?.id ?? '');
+    const name = s?.Name ?? s?.name ?? s?.Post ?? s?.designation ?? `Sign #${id}`;
+    const role = s?.Post ?? s?.post ?? s?.designation ?? '';
+    const image = s?.['Sign Image Source'] ?? s?.image ?? '';
+    return { id, name, role, image };
+  };
+
+  const normalizedList = (Array.isArray(signList) ? signList : []).map(normalize);
+
   const getSignDetails = (id) => {
-    const found = signList.find((s) => String(s.id) === String(id));
-    return {
-      name: found?.name || `Signature #${id}`,
-      designation: found?.designation || '',
-    };
+    const found = normalizedList.find((s) => String(s.id) === String(id));
+    return (
+      found || {
+        id: String(id),
+        name: `Signature #${id}`,
+        role: '',
+        image: '',
+      }
+    );
   };
 
   const handleToggle = (id) => {
@@ -96,11 +110,12 @@ function SignatureSelector({ signList = [], value = '', onChange }) {
             Select Signatures & Print Sequence
           </label>
           <p className="text-[11px] text-slate-500">
-            Select signatures and order sequence as required. (API sends <code className="font-mono text-indigo-600 font-bold">sign={selectedIds.join(',') || '...'}</code>)
+            Select signatures and order sequence as required. (API sends{' '}
+            <code className="font-mono text-indigo-600 font-bold">sign={selectedIds.join(',') || '...'}</code>)
           </p>
         </div>
         {selectedIds.length > 0 && (
-          <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
+          <span className="font-mono text-[11px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
             sign={selectedIds.join(',')}
           </span>
         )}
@@ -112,24 +127,37 @@ function SignatureSelector({ signList = [], value = '', onChange }) {
           <span className="text-[10px] font-bold uppercase text-slate-500 tracking-wider block">
             Selected Sign-Off Sequence ({selectedIds.length})
           </span>
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             {selectedIds.map((id, idx) => {
               const details = getSignDetails(id);
               return (
                 <div
                   key={id}
-                  className="flex items-center justify-between gap-2 bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 shadow-2xs text-xs font-semibold text-slate-800"
+                  className="flex items-center justify-between gap-2 bg-white px-3 py-2 rounded-lg border border-slate-200 shadow-2xs text-xs font-semibold text-slate-800"
                 >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-[10px] shrink-0">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-[10px] shrink-0 shadow-xs">
                       {idx + 1}
                     </span>
-                    <span className="truncate">{details.name}</span>
-                    {details.designation && (
-                      <span className="text-[10px] text-slate-500 font-normal truncate">
-                        ({details.designation})
+                    {details.image && (
+                      <img
+                        src={details.image}
+                        alt={details.name}
+                        className="h-6 max-w-[70px] object-contain bg-white px-1 rounded border border-slate-200 shrink-0"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                        }}
+                      />
+                    )}
+                    <span className="truncate text-slate-900 font-bold">{details.name}</span>
+                    {details.role && details.role !== details.name && (
+                      <span className="text-[11px] text-slate-500 font-normal truncate">
+                        ({details.role})
                       </span>
                     )}
+                    <span className="text-[9px] font-mono font-semibold px-1 py-0.2 rounded bg-slate-100 text-slate-500 shrink-0">
+                      ID: {id}
+                    </span>
                   </div>
 
                   <div className="flex items-center gap-1 shrink-0">
@@ -137,7 +165,7 @@ function SignatureSelector({ signList = [], value = '', onChange }) {
                       type="button"
                       onClick={() => handleMoveUp(idx)}
                       disabled={idx === 0}
-                      className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-slate-100 hover:bg-slate-200 text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                      className="w-6 h-6 flex items-center justify-center text-[10px] font-bold rounded bg-slate-100 hover:bg-slate-200 text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                       title="Move up in sequence"
                     >
                       ▲
@@ -146,7 +174,7 @@ function SignatureSelector({ signList = [], value = '', onChange }) {
                       type="button"
                       onClick={() => handleMoveDown(idx)}
                       disabled={idx === selectedIds.length - 1}
-                      className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-slate-100 hover:bg-slate-200 text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                      className="w-6 h-6 flex items-center justify-center text-[10px] font-bold rounded bg-slate-100 hover:bg-slate-200 text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                       title="Move down in sequence"
                     >
                       ▼
@@ -154,7 +182,7 @@ function SignatureSelector({ signList = [], value = '', onChange }) {
                     <button
                       type="button"
                       onClick={() => handleToggle(id)}
-                      className="px-1.5 py-0.5 text-[11px] font-bold rounded bg-rose-50 hover:bg-rose-100 text-rose-600 cursor-pointer ml-1"
+                      className="w-6 h-6 flex items-center justify-center text-[13px] font-bold rounded bg-rose-50 hover:bg-rose-100 text-rose-600 cursor-pointer ml-1"
                       title="Remove signature"
                     >
                       &times;
@@ -173,28 +201,39 @@ function SignatureSelector({ signList = [], value = '', onChange }) {
 
       {/* Available Signatures */}
       <div>
-        <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider block mb-1">
+        <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider block mb-1.5">
           Available System Signatures
         </span>
         <div className="flex flex-wrap gap-1.5">
-          {signList.map((s) => {
-            const sId = String(s.id);
-            const isSelected = selectedIds.includes(sId);
+          {normalizedList.map((s) => {
+            const isSelected = selectedIds.includes(s.id);
             return (
               <button
-                key={sId}
+                key={s.id}
                 type="button"
-                onClick={() => handleToggle(sId)}
-                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                onClick={() => handleToggle(s.id)}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   isSelected
                     ? 'bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs ring-1 ring-emerald-200'
-                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:border-slate-300'
                 }`}
               >
-                <span>{isSelected ? '✓' : '+'}</span>
-                <span>{s.name || `Sign #${sId}`}</span>
-                {s.designation && (
-                  <span className="text-[10px] opacity-75 font-normal">({s.designation})</span>
+                <span className={isSelected ? 'text-emerald-600 font-bold' : 'text-slate-400'}>
+                  {isSelected ? '✓' : '+'}
+                </span>
+                {s.image && (
+                  <img
+                    src={s.image}
+                    alt={s.name}
+                    className="h-4 max-w-[40px] object-contain shrink-0"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                    }}
+                  />
+                )}
+                <span>{s.name}</span>
+                {s.role && s.role !== s.name && (
+                  <span className="text-[10px] opacity-75 font-normal">({s.role})</span>
                 )}
               </button>
             );

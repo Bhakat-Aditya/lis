@@ -30,6 +30,7 @@ import {
   User,
   CreditCard,
   Edit,
+  Trash2,
   Loader2,
   AlertCircle,
   Printer,
@@ -228,6 +229,38 @@ export default function PatientDetailPage() {
 
   const handleOpenBillPdf = () => {
     setShowBillPreviewModal(true);
+  };
+
+  const handleDeletePatient = () => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Patient Record?',
+      message: `Are you sure you want to permanently delete patient "${patient?.name || id}" (ID: ${id})?`,
+      description: 'This will remove the patient record from active worklists and diagnostic reports.',
+      confirmText: 'Delete Patient',
+      cancelText: 'Cancel',
+      variant: 'danger',
+      icon: 'trash',
+      onConfirm: async () => {
+        try {
+          setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+          setLoading(true);
+          const res = await api.post('/patients/delete', {
+            patientId: id,
+            patientName: patient?.name,
+            slNo: patient?.slNo,
+            mobile: patient?.mobile,
+          });
+          if (res.data?.STATUS === 'FAILED') {
+            throw new Error(res.data?.Message || 'Failed to delete patient');
+          }
+          navigate('/patients');
+        } catch (err) {
+          setErrorMessage(err.response?.data?.Message || err.message || 'Error deleting patient');
+          setLoading(false);
+        }
+      },
+    });
   };
 
 
@@ -656,6 +689,15 @@ export default function PatientDetailPage() {
           >
             <Edit className="w-3.5 h-3.5" />
             <span>Edit Patient</span>
+          </button>
+
+          <button
+            onClick={handleDeletePatient}
+            className="flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 active:scale-95 text-xs font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer shadow-2xs"
+            title="Delete Patient Record"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Delete</span>
           </button>
 
           <button

@@ -1,0 +1,808 @@
+{
+  "P14R8": {
+    "resultJSON": {
+      "TEMPLATE_NAME": "COMPLETE BLOOD COUNT",
+      "Exam": {
+        "Others": [
+          {
+            "Value": "",
+            "Name": "Others 0",
+            "Unit": "",
+            "showUnitInput": false,
+            "RefRange": "",
+            "Ref Range": ""
+          },
+          {
+            "Value": "10",
+            "Name": "Others 1",
+            "Unit": "/CU.mm",
+            "showUnitInput": true,
+            "RefRange": "",
+            "Ref Range": ""
+          },
+          {
+            "Value": "",
+            "Name": "Others 2",
+            "Unit": "",
+            "showUnitInput": false,
+            "RefRange": "",
+            "Ref Range": ""
+          },
+          {
+            "Value": "",
+            "Name": "Others 3",
+            "Unit": "",
+            "showUnitInput": false,
+            "RefRange": "",
+            "Ref Range": ""
+          },
+          {
+            "Value": "",
+            "Name": "Others 4",
+            "Unit": "",
+            "showUnitInput": false,
+            "RefRange": "",
+            "Ref Range": ""
+          }
+        ],
+        "DIFFRENTIAL COUNT": [
+          {
+            "Value": "56",
+            "Ref Range": "",
+            "Method": "56",
+            "Unit": "%",
+            "Name": "Neutrophils"
+          },
+          {
+            "Value": "10",
+            "Ref Range": "",
+            "Method": "10",
+            "Unit": "%",
+            "Name": "Lymphocytes"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Monocytes"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Eosinophil"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Basophil"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Band neutrophil"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Myeloblast"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Myelocyte"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Promyelocyte"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Metamyelocyte"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Monocytoid cell"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Lymphocytoid cell"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Atypical lymphocytoid cell"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Lymphoid cell"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Atypical mononuclear cell"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Myeoloblast & promyelocyte"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Promyelocyte & Blasts"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Lymphoblasts"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Blasts"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Promyeloblasts"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Monocytoid cell including"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Monoblast"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Absolute neutrophil count"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Absolute lymphocyte count"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Absolute Eosinophil Count"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "I.T.Ratio"
+          }
+        ],
+        "Extra": [
+          {
+            "Value": "10",
+            "Ref Range": "",
+            "Method": "M34",
+            "Unit": "%",
+            "Name": "Reticulocyte count"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "M34",
+            "Unit": "cu micron",
+            "Name": "Reticulocyte production index"
+          }
+        ],
+        "GBP": [
+          {
+            "Value": "10",
+            "Method": "M34",
+            "Name": "RBC"
+          },
+          {
+            "Value": "",
+            "Method": "M34",
+            "Name": "WBC"
+          },
+          {
+            "Value": "",
+            "Method": "M34",
+            "Name": "Platelets"
+          },
+          {
+            "Value": "",
+            "Method": "M34",
+            "Name": "Parasite (MP/MF)"
+          }
+        ],
+        "INVESTIGATION": [
+          {
+            "Value": "10",
+            "Ref Range": "13-17",
+            "Method": "",
+            "Unit": "gm/dl",
+            "Name": "Haemoglobin",
+            "showUnitInput": true,
+            "RefRange": "13-17"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "/ cmm",
+            "Name": "Total WBC Count"
+          },
+          {
+            "Value": "56",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "R.B.C. Count"
+          }
+        ],
+        "PLATELETS ABSOLUTE VALUES": [
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Platelet count"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "P.D.W"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "MPV"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "PCT"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "LPCR"
+          }
+        ],
+        "RED CELL ABSOLUTE VALUES": [
+          {
+            "Value": "10",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "PCV/HCT"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Mean Corpuscular Volumne"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Mean Corpuscular Hb"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Mean Corpuscular Hb Con."
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "R.D.W"
+          }
+        ]
+      },
+      "Remark": [
+        {
+          "Value": "",
+          "Name": "Mean Corpuscular Hb"
+        },
+        {
+          "Value": "",
+          "Name": "Mean Corpuscular Hb Con."
+        },
+        {
+          "Value": "",
+          "Name": "R.D.W"
+        },
+        {
+          "Value": "",
+          "Name": "Remark"
+        },
+        {
+          "Value": "",
+          "Name": "LE cell Phenomenon"
+        }
+      ],
+      "headingName": "COMPLETE BLOOD COUNT"
+    },
+    "TEMPLATE_NAME": "COMPLETE BLOOD COUNT",
+    "reportId": "P14R8",
+    "patientId": "P14",
+    "name": "COMPLETE BLOOD COUNT",
+    "templatesId": "T8",
+    "templatesDate": "2026-11-01",
+    "status": "SAVED"
+  },
+  "P269T5": {
+    "resultJSON": {
+      "TEMPLATE_NAME": "HBA1C REPORT",
+      "Exam": {
+        "HbA1C Result": [
+          {
+            "Name": "Glycated Haemoglobin (HbA1c)",
+            "Value": "50",
+            "Unit": "% ofTotal Hb",
+            "RefRange": "<6%",
+            "Ref Range": "<6%",
+            "Method": "-",
+            "showUnitInput": true
+          },
+          {
+            "Name": "Estimated Average Glucose (eAG)",
+            "Value": "",
+            "Unit": "mg/dL",
+            "RefRange": "",
+            "Ref Range": "",
+            "Method": "-",
+            "showUnitInput": true
+          }
+        ],
+        "Summary Result": [
+          {
+            "Name": "TotalArea",
+            "Value": "10",
+            "Unit": "jj",
+            "RefRange": "",
+            "Ref Range": "",
+            "showUnitInput": true
+          },
+          {
+            "Name": "HbA1C(NGSP)",
+            "Value": "",
+            "Unit": "",
+            "RefRange": "",
+            "Ref Range": "",
+            "showUnitInput": false
+          },
+          {
+            "Name": "eAG(ADA)",
+            "Value": "",
+            "Unit": "",
+            "RefRange": "",
+            "Ref Range": "",
+            "showUnitInput": false
+          },
+          {
+            "Name": "HbA1C(IFCC)",
+            "Value": "",
+            "Unit": "",
+            "RefRange": "",
+            "Ref Range": "",
+            "showUnitInput": false
+          },
+          {
+            "Name": "eAG[ADA]",
+            "Value": "",
+            "Unit": "",
+            "RefRange": "",
+            "Ref Range": "",
+            "showUnitInput": false
+          }
+        ],
+        "Final Result": [
+          {
+            "Value": "10",
+            "Unit": "jj",
+            "Name": "TotalArea",
+            "showUnitInput": true,
+            "RefRange": "",
+            "Ref Range": ""
+          },
+          {
+            "Value": "",
+            "Unit": "",
+            "Name": "HbA1C(NGSP)",
+            "showUnitInput": false,
+            "RefRange": "",
+            "Ref Range": ""
+          },
+          {
+            "Value": "",
+            "Unit": "",
+            "Name": "eAG(ADA)",
+            "showUnitInput": false,
+            "RefRange": "",
+            "Ref Range": ""
+          },
+          {
+            "Value": "",
+            "Unit": "",
+            "Name": "HbA1C(IFCC)",
+            "showUnitInput": false,
+            "RefRange": "",
+            "Ref Range": ""
+          },
+          {
+            "Value": "",
+            "Unit": "",
+            "Name": "eAG[ADA]",
+            "showUnitInput": false,
+            "RefRange": "",
+            "Ref Range": ""
+          }
+        ],
+        "PeakData": [
+          {
+            "ABS": "",
+            "Area": "",
+            "Peak": "HbA1C(IFCC)",
+            "Time": "",
+            "Ref Range": "",
+            "Result": "",
+            "Name": "",
+            "Value": "",
+            "Unit": "",
+            "showUnitInput": false,
+            "RefRange": ""
+          },
+          {
+            "ABS": "",
+            "Area": "",
+            "Peak": "eAG[ADA]",
+            "Time": "",
+            "Ref Range": "",
+            "Result": "",
+            "Name": "",
+            "Value": "",
+            "Unit": "",
+            "showUnitInput": false,
+            "RefRange": ""
+          },
+          {
+            "ABS": "",
+            "Area": "",
+            "Peak": "Others 1",
+            "Time": "",
+            "Ref Range": "",
+            "Result": "",
+            "Name": "",
+            "Value": "",
+            "Unit": "",
+            "showUnitInput": false,
+            "RefRange": ""
+          },
+          {
+            "ABS": "",
+            "Area": "",
+            "Peak": "Others 2",
+            "Time": "",
+            "Ref Range": "",
+            "Result": "",
+            "Name": "",
+            "Value": "",
+            "Unit": "",
+            "showUnitInput": false,
+            "RefRange": ""
+          },
+          {
+            "ABS": "",
+            "Area": "",
+            "Peak": "Others 3",
+            "Time": "",
+            "Ref Range": "",
+            "Result": "",
+            "Name": "",
+            "Value": "",
+            "Unit": "",
+            "showUnitInput": false,
+            "RefRange": ""
+          },
+          {
+            "ABS": "",
+            "Area": "",
+            "Peak": "Peak Data",
+            "Time": "",
+            "Ref Range": "",
+            "Result": "",
+            "Name": "",
+            "Value": "",
+            "Unit": "",
+            "showUnitInput": false,
+            "RefRange": ""
+          },
+          {
+            "ABS": "",
+            "Area": "",
+            "Peak": "Graph Data",
+            "Time": "",
+            "Ref Range": "",
+            "Result": "",
+            "Name": "",
+            "Value": "",
+            "Unit": "",
+            "showUnitInput": false,
+            "RefRange": ""
+          }
+        ],
+        "Result": [
+          {
+            "Value": "50",
+            "Ref Range": "<6%",
+            "Method": "M1",
+            "Unit": "% ofTotal Hb",
+            "Name": "Glycated Haemoglobin (HbA1c)",
+            "showUnitInput": true,
+            "RefRange": "<6%"
+          },
+          {
+            "Value": "10",
+            "Ref Range": "5",
+            "Method": "M1",
+            "Unit": "mg/dL",
+            "Name": "Estimated Average Glucose (eAG)",
+            "showUnitInput": true,
+            "RefRange": "5"
+          }
+        ],
+        "Others": [
+          {
+            "Value": "",
+            "Name": "Others 1",
+            "Unit": "",
+            "showUnitInput": false,
+            "RefRange": "",
+            "Ref Range": ""
+          },
+          {
+            "Value": "",
+            "Name": "Others 2",
+            "Unit": "",
+            "showUnitInput": false,
+            "RefRange": "",
+            "Ref Range": ""
+          },
+          {
+            "Value": "",
+            "Name": "Others 3",
+            "Unit": "",
+            "showUnitInput": false,
+            "RefRange": "",
+            "Ref Range": ""
+          }
+        ],
+        "Drawing Data": [
+          {
+            "Value": "",
+            "Name": "Peak Data",
+            "Unit": "",
+            "showUnitInput": false,
+            "RefRange": "",
+            "Ref Range": ""
+          },
+          {
+            "Value": "",
+            "Name": "Graph Data",
+            "Unit": "",
+            "showUnitInput": false,
+            "RefRange": "",
+            "Ref Range": ""
+          }
+        ]
+      },
+      "templateType": "HBA1C",
+      "hba1cResult": [
+        {
+          "name": "Glycated Haemoglobin (HbA1c)",
+          "operator": "M1",
+          "value": "50",
+          "unit": "% ofTotal Hb",
+          "refRange": "<6%"
+        },
+        {
+          "name": "Estimated Average Glucose (eAG)",
+          "operator": "M1",
+          "value": "10",
+          "unit": "mg/dL",
+          "refRange": "5"
+        }
+      ],
+      "peakDataTable": [
+        {
+          "peak": "HbA1C(IFCC)",
+          "time": "",
+          "abs": "",
+          "area": "",
+          "result": "",
+          "refRange": ""
+        },
+        {
+          "peak": "eAG[ADA]",
+          "time": "",
+          "abs": "",
+          "area": "",
+          "result": "",
+          "refRange": ""
+        },
+        {
+          "peak": "Others 1",
+          "time": "",
+          "abs": "",
+          "area": "",
+          "result": "",
+          "refRange": ""
+        },
+        {
+          "peak": "Others 2",
+          "time": "",
+          "abs": "",
+          "area": "",
+          "result": "",
+          "refRange": ""
+        },
+        {
+          "peak": "Others 3",
+          "time": "",
+          "abs": "",
+          "area": "",
+          "result": "",
+          "refRange": ""
+        },
+        {
+          "peak": "Peak Data",
+          "time": "",
+          "abs": "",
+          "area": "",
+          "result": "",
+          "refRange": ""
+        },
+        {
+          "peak": "Graph Data",
+          "time": "",
+          "abs": "",
+          "area": "",
+          "result": "",
+          "refRange": ""
+        }
+      ],
+      "summaryResult": [
+        {
+          "name": "TotalArea",
+          "val1": "10",
+          "val2": "jj"
+        },
+        {
+          "name": "HbA1C(NGSP)",
+          "val1": "",
+          "val2": ""
+        },
+        {
+          "name": "eAG(ADA)",
+          "val1": "",
+          "val2": ""
+        },
+        {
+          "name": "HbA1C(IFCC)",
+          "val1": "",
+          "val2": ""
+        },
+        {
+          "name": "eAG[ADA]",
+          "val1": "",
+          "val2": ""
+        }
+      ],
+      "headingName": "HBA1C REPORT",
+      "others": [
+        {
+          "name": "Others 1",
+          "value": ""
+        },
+        {
+          "name": "Others 2",
+          "value": ""
+        },
+        {
+          "name": "Others 3",
+          "value": ""
+        }
+      ],
+      "drawingData": [
+        {
+          "name": "Peak Data",
+          "value": ""
+        },
+        {
+          "name": "Graph Data",
+          "value": ""
+        }
+      ],
+      "patientId": "P269",
+      "reportId": "P269T5",
+      "templateId": ""
+    },
+    "TEMPLATE_NAME": "HBA1C REPORT",
+    "reportId": "P269T5",
+    "patientId": "P269",
+    "name": "Adad",
+    "sign": "5,2,4",
+    "templatesId": "T14",
+    "templatesDate": "2026-11-08",
+    "status": "SAVED"
+  }
+}

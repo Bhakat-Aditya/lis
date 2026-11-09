@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import api from '../services/api.js';
@@ -20,7 +20,7 @@ import {
   FileDown,
   Cpu,
 } from 'lucide-react';
-import { sortSectionKeys, orderExamObject, getDefaultTemplateSchema } from '../utils/templateSequence.js';
+import { sortSectionKeys, orderExamObject, getDefaultTemplateSchema, openUpstreamTemplateEditor } from '../utils/templateSequence.js';
 import { formatDisplayDate, formatAgeDisplay } from '../utils/dateUtils.js';
 
 export default function TemplateReportEditPage() {
@@ -98,218 +98,257 @@ export default function TemplateReportEditPage() {
   // General Examination State (for Stool, Urine, Semen, CSF, etc.)
   const [generalExam, setGeneralExam] = useState(null);
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
   // Load Patient and Template JSON
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadData = async () => {
+  const loadData = useCallback(async (isRefresh = false) => {
+    if (isRefresh) {
+      setIsRefreshing(true);
+    } else {
       setLoading(true);
-      setErrorMsg('');
+    }
+    setErrorMsg('');
 
-      const rawPid = String(patientId || '').trim();
-      const cleanPid = rawPid.toUpperCase().startsWith('P')
-        ? `P${rawPid.replace(/^P+/i, '')}`
-        : `P${rawPid}`;
+    const rawPid = String(patientId || '').trim();
+    const cleanPid = rawPid.toUpperCase().startsWith('P')
+      ? `P${rawPid.replace(/^P+/i, '')}`
+      : `P${rawPid}`;
 
+    try {
+      let loadedPatient = null;
+      let templatesList = [];
+
+      // 1. Fetch Patient Info & Templates directly via /reports/patient-report with fresh=true
       try {
-        let loadedPatient = null;
-        let templatesList = [];
+        const ptRes = await api.get('/reports/patient-report', {
+          params: { patientId: cleanPid, withBilling: isMasterTemplate ? 'false' : 'true', fresh: 'true' },
+        });
+        if (ptRes.data?.patient) {
+          loadedPatient = isMasterTemplate
+            ? {
+                name: 'Master Template Blueprint',
+                patientId: 'P14',
+                barcode: searchParams.get('templateId') || reportId,
+                doctor: 'MASTER CATALOG',
+              }
+            : ptRes.data.patient;
+          setPatient(loadedPatient);
+        }
+        if (Array.isArray(ptRes.data?.templates)) {
+          templatesList = ptRes.data.templates;
+        }
+      } catch (ptErr) {
+        console.warn('[TemplateReportEditPage] Patient-report fetch note:', ptErr.message);
+      }
 
-        // 1. Fetch Patient Info & Templates directly via /reports/patient-report
+      // Fallback: If patient was not returned, try /patient/:id
+      if (!loadedPatient) {
         try {
-          const ptRes = await api.get('/reports/patient-report', {
-            params: { patientId: cleanPid, withBilling: isMasterTemplate ? 'false' : 'true' },
-          });
-          if (isMounted && ptRes.data?.patient) {
-            loadedPatient = isMasterTemplate
-              ? {
-                  name: 'Master Template Blueprint',
-                  patientId: 'P14',
-                  barcode: searchParams.get('templateId') || reportId,
-                  doctor: 'MASTER CATALOG',
-                }
-              : ptRes.data.patient;
+          const fallbackRes = await api.get(`/patient/${cleanPid}`);
+          if (fallbackRes.data?.patient) {
+            loadedPatient = fallbackRes.data.patient;
             setPatient(loadedPatient);
           }
-          if (Array.isArray(ptRes.data?.templates)) {
-            templatesList = ptRes.data.templates;
-          }
-        } catch (ptErr) {
-          console.warn('[TemplateReportEditPage] Patient-report fetch note:', ptErr.message);
+        } catch {
+          // ignore
         }
+      }
 
-        // Fallback: If patient was not returned, try /patient/:id
-        if (!loadedPatient) {
-          try {
-            const fallbackRes = await api.get(`/patient/${cleanPid}`);
-            if (isMounted && fallbackRes.data?.patient) {
-              loadedPatient = fallbackRes.data.patient;
-              setPatient(loadedPatient);
-            }
-          } catch {
-            // ignore
-          }
+      // 2. Identify Matching Template from Patient's Templates List
+      const cleanRid = String(reportId || '').trim().toLowerCase();
+      const matchedTmpl = templatesList.find(
+        (t) =>
+          String(t.reportId || '').trim().toLowerCase() === cleanRid ||
+          String(t.templatesId || '').trim().toLowerCase() === cleanRid ||
+          String(t.id || '').trim().toLowerCase() === cleanRid
+      ) || (templatesList.length === 1 ? templatesList[0] : null);
+
+      let resultJson = matchedTmpl?.resultJsonParsed || matchedTmpl?.resultJson || matchedTmpl?.resultJSON;
+      if (typeof resultJson === 'string') {
+        try {
+          resultJson = JSON.parse(resultJson);
+        } catch {
+          resultJson = null;
         }
+      }
 
-        // 2. Identify Matching Template from Patient's Templates List
-        const cleanRid = String(reportId || '').trim().toLowerCase();
-        const matchedTmpl = templatesList.find(
-          (t) =>
-            String(t.reportId || '').trim().toLowerCase() === cleanRid ||
-            String(t.templatesId || '').trim().toLowerCase() === cleanRid ||
-            String(t.id || '').trim().toLowerCase() === cleanRid
-        ) || (templatesList.length === 1 ? templatesList[0] : null);
+      const effectiveName =
+        resultJson?.headingName ||
+        resultJson?.TEMPLATE_NAME ||
+        matchedTmpl?.TEMPLATE_NAME ||
+        matchedTmpl?.name ||
+        queryName ||
+        'Template Report';
 
-        let resultJson = matchedTmpl?.resultJsonParsed || matchedTmpl?.resultJson || matchedTmpl?.resultJSON;
-        if (typeof resultJson === 'string') {
-          try {
-            resultJson = JSON.parse(resultJson);
-          } catch {
-            resultJson = null;
-          }
-        }
+      setHeadingName(effectiveName);
 
-        const effectiveName =
-          resultJson?.headingName ||
-          resultJson?.TEMPLATE_NAME ||
-          matchedTmpl?.TEMPLATE_NAME ||
-          matchedTmpl?.name ||
-          queryName ||
-          'Template Report';
+      // 3. If no prefilled findings found on patient, fetch template schema from /reports/template-json
+      if (!resultJson || (!resultJson.Exam && !resultJson.peakDataTable)) {
+        try {
+          const tmplRes = await api.get('/reports/template-json', {
+            params: {
+              reportId,
+              templateName: effectiveName,
+              fresh: 'true',
+            },
+          });
 
-        setHeadingName(effectiveName);
-
-        // 3. If no prefilled findings found on patient, fetch template schema from /reports/template-json
-        if (!resultJson || (!resultJson.Exam && !resultJson.peakDataTable)) {
-          try {
-            const tmplRes = await api.get('/reports/template-json', {
-              params: {
-                reportId,
-                templateName: effectiveName,
-              },
-            });
-
-            const rep = tmplRes.data?.templateReport || tmplRes.data?.payLoadJSON?.TemplateReport;
-            const fetchedJson = rep?.resultJSON || rep?.resultJson;
-            if (fetchedJson) {
-              if (typeof fetchedJson === 'string') {
-                try {
-                  resultJson = JSON.parse(fetchedJson);
-                } catch {
-                  resultJson = null;
-                }
-              } else {
-                resultJson = fetchedJson;
+          const rep = tmplRes.data?.templateReport || tmplRes.data?.payLoadJSON?.TemplateReport;
+          const fetchedJson = rep?.resultJSON || rep?.resultJson;
+          if (fetchedJson) {
+            if (typeof fetchedJson === 'string') {
+              try {
+                resultJson = JSON.parse(fetchedJson);
+              } catch {
+                resultJson = null;
               }
+            } else {
+              resultJson = fetchedJson;
             }
-          } catch (tmplErr) {
-            console.warn('[TemplateReportEditPage] Template schema fetch note:', tmplErr.message);
+          }
+        } catch (tmplErr) {
+          console.warn('[TemplateReportEditPage] Template schema fetch note:', tmplErr.message);
+        }
+      }
+
+      // 4. Distinguish between HbA1C and General Examinations
+      const isHbA1C =
+        resultJson?.templateType === 'HBA1C' ||
+        effectiveName.toUpperCase().includes('HBA1C') ||
+        effectiveName.toUpperCase().includes('GLYCATED') ||
+        resultJson?.peakDataTable !== undefined ||
+        Boolean(resultJson?.Exam?.PeakData);
+
+      if (isHbA1C) {
+        setTemplateType('HBA1C');
+
+        // A. HbA1C Result
+        const resArr = resultJson?.hba1cResult || resultJson?.Exam?.Result || resultJson?.Exam?.['HbA1C Result'];
+        if (Array.isArray(resArr) && resArr.length > 0) {
+          setHba1cResult(
+            resArr.map((r, idx) => ({
+              name: r.Name || r.name || (idx === 0 ? 'Glycated Haemoglobin (HbA1c)' : 'Estimated Average Glucose (eAG)'),
+              operator: r.operator || r.Method || r.method || '-',
+              value: r.value !== undefined ? String(r.value) : (r.Value !== undefined ? String(r.Value) : ''),
+              unit: r.Unit || r.unit || (idx === 0 ? '% ofTotal Hb' : 'mg/dL'),
+              refRange: r['Ref Range'] || r.RefRange || r.refRange || (idx === 0 ? '<6%' : ''),
+            }))
+          );
+        }
+
+        // B. Peak Data Table
+        const peakArr = resultJson?.peakDataTable || resultJson?.Exam?.PeakData || resultJson?.Exam?.['Peak Data'];
+        const defaultPeaks = ['HbA1C(IFCC)', 'eAG[ADA]', 'Others 1', 'Others 2', 'Others 3', 'Peak Data', 'Graph Data'];
+        if (Array.isArray(peakArr) && peakArr.length > 0) {
+          setPeakDataTable(
+            peakArr.map((p, idx) => ({
+              peak: p.Peak || p.peak || p.Name || p.name || defaultPeaks[idx] || `Peak ${idx + 1}`,
+              time: p.time !== undefined ? String(p.time) : (p.Time !== undefined ? String(p.Time) : ''),
+              abs: p.abs !== undefined ? String(p.abs) : (p.ABS !== undefined ? String(p.ABS) : ''),
+              area: p.area !== undefined ? String(p.area) : (p.Area !== undefined ? String(p.Area) : ''),
+              result: p.result !== undefined ? String(p.result) : (p.Result !== undefined ? String(p.Result) : ''),
+              refRange: p['Ref Range'] || p.RefRange || p.refRange || '',
+            }))
+          );
+        }
+
+        // C. Summary Result / Final Result
+        const sumArr = resultJson?.summaryResult || resultJson?.Exam?.['Final Result'] || resultJson?.Exam?.['Summary Result'];
+        const defaultSummary = ['TotalArea', 'HbA1C(NGSP)', 'eAG(ADA)', 'HbA1C(IFCC)', 'eAG[ADA]'];
+        if (Array.isArray(sumArr) && sumArr.length > 0) {
+          setSummaryResult(
+            sumArr.map((s, idx) => ({
+              name: s.Name || s.name || defaultSummary[idx] || `Summary ${idx + 1}`,
+              val1: s.val1 !== undefined ? String(s.val1) : (s.Value !== undefined ? String(s.Value) : (s.value !== undefined ? String(s.value) : '')),
+              val2: s.val2 !== undefined ? String(s.val2) : (s.Unit !== undefined ? String(s.Unit) : (s.unit !== undefined ? String(s.unit) : '')),
+            }))
+          );
+        }
+
+        // D. Others
+        const othArr = resultJson?.others || resultJson?.Exam?.Others;
+        if (Array.isArray(othArr) && othArr.length > 0) {
+          setOthers(
+            othArr.map((o) => ({
+              name: o.Name || o.name || '',
+              value: o.Value !== undefined ? String(o.Value) : (o.value !== undefined ? String(o.value) : ''),
+            }))
+          );
+        }
+
+        // E. Drawing Data
+        const drawArr = resultJson?.drawingData || resultJson?.Exam?.['Drawing Data'];
+        if (Array.isArray(drawArr) && drawArr.length > 0) {
+          setDrawingData(
+            drawArr.map((d) => ({
+              name: d.Name || d.name || '',
+              value: d.Value !== undefined ? String(d.Value) : (d.value !== undefined ? String(d.value) : ''),
+            }))
+          );
+        }
+      } else {
+        // GENERAL EXAMINATION (URINE, STOOL, SEMEN, CSF, HISTOPATHOLOGY, etc.)
+        setTemplateType('GENERAL');
+        let examData = resultJson?.Exam || resultJson?.exam;
+
+        if (!examData || typeof examData !== 'object' || Object.keys(examData).length === 0) {
+          examData = getDefaultTemplateSchema(effectiveName);
+        }
+
+        const normalizedExam = {};
+        for (const [sectionKey, items] of Object.entries(examData)) {
+          if (Array.isArray(items)) {
+            normalizedExam[sectionKey] = items.map((it) => {
+              const u = it.Unit !== undefined && it.Unit !== null
+                ? String(it.Unit)
+                : (it.unit !== undefined && it.unit !== null ? String(it.unit) : '');
+              const ref = it.RefRange !== undefined && it.RefRange !== null
+                ? String(it.RefRange)
+                : (it['Ref Range'] !== undefined && it['Ref Range'] !== null ? String(it['Ref Range']) : '');
+              return {
+                ...it,
+                Name: it.Name || it.name || '',
+                Value: it.Value !== undefined ? String(it.Value) : (it.value !== undefined ? String(it.value) : ''),
+                Unit: u,
+                RefRange: ref,
+                'Ref Range': ref,
+                showUnitInput: Boolean(it.showUnitInput || u.trim() !== ''),
+              };
+            });
+          } else {
+            normalizedExam[sectionKey] = items;
           }
         }
 
-        if (!isMounted) return;
+        setGeneralExam(orderExamObject(normalizedExam, effectiveName));
+      }
+    } catch (err) {
+      setErrorMsg('Failed to load template data from server. Default form initialized.');
+    } finally {
+      if (isRefresh) {
+        setIsRefreshing(false);
+      } else {
+        setLoading(false);
+      }
+    }
+  }, [patientId, reportId, isMasterTemplate, queryName, searchParams]);
 
-        // 4. Distinguish between HbA1C and General Examinations
-        const isHbA1C =
-          resultJson?.templateType === 'HBA1C' ||
-          effectiveName.toUpperCase().includes('HBA1C') ||
-          effectiveName.toUpperCase().includes('GLYCATED') ||
-          resultJson?.peakDataTable !== undefined ||
-          Boolean(resultJson?.Exam?.PeakData);
+  useEffect(() => {
+    if (patientId && reportId) {
+      loadData(false);
+    }
+  }, [patientId, reportId, loadData]);
 
-        if (isHbA1C) {
-          setTemplateType('HBA1C');
-
-          // A. HbA1C Result
-          const resArr = resultJson?.hba1cResult || resultJson?.Exam?.Result || resultJson?.Exam?.['HbA1C Result'];
-          if (Array.isArray(resArr) && resArr.length > 0) {
-            setHba1cResult(
-              resArr.map((r) => ({
-                name: r.Name || r.name || 'Parameter',
-                operator: r.operator || '-',
-                value: r.Value !== undefined ? String(r.Value) : (r.value !== undefined ? String(r.value) : ''),
-                unit: r.Unit || r.unit || '',
-                refRange: r['Ref Range'] || r.RefRange || r.refRange || '',
-              }))
-            );
-          }
-
-          // B. Peak Data Table
-          const peakArr = resultJson?.peakDataTable || resultJson?.Exam?.PeakData || resultJson?.Exam?.['Peak Data'];
-          if (Array.isArray(peakArr) && peakArr.length > 0) {
-            setPeakDataTable(
-              peakArr.map((p) => ({
-                peak: p.Peak || p.peak || '',
-                time: p.Time !== undefined ? String(p.Time) : (p.time !== undefined ? String(p.time) : ''),
-                abs: p.ABS !== undefined ? String(p.ABS) : (p.abs !== undefined ? String(p.abs) : ''),
-                area: p.Area !== undefined ? String(p.Area) : (p.area !== undefined ? String(p.area) : ''),
-                result: p.Result !== undefined ? String(p.Result) : (p.result !== undefined ? String(p.result) : ''),
-                refRange: p['Ref Range'] || p.RefRange || p.refRange || '',
-              }))
-            );
-          }
-
-          // C. Summary Result / Final Result
-          const sumArr = resultJson?.summaryResult || resultJson?.Exam?.['Final Result'] || resultJson?.Exam?.['Summary Result'];
-          if (Array.isArray(sumArr) && sumArr.length > 0) {
-            setSummaryResult(
-              sumArr.map((s) => ({
-                name: s.Name || s.name || '',
-                val1: s.Value !== undefined ? String(s.Value) : (s.val1 !== undefined ? String(s.val1) : ''),
-                val2: s.Unit || s.val2 || '',
-              }))
-            );
-          }
-
-          // D. Others
-          const othArr = resultJson?.others || resultJson?.Exam?.Others;
-          if (Array.isArray(othArr) && othArr.length > 0) {
-            setOthers(
-              othArr.map((o) => ({
-                name: o.Name || o.name || '',
-                value: o.Value !== undefined ? String(o.Value) : (o.value !== undefined ? String(o.value) : ''),
-              }))
-            );
-          }
-
-          // E. Drawing Data
-          const drawArr = resultJson?.drawingData || resultJson?.Exam?.['Drawing Data'];
-          if (Array.isArray(drawArr) && drawArr.length > 0) {
-            setDrawingData(
-              drawArr.map((d) => ({
-                name: d.Name || d.name || '',
-                value: d.Value !== undefined ? String(d.Value) : (d.value !== undefined ? String(d.value) : ''),
-              }))
-            );
-          }
-        } else {
-          // GENERAL EXAMINATION (URINE, STOOL, SEMEN, CSF, HISTOPATHOLOGY, etc.)
-          setTemplateType('GENERAL');
-          let examData = resultJson?.Exam || resultJson?.exam;
-
-          if (!examData || typeof examData !== 'object' || Object.keys(examData).length === 0) {
-            examData = getDefaultTemplateSchema(effectiveName);
-          }
-
-          setGeneralExam(orderExamObject(examData, effectiveName));
-        }
-      } catch (err) {
-        if (isMounted) {
-          setErrorMsg('Failed to load template data from server. Default form initialized.');
-        }
-      } finally {
-        if (isMounted) setLoading(false);
+  // When user returns to tab after editing in AWS editor window, auto-sync fresh data
+  useEffect(() => {
+    const handleWindowFocus = () => {
+      if (patientId && reportId) {
+        loadData(true);
       }
     };
-
-    if (patientId && reportId) {
-      loadData();
-    }
-
-    return () => {
-      isMounted = false;
-    };
-  }, [patientId, reportId, queryName]);
+    window.addEventListener('focus', handleWindowFocus);
+    return () => window.removeEventListener('focus', handleWindowFocus);
+  }, [patientId, reportId, loadData]);
 
   // Handle Save
   const handleSave = async (e) => {
@@ -331,10 +370,10 @@ export default function TemplateReportEditPage() {
         others,
         drawingData,
         Exam: {
-          'HbA1C Result': hba1cResult.map((r) => ({ Name: r.name, Value: r.value, Unit: r.unit, RefRange: r.refRange })),
-          Result: hba1cResult.map((r) => ({ Name: r.name, Value: r.value, Unit: r.unit, RefRange: r.refRange })),
-          PeakData: peakDataTable.map((p) => ({ Peak: p.peak, Time: p.time, ABS: p.abs, Area: p.area, Result: p.result, RefRange: p.refRange })),
-          'Summary Result': summaryResult.map((r) => ({ Name: r.name, Value: r.val1 })),
+          'HbA1C Result': hba1cResult.map((r) => ({ Name: r.name, Value: r.value, Unit: r.unit, RefRange: r.refRange, 'Ref Range': r.refRange, Method: r.operator })),
+          Result: hba1cResult.map((r) => ({ Name: r.name, Value: r.value, Unit: r.unit, RefRange: r.refRange, 'Ref Range': r.refRange, Method: r.operator })),
+          PeakData: peakDataTable.map((p) => ({ Peak: p.peak, Time: p.time, ABS: p.abs, Area: p.area, Result: p.result, RefRange: p.refRange, 'Ref Range': p.refRange })),
+          'Summary Result': summaryResult.map((r) => ({ Name: r.name, Value: r.val1, Unit: r.val2 })),
           'Final Result': summaryResult.map((r) => ({ Name: r.name, Value: r.val1, Unit: r.val2 })),
           Others: others.map((o) => ({ Name: o.name, Value: o.value })),
           'Drawing Data': drawingData.map((d) => ({ Name: d.name, Value: d.value })),
@@ -488,6 +527,35 @@ export default function TemplateReportEditPage() {
               </button>
             </>
           )}
+
+          {/* Open in Upstream AWS Editor */}
+          <button
+            type="button"
+            onClick={() => {
+              openUpstreamTemplateEditor({
+                patientId: isMasterTemplate ? 'P14' : patientId,
+                reportId,
+                name: headingName,
+              });
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 active:scale-95 text-amber-800 border border-amber-300 font-bold text-xs shadow-2xs transition-all cursor-pointer"
+            title="Open official AWS template editor (editTemplateV2.jsp) in new window"
+          >
+            <ExternalLink className="w-3.5 h-3.5 text-amber-700" />
+            <span>AWS Editor</span>
+          </button>
+
+          {/* Sync / Refresh Data from Server/AWS */}
+          <button
+            type="button"
+            onClick={() => loadData(true)}
+            disabled={isRefreshing || loading}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 active:scale-95 text-blue-800 border border-blue-300 font-bold text-xs shadow-2xs transition-all cursor-pointer disabled:opacity-60"
+            title="Fetch latest data from server / AWS editor"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-blue-700 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span>{isRefreshing ? 'Syncing...' : 'Sync Data'}</span>
+          </button>
 
           <span className="text-xs font-mono font-bold text-slate-400">
             {isMasterTemplate ? `Master Template Blueprint #${reportId}` : `Template Report #${reportId}`}
@@ -1074,7 +1142,16 @@ export default function TemplateReportEditPage() {
                               onChange={(e) => {
                                 const nextExam = { ...generalExam };
                                 nextExam[sectionName][idx].Unit = e.target.value;
+                                nextExam[sectionName][idx].showUnitInput = true;
                                 setGeneralExam(nextExam);
+                              }}
+                              onBlur={() => {
+                                if (!item.Unit || String(item.Unit).trim() === '') {
+                                  const nextExam = { ...generalExam };
+                                  nextExam[sectionName][idx].showUnitInput = false;
+                                  nextExam[sectionName][idx].Unit = '';
+                                  setGeneralExam(nextExam);
+                                }
                               }}
                               placeholder="Unit (/CU.mm)"
                               title="Click to edit unit (Green Box)"
