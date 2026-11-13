@@ -252,13 +252,13 @@ export default function MasterDataManager() {
 
   const renderSignatureBadges = (signStr) => {
     if (!signStr || !String(signStr).trim()) {
-      return <span className="text-slate-400 italic text-[11px]">-</span>;
+      return <span className="text-slate-300 font-mono text-xs">—</span>;
     }
     const ids = String(signStr)
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean);
-    if (ids.length === 0) return <span className="text-slate-400 italic text-[11px]">-</span>;
+    if (ids.length === 0) return <span className="text-slate-300 font-mono text-xs">—</span>;
 
     const normalize = (s) => ({
       id: String(s?.Id ?? s?.id ?? ''),
@@ -496,22 +496,21 @@ export default function MasterDataManager() {
 
 
           {activeTab === 'templates' && (
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="bg-slate-100/90 text-slate-700 font-bold border-b border-slate-200 text-[11px] uppercase tracking-wider">
                 <tr>
-                  <th className="py-2.5 px-4 w-24">Template ID</th>
-                  <th className="py-2.5 px-4">Template Report Name</th>
-                  <th className="py-2.5 px-4">Signatures</th>
-                  <th className="py-2.5 px-4">Report Structure</th>
-                  <th className="py-2.5 px-4">Sync Date</th>
-                  <th className="py-2.5 px-4">Status</th>
-                  <th className="py-2.5 px-4 text-right">Action</th>
+                  <th className="py-3 px-4 w-20">ID</th>
+                  <th className="py-3 px-4 min-w-[220px]">Template Report Name</th>
+                  <th className="py-3 px-4 min-w-[180px]">Signatures Assigned</th>
+                  <th className="py-3 px-4 w-28 whitespace-nowrap">Sync Date</th>
+                  <th className="py-3 px-4 w-24 text-center">Status</th>
+                  <th className="py-3 px-4 text-right min-w-[210px]">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 bg-white">
                 {templates.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-6 text-center text-slate-400">
+                    <td colSpan={6} className="py-8 text-center text-slate-400">
                       No master template reports loaded.
                     </td>
                   </tr>
@@ -525,64 +524,78 @@ export default function MasterDataManager() {
                       return name.includes(q) || id.includes(q);
                     })
                     .map((tmpl, idx) => (
-                      <tr key={tmpl.templatesId || tmpl.reportId || idx} className="hover:bg-slate-50">
-                        <td className="py-2 px-4 font-mono font-bold text-purple-700">
-                          {tmpl.templatesId || `T${idx + 1}`}
-                        </td>
-                        <td className="py-2 px-4">
-                          <span className="font-bold text-slate-900">{tmpl.TEMPLATE_NAME || tmpl.name}</span>
-                        </td>
-                        <td className="py-2 px-4">{renderSignatureBadges(tmpl.sign)}</td>
-                        <td className="py-2 px-4 text-slate-600">
-                          <span className="bg-purple-50 text-purple-800 border border-purple-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                            Full-Page Report Structure
+                      <tr key={tmpl.templatesId || tmpl.reportId || idx} className="hover:bg-slate-50/80 transition-colors">
+                        {/* 1. Template ID */}
+                        <td className="py-3 px-4 font-mono font-bold text-purple-700 whitespace-nowrap">
+                          <span className="bg-purple-50 border border-purple-200/80 px-2 py-0.5 rounded text-[11px]">
+                            {tmpl.templatesId || `T${idx + 1}`}
                           </span>
                         </td>
-                        <td className="py-2 px-4 font-mono text-slate-500 text-[11px]">
+
+                        {/* 2. Template Name */}
+                        <td className="py-3 px-4">
+                          <div className="font-bold text-slate-900 text-xs">
+                            {tmpl.TEMPLATE_NAME || tmpl.name}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-medium mt-0.5">
+                            Full-page clinical template report
+                          </div>
+                        </td>
+
+                        {/* 3. Signatures Assigned */}
+                        <td className="py-3 px-4">
+                          {renderSignatureBadges(tmpl.sign)}
+                        </td>
+
+                        {/* 4. Sync Date */}
+                        <td className="py-3 px-4 font-mono text-slate-500 text-[11px] whitespace-nowrap">
                           {tmpl.templatesDate || '2026-11-01'}
                         </td>
-                        <td className="py-2 px-4">
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+
+                        {/* 5. Status */}
+                        <td className="py-3 px-4 text-center whitespace-nowrap">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                             String(tmpl.status || '').toUpperCase() === 'SAVED'
-                              ? 'bg-blue-50 text-blue-700'
-                              : 'bg-emerald-50 text-emerald-700'
+                              ? 'bg-blue-50 text-blue-700 border-blue-200'
+                              : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                           }`}>
                             {tmpl.status || 'Active'}
                           </span>
                         </td>
-                        <td className="py-2 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                            {/* Option 1: API_UPDATE_TEMPLATE (basic info: name, dept, price, sign) */}
-                            <button
-                              type="button"
-                              onClick={() => handleEditBasic(tmpl)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 rounded-md border border-blue-200 transition-colors cursor-pointer"
-                              title="Edit basic info (name, department, price, signatures) - API_UPDATE_TEMPLATE"
-                            >
-                              <Edit3 className="w-3 h-3" />
-                              <span>Edit Basic</span>
-                            </button>
 
-                            {/* Option 2: Custom Modern Editor (My Editor) */}
+                        {/* 6. Actions (Single-line, professional action group) */}
+                        <td className="py-3 px-4 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                            {/* Primary: Modern Rich Template Editor */}
                             <button
                               type="button"
                               onClick={() => handleEditPrefillData(tmpl)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 rounded-md border border-purple-200 transition-colors cursor-pointer"
-                              title="Edit prefill template findings data in custom modern editor"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 active:scale-95 rounded-lg shadow-2xs transition-all cursor-pointer"
+                              title="Open rich clinical template editor to edit report findings and format"
                             >
-                              <FileText className="w-3 h-3" />
-                              <span>My Editor</span>
+                              <FileText className="w-3.5 h-3.5" />
+                              <span>Edit Template</span>
                             </button>
 
-                            {/* Option 3: Upstream AWS Template Editor */}
+                            {/* Secondary: Basic Information & Signatures */}
+                            <button
+                              type="button"
+                              onClick={() => handleEditBasic(tmpl)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 rounded-lg border border-slate-200 transition-colors cursor-pointer shadow-2xs"
+                              title="Edit basic info (name, department, price, signatures) - API_UPDATE_TEMPLATE"
+                            >
+                              <Edit3 className="w-3.5 h-3.5 text-slate-500" />
+                              <span>Info</span>
+                            </button>
+
+                            {/* Tertiary: Official AWS Template Editor */}
                             <button
                               type="button"
                               onClick={() => handleOpenAwsEditor(tmpl)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 rounded-md border border-amber-300 transition-colors cursor-pointer"
+                              className="p-1.5 text-slate-400 hover:text-amber-700 bg-white hover:bg-amber-50 rounded-lg border border-slate-200 hover:border-amber-300 transition-colors cursor-pointer shadow-2xs"
                               title="Open official AWS template editor (editTemplateV2.jsp) in new window"
                             >
-                              <ExternalLink className="w-3 h-3" />
-                              <span>AWS Editor</span>
+                              <ExternalLink className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </td>

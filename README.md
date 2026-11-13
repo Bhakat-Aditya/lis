@@ -92,8 +92,8 @@ As per clinic system requirements, the following 11 master lists are cached with
    LAB_DOMAIN=https://lis.newlifecaremidnapore.com
    LAB_WEBSITE=https://lis.newlifecaremidnapore.com
    LAB_COOKIE_NAME=lifecareauth
-   UPSTREAM_DEFAULT_USER=sandip
-   UPSTREAM_DEFAULT_PASS=Life
+   UPSTREAM_DEFAULT_USER=exsuper
+   UPSTREAM_DEFAULT_PASS=exsuper
    CLIENT_URL=https://your-frontend.vercel.app
    ```
 4. Click **Deploy**. Note your live Render URL (e.g. `https://lis-server.onrender.com`).
@@ -142,7 +142,7 @@ npm run dev
 
 | Login ID | Password | Role | Description |
 |---|---|---|---|
-| `sandip` | `Life` | Super Admin | Full administrative access |
+| `exsuper` | `exsuper` | Super Admin | Full administrative master access |
 | `entry` | `010101` | Front Desk | Receptionist / Billing |
 | `micronmicrotech` | *(default)* | Microbiology User | Laboratory Analyst / Technician |
 

@@ -1838,7 +1838,7 @@ export default function MasterEditModal({
                   required
                   value={formData.login || ''}
                   onChange={(e) => handleChange('login', e.target.value)}
-                  placeholder="e.g. entry, sandip"
+                  placeholder="e.g. entry, exsuper"
                   className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-bold"
                 />
               </div>

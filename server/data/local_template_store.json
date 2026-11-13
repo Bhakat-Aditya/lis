@@ -3,6 +3,423 @@
     "resultJSON": {
       "TEMPLATE_NAME": "COMPLETE BLOOD COUNT",
       "Exam": {
+        "INVESTIGATION": [
+          {
+            "Value": "10",
+            "Ref Range": "13-17",
+            "Method": "",
+            "Unit": "gm/dl",
+            "Name": "Haemoglobin",
+            "showUnitInput": true,
+            "RefRange": "13-17"
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "/ cmm",
+            "Name": "Total WBC Count",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "56",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "R.B.C. Count",
+            "showUnitInput": true,
+            "RefRange": ""
+          }
+        ],
+        "RED CELL ABSOLUTE VALUES": [
+          {
+            "Value": "10",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "PCV/HCT",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Mean Corpuscular Volumne",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Mean Corpuscular Hb",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Mean Corpuscular Hb Con.",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "R.D.W",
+            "showUnitInput": true,
+            "RefRange": ""
+          }
+        ],
+        "PLATELETS ABSOLUTE VALUES": [
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Platelet count",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "P.D.W",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "MPV",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "PCT",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "LPCR",
+            "showUnitInput": true,
+            "RefRange": ""
+          }
+        ],
+        "DIFFRENTIAL COUNT": [
+          {
+            "Value": "56",
+            "Ref Range": "",
+            "Method": "56",
+            "Unit": "%",
+            "Name": "Neutrophils",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "10",
+            "Ref Range": "",
+            "Method": "10",
+            "Unit": "%",
+            "Name": "Lymphocytes",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Monocytes",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Eosinophil",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Basophil",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Band neutrophil",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Myeloblast",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Myelocyte",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Promyelocyte",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Metamyelocyte",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Monocytoid cell",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Lymphocytoid cell",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Atypical lymphocytoid cell",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Lymphoid cell",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Atypical mononuclear cell",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Myeoloblast & promyelocyte",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Promyelocyte & Blasts",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Lymphoblasts",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Blasts",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Promyeloblasts",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Monocytoid cell including",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Monoblast",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Absolute neutrophil count",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Absolute lymphocyte count",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "Absolute Eosinophil Count",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "",
+            "Unit": "%",
+            "Name": "I.T.Ratio",
+            "showUnitInput": true,
+            "RefRange": ""
+          }
+        ],
+        "GBP": [
+          {
+            "Value": "10",
+            "Method": "M34",
+            "Name": "RBC",
+            "Unit": "",
+            "showUnitInput": false,
+            "RefRange": "",
+            "Ref Range": ""
+          },
+          {
+            "Value": "",
+            "Method": "M34",
+            "Name": "WBC",
+            "Unit": "",
+            "showUnitInput": false,
+            "RefRange": "",
+            "Ref Range": ""
+          },
+          {
+            "Value": "",
+            "Method": "M34",
+            "Name": "Platelets",
+            "Unit": "",
+            "showUnitInput": false,
+            "RefRange": "",
+            "Ref Range": ""
+          },
+          {
+            "Value": "",
+            "Method": "M34",
+            "Name": "Parasite (MP/MF)",
+            "Unit": "",
+            "showUnitInput": false,
+            "RefRange": "",
+            "Ref Range": ""
+          }
+        ],
+        "Extra": [
+          {
+            "Value": "10",
+            "Ref Range": "",
+            "Method": "M34",
+            "Unit": "%",
+            "Name": "Reticulocyte count",
+            "showUnitInput": true,
+            "RefRange": ""
+          },
+          {
+            "Value": "",
+            "Ref Range": "",
+            "Method": "M34",
+            "Unit": "cu micron",
+            "Name": "Reticulocyte production index",
+            "showUnitInput": true,
+            "RefRange": ""
+          }
+        ],
         "Others": [
           {
             "Value": "",
@@ -43,327 +460,6 @@
             "showUnitInput": false,
             "RefRange": "",
             "Ref Range": ""
-          }
-        ],
-        "DIFFRENTIAL COUNT": [
-          {
-            "Value": "56",
-            "Ref Range": "",
-            "Method": "56",
-            "Unit": "%",
-            "Name": "Neutrophils"
-          },
-          {
-            "Value": "10",
-            "Ref Range": "",
-            "Method": "10",
-            "Unit": "%",
-            "Name": "Lymphocytes"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "Monocytes"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "Eosinophil"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "Basophil"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "Band neutrophil"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "Myeloblast"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "Myelocyte"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "Promyelocyte"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "Metamyelocyte"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "Monocytoid cell"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "Lymphocytoid cell"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "Atypical lymphocytoid cell"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "Lymphoid cell"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "Atypical mononuclear cell"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "Myeoloblast & promyelocyte"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "Promyelocyte & Blasts"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "Lymphoblasts"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "Blasts"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "Promyeloblasts"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "Monocytoid cell including"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "Monoblast"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "Absolute neutrophil count"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "Absolute lymphocyte count"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "Absolute Eosinophil Count"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "I.T.Ratio"
-          }
-        ],
-        "Extra": [
-          {
-            "Value": "10",
-            "Ref Range": "",
-            "Method": "M34",
-            "Unit": "%",
-            "Name": "Reticulocyte count"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "M34",
-            "Unit": "cu micron",
-            "Name": "Reticulocyte production index"
-          }
-        ],
-        "GBP": [
-          {
-            "Value": "10",
-            "Method": "M34",
-            "Name": "RBC"
-          },
-          {
-            "Value": "",
-            "Method": "M34",
-            "Name": "WBC"
-          },
-          {
-            "Value": "",
-            "Method": "M34",
-            "Name": "Platelets"
-          },
-          {
-            "Value": "",
-            "Method": "M34",
-            "Name": "Parasite (MP/MF)"
-          }
-        ],
-        "INVESTIGATION": [
-          {
-            "Value": "10",
-            "Ref Range": "13-17",
-            "Method": "",
-            "Unit": "gm/dl",
-            "Name": "Haemoglobin",
-            "showUnitInput": true,
-            "RefRange": "13-17"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "/ cmm",
-            "Name": "Total WBC Count"
-          },
-          {
-            "Value": "56",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "R.B.C. Count"
-          }
-        ],
-        "PLATELETS ABSOLUTE VALUES": [
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "Platelet count"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "P.D.W"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "MPV"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "PCT"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "LPCR"
-          }
-        ],
-        "RED CELL ABSOLUTE VALUES": [
-          {
-            "Value": "10",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "PCV/HCT"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "Mean Corpuscular Volumne"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "Mean Corpuscular Hb"
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "Mean Corpuscular Hb Con."
-          },
-          {
-            "Value": "",
-            "Ref Range": "",
-            "Method": "",
-            "Unit": "%",
-            "Name": "R.D.W"
           }
         ]
       },

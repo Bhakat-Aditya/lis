@@ -65,8 +65,18 @@ export default function AddTestsModal({ isOpen, onClose, patient, reports = [], 
     }
 
     // Format string according to upstream API:
-    // e.g. TEST|T1,TEST|T75,PROF|11,PKG|3
-    const formattedIds = selectedItems.map((item) => `${item.type}|${item.id}`).join(',');
+    // e.g. PKG|4,PROF|21,TEST|T12,TEMP|T1
+    const formattedIds = selectedItems
+      .map((item) => {
+        let prefix = item.type || 'TEST';
+        if (prefix === 'TEMPLATE') prefix = 'TEMP';
+        let tid = item.id;
+        if (prefix === 'TEMP' && !String(tid).toUpperCase().startsWith('T')) {
+          tid = `T${tid}`;
+        }
+        return `${prefix}|${tid}`;
+      })
+      .join(',');
 
     try {
       await api.post('/patients/add-tests', {

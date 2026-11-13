@@ -694,7 +694,15 @@ export default function TestSelectionView({
 
     try {
       const formattedIds = newTests
-        .map((t) => `${t.type || 'TEST'}|${t.testId}`)
+        .map((t) => {
+          let prefix = t.type || 'TEST';
+          if (prefix === 'TEMPLATE') prefix = 'TEMP';
+          let tid = t.testId;
+          if (prefix === 'TEMP' && !String(tid).toUpperCase().startsWith('T')) {
+            tid = `T${tid}`;
+          }
+          return `${prefix}|${tid}`;
+        })
         .join(',');
 
       const hasRepeat = newTests.some((t) => t.isRepeat);
@@ -1231,19 +1239,9 @@ export default function TestSelectionView({
 
                             {/* Lot Total Amount */}
                             <td className="py-3 px-3 text-right">
-                              <div className="flex items-center justify-end gap-1.5">
-                                <span className="font-mono font-extrabold text-slate-900 text-xs">
-                                  ₹{Number(t.amount || 0).toFixed(2)}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenEditRateModal(t)}
-                                  title="Edit Rate / Price for this investigation"
-                                  className="p-1 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
-                                >
-                                  <Edit className="w-3 h-3" />
-                                </button>
-                              </div>
+                              <span className="font-mono font-extrabold text-slate-900 text-xs">
+                                ₹{Number(t.amount || 0).toFixed(2)}
+                              </span>
                             </td>
 
                             {/* Actions / Status */}
@@ -1258,34 +1256,10 @@ export default function TestSelectionView({
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                               ) : (
-                                <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                                    <Check className="w-3 h-3 text-emerald-600" />
-                                    Booked
-                                  </span>
-                                  {(t.category === 'Template' || t.type === 'TEMPLATE') && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const repId = t.reportId || t.testId || t.id || 'P14R1';
-                                        navigate(`/patients/${pid}/template/${repId}?name=${encodeURIComponent(t.name)}`);
-                                      }}
-                                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-[11px] transition-all shadow-2xs cursor-pointer"
-                                      title="Open template workspace and fill findings for this patient"
-                                    >
-                                      <FileEdit className="w-3 h-3" />
-                                      <span>Open Template</span>
-                                    </button>
-                                  )}
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenEditRateModal(t)}
-                                    title="Edit Price (BILLUPDATE & Report Rate)"
-                                    className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors cursor-pointer"
-                                  >
-                                    <Edit className="w-3 h-3" />
-                                  </button>
-                                </div>
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                                  <Check className="w-3 h-3 text-emerald-600" />
+                                  Booked
+                                </span>
                               )}
                             </td>
                           </tr>

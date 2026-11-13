@@ -31,6 +31,7 @@ import {
   DepartmentReportStats,
   ReportProgressStats,
 } from '../components/dashboard/AnalyticsDailyStats.jsx';
+import { formatGmtToIstTime, formatGmtToIstDate } from '../utils/dateUtils.js';
 
 /**
  * Format date to YYYY-MM-DD
@@ -58,7 +59,7 @@ export default function DashboardPage({ onOpenNewPatient }) {
   const [activeView, setActiveView] = useState('analytics'); // 'analytics' | 'worklist'
   const todayStr = getTodayDate();
   const [toDate, setToDate] = useState(todayStr);
-  const [fromDate, setFromDate] = useState(() => calculatePastDate(todayStr, 8));
+  const [fromDate, setFromDate] = useState(todayStr);
   const [analyticsData, setAnalyticsData] = useState(null);
   const [loadingAnalytics, setLoadingAnalytics] = useState(true);
   const [selectedDetailChart, setSelectedDetailChart] = useState(null);
@@ -348,24 +349,14 @@ export default function DashboardPage({ onOpenNewPatient }) {
         onToggleView={setActiveView}
         loading={loadingAnalytics}
         lastCacheTime={
-          analyticsData?.cachedTimeFormatted ||
-          (analyticsData?.catchedTime
-            ? new Date(analyticsData.catchedTime).toLocaleTimeString('en-US', {
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: true,
-              })
-            : null)
+          (analyticsData?.catchedTime || analyticsData?.cachedAt)
+            ? formatGmtToIstTime(analyticsData.catchedTime || analyticsData.cachedAt)
+            : (analyticsData?.cachedTimeFormatted || null)
         }
         lastCacheDate={
-          analyticsData?.cachedDateFormatted ||
-          (analyticsData?.catchedTime
-            ? new Date(analyticsData.catchedTime).toLocaleDateString('en-US', {
-                month: 'short',
-                day: '2-digit',
-                year: 'numeric',
-              })
-            : null)
+          (analyticsData?.catchedTime || analyticsData?.cachedAt)
+            ? formatGmtToIstDate(analyticsData.catchedTime || analyticsData.cachedAt)
+            : (analyticsData?.cachedDateFormatted || null)
         }
         isFromCache={Boolean(analyticsData?.isCached)}
       />

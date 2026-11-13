@@ -26,8 +26,8 @@ services:
       - key: LAB_COOKIE_NAME
         value: lifecareauth
       - key: UPSTREAM_DEFAULT_USER
-        value: sandip
+        value: exsuper
       - key: UPSTREAM_DEFAULT_PASS
-        value: Life
+        value: exsuper
       - key: CLIENT_URL
         value: https://your-lis-frontend.vercel.app

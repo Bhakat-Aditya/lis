@@ -778,6 +778,7 @@ export const getBillList = async (req, res, next) => {
     const today = new Date().toISOString().slice(0, 10);
     const fromDate = req.query.fromDate || today;
     const toDate = req.query.toDate || today;
+    const branch = req.query.branch || '';
 
     try {
       const upstreamData = await upstreamService.get(
@@ -802,12 +803,56 @@ export const getBillList = async (req, res, next) => {
         bills = upstreamData.bills;
       }
 
+      // Cross-correlate with patient list to enrich bills with branch & build branchSummary
+      let branchSummary = {};
+      try {
+        const pRes = await upstreamService.get(
+          'GETPATIENTLIST',
+          { fromDate, toDate },
+          req.user?.upstreamSid
+        );
+        const patients = pRes?.payLoadJSON?.patientList || pRes?.payLoadJSON?.patients || [];
+        const pidToBranch = new Map();
+        patients.forEach((p) => {
+          const pid = String(p.patientId || p.slNo || '').trim().toUpperCase();
+          const bCode = String(p.branch ?? '0').trim();
+          if (pid) pidToBranch.set(pid, bCode);
+        });
+
+        bills.forEach((b) => {
+          const bPid = String(b['Patient Id'] || b.patientId || '').trim().toUpperCase();
+          const bBranch = pidToBranch.get(bPid) || '0';
+          b.branch = bBranch;
+
+          if (!branchSummary[bBranch]) {
+            branchSummary[bBranch] = {
+              branchId: bBranch,
+              count: 0,
+              totalInvoiced: 0,
+              totalCollected: 0,
+              totalDue: 0,
+            };
+          }
+          branchSummary[bBranch].count += 1;
+          branchSummary[bBranch].totalInvoiced += Number(b['Total Bill'] || b['Total Amount'] || 0);
+          branchSummary[bBranch].totalCollected += Number(b['Total Payment'] || 0);
+          branchSummary[bBranch].totalDue += Number(b['Total Outstanding'] || 0);
+        });
+
+        if (branch && branch !== 'ALL') {
+          bills = bills.filter((b) => String(b.branch) === String(branch));
+        }
+      } catch (pErr) {
+        console.warn('[GetBillList] Patient branch correlation skipped:', pErr.message);
+      }
+
       if (bills.length > 0 || upstreamData?.STATUS === 'SUCCESS') {
         return res.json({
           STATUS: 'SUCCESS',
           StatusCode: '0000',
           fromDate,
           toDate,
+          branchSummary,
           bills,
         });
       }
@@ -821,6 +866,7 @@ export const getBillList = async (req, res, next) => {
       StatusCode: '0000',
       fromDate,
       toDate,
+      branchSummary: {},
       bills: [],
       fallback: true,
     });

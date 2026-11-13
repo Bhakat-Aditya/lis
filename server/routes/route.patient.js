@@ -7,6 +7,7 @@ import {
   addMultipleTests,
   getPatientLogs,
   getPatientEmr,
+  getPatientJourneyStages,
 } from '../controllers/controller.patient.js';
 import { getPatientReport } from '../controllers/controller.report.js';
 import { requireAuth } from '../middleware/middleware.auth.js';
@@ -39,10 +40,14 @@ router.get(
   getPatientEmr
 );
 
-// Individual Patient Report & Demographics (Must come AFTER specific static routes like /logs and /emr)
+// Rule: Upstream Journey Stages (API_GET_JOURNEY_STAGES = "GETJOURNEYSTAGES" with patientId, e.g. patientId=P26)
+router.get('/journey-stages', getPatientJourneyStages);
+router.get('/:id/journey-stages', getPatientJourneyStages);
+
+// Individual Patient Report & Demographics (Must come AFTER specific static routes like /logs, /emr, /journey-stages)
 router.get('/:id', async (req, res, next) => {
   const { id } = req.params;
-  if (!id || ['logs', 'emr', 'list', 'add', 'update', 'delete', 'add-tests'].includes(id.toLowerCase())) {
+  if (!id || ['logs', 'emr', 'list', 'add', 'update', 'delete', 'add-tests', 'journey-stages'].includes(id.toLowerCase())) {
     return next();
   }
   req.query.patientId = id;

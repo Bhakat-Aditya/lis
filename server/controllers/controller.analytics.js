@@ -71,7 +71,7 @@ export const getDashboardAnalytics = async (req, res, next) => {
     const pastDaysList = getPastDays(toDate, daysCount);
     const fromDate = req.query.fromDate
       ? normalizeDateToYYYYMMDD(req.query.fromDate)
-      : (req.query.date ? normalizeDateToYYYYMMDD(req.query.date) : pastDaysList[0]);
+      : (req.query.date ? normalizeDateToYYYYMMDD(req.query.date) : toDate);
 
     const branch = req.query.branch || '';
     const forceFresh = req.query.fresh === 'true';
@@ -151,13 +151,17 @@ export const getDashboardAnalytics = async (req, res, next) => {
           (payload.last9DaysRegistration || payload.maleFemaleRatio || payload.patientBillStatus)
         ) {
           const rawCatched = payload.catchedTime || payload.cachedTime || new Date().toISOString();
-          const dObj = new Date(rawCatched);
+          let parsedStr = String(rawCatched).trim();
+          if (!parsedStr.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(parsedStr)) {
+            parsedStr = parsedStr.replace(' ', 'T') + 'Z';
+          }
+          const dObj = new Date(parsedStr);
           const cachedTimeFormatted = !isNaN(dObj.getTime())
-            ? dObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
-            : new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+            ? dObj.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true })
+            : new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
           const cachedDateFormatted = !isNaN(dObj.getTime())
-            ? dObj.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
-            : new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+            ? dObj.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', month: 'short', day: '2-digit', year: 'numeric' })
+            : new Date().toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', month: 'short', day: '2-digit', year: 'numeric' });
 
           const result = {
             STATUS: 'SUCCESS',
@@ -494,8 +498,8 @@ export const getDashboardAnalytics = async (req, res, next) => {
 
     const nowIso = new Date().toISOString();
     const dObj = new Date();
-    const cachedTimeFormatted = dObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-    const cachedDateFormatted = dObj.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+    const cachedTimeFormatted = dObj.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
+    const cachedDateFormatted = dObj.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', month: 'short', day: '2-digit', year: 'numeric' });
 
     const finalResponse = {
       STATUS: 'SUCCESS',

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import api from '../../services/api.js';
 import {
   UserCheck,
   TestTube2,
@@ -98,13 +99,46 @@ export default function PatientJourneyTimeline({
   const [feedbackRating, setFeedbackRating] = useState(5);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
+  const [journeyApiData, setJourneyApiData] = useState(null);
+  const [loadingStages, setLoadingStages] = useState(false);
+
+  const rawPatientId = patient?.patientId || patient?.slNo || patient?.id || '';
+  const cleanPatientId = rawPatientId
+    ? (String(rawPatientId).trim().toUpperCase().startsWith('P')
+        ? `P${String(rawPatientId).trim().replace(/^P+/i, '')}`
+        : `P${String(rawPatientId).trim()}`)
+    : '';
+
+  const fetchJourneyStages = async () => {
+    if (!cleanPatientId) return;
+    setLoadingStages(true);
+    try {
+      const res = await api.get('/patients/journey-stages', {
+        params: { patientId: cleanPatientId },
+      });
+      if (res.data?.STATUS === 'SUCCESS') {
+        setJourneyApiData(res.data);
+      }
+    } catch (err) {
+      console.warn('[JourneyTimeline] Fetch error:', err.message);
+    } finally {
+      setLoadingStages(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchJourneyStages();
+  }, [cleanPatientId]);
 
   const statusStr = String(patient?.status || '').toUpperCase().trim();
   const regDateFormatted = formatDisplayDate(patient?.regDate || patient?.collectionDate || new Date());
   const sampleTime = patient?.sampleTime || '10:30 AM';
 
-  // Determine current active stage index (0 to 9) dynamically from patient status and live report lot statuses
+  // Determine current active stage index (0 to 9) dynamically from API or patient status
   const determineCurrentStageIndex = () => {
+    if (journeyApiData?.currentStageIndex !== undefined && journeyApiData.currentStageIndex !== null) {
+      return journeyApiData.currentStageIndex;
+    }
     const hasReleasedReports = reports.length > 0 && reports.some(r => String(r.status || '').toUpperCase() === 'RELEASED');
     const allReportsReleased = reports.length > 0 && reports.every(r => String(r.status || '').toUpperCase() === 'RELEASED');
     const hasApproved = reports.some(r => r.isApproved || String(r.status || '').toUpperCase() === 'APPROVED');
@@ -122,6 +156,14 @@ export default function PatientJourneyTimeline({
 
   const currentStageIndex = determineCurrentStageIndex();
 
+  const apiStageMap = new Map();
+  if (Array.isArray(journeyApiData?.stages)) {
+    journeyApiData.stages.forEach((s, idx) => {
+      const stageIdx = s.id !== undefined ? s.id : (s.stageNumber ? s.stageNumber - 1 : idx);
+      apiStageMap.set(stageIdx, s);
+    });
+  }
+
   const stages = [
     {
       id: 0,
@@ -129,9 +171,9 @@ export default function PatientJourneyTimeline({
       subtitle: 'Demographics & Barcode Registered',
       icon: UserCheck,
       color: 'indigo',
-      timestamp: `${regDateFormatted} • 09:45 AM`,
-      operator: 'Reception Desk (Sandip)',
-      details: `Patient registered with ID #${patient?.slNo || patient?.barcode || patient?.patientId || '-'}. Requisition and barcode generated. Total Billed: ₹${patient?.totalBill || 0}.`,
+      timestamp: apiStageMap.get(0)?.time || `${regDateFormatted} • 09:45 AM`,
+      operator: apiStageMap.get(0)?.operator || 'Reception Desk',
+      details: apiStageMap.get(0)?.details || `Patient registered with ID #${patient?.slNo || patient?.barcode || cleanPatientId || '-'}. Requisition and barcode generated. Total Billed: ₹${patient?.totalBill || 0}.`,
       actionLabel: null,
     },
     {
@@ -140,9 +182,9 @@ export default function PatientJourneyTimeline({
       subtitle: 'Phlebotomy & Accession Desk',
       icon: TestTube2,
       color: 'amber',
-      timestamp: `${regDateFormatted} • ${sampleTime}`,
-      operator: 'Central Phlebotomy Lab',
-      details: 'Specimens accessioned (EDTA Whole Blood, Serum SST & Fluoride Vacutainers). Barcode scanned and verified.',
+      timestamp: apiStageMap.get(1)?.time || `${regDateFormatted} • ${sampleTime}`,
+      operator: apiStageMap.get(1)?.operator || 'Central Phlebotomy Lab',
+      details: apiStageMap.get(1)?.details || 'Specimens accessioned (EDTA Whole Blood, Serum SST & Fluoride Vacutainers). Barcode scanned and verified.',
       actionLabel: currentStageIndex <= 1 && onReceiveSample ? 'Receive Sample Specimen' : null,
       onAction: onReceiveSample,
     },
@@ -152,9 +194,9 @@ export default function PatientJourneyTimeline({
       subtitle: 'ASTM E1381 / HL7 Bidirectional Handshake',
       icon: Cpu,
       color: 'blue',
-      timestamp: `${regDateFormatted} • 10:48 AM`,
-      operator: 'AutoQuant 200, VIDAS KUBE, LD-560 HPLC, HDC Lyte, ECL 105',
-      details: 'Bidirectional query protocol initiated across all 5 physical analyzers: Meril AutoQuant 200, bioMérieux VIDAS® KUBE™, Labnovation LD-560 HPLC, HDC Lyte, and Erba ECL 105. Barcodes synchronized with LIS.',
+      timestamp: apiStageMap.get(2)?.time || `${regDateFormatted} • 10:48 AM`,
+      operator: apiStageMap.get(2)?.operator || 'AutoQuant 200, VIDAS KUBE, LD-560 HPLC, HDC Lyte, ECL 105',
+      details: apiStageMap.get(2)?.details || 'Bidirectional query protocol initiated across all 5 physical analyzers: Meril AutoQuant 200, bioMérieux VIDAS® KUBE™, Labnovation LD-560 HPLC, HDC Lyte, and Erba ECL 105. Barcodes synchronized with LIS.',
       actionLabel: null,
     },
     {
@@ -163,9 +205,9 @@ export default function PatientJourneyTimeline({
       subtitle: 'Analyzer Optical & Impedance Measurement',
       icon: FlaskConical,
       color: 'purple',
-      timestamp: `${regDateFormatted} • 11:15 AM`,
-      operator: 'Laser Flow Cytometry & Photometry Unit',
-      details: `${reports.length || 'Ordered'} parameters analyzed on automated benches. Calibration and internal QC controls passed.`,
+      timestamp: apiStageMap.get(3)?.time || `${regDateFormatted} • 11:15 AM`,
+      operator: apiStageMap.get(3)?.operator || 'Laser Flow Cytometry & Photometry Unit',
+      details: apiStageMap.get(3)?.details || `${reports.length || 'Ordered'} parameters analyzed on automated benches. Calibration and internal QC controls passed.`,
       actionLabel: null,
     },
     {
@@ -174,9 +216,9 @@ export default function PatientJourneyTimeline({
       subtitle: 'Direct Data Feed into LIS Middleman',
       icon: Activity,
       color: 'cyan',
-      timestamp: `${regDateFormatted} • 11:22 AM`,
-      operator: 'LIS ASTM Receiver Socket',
-      details: 'Raw parameter packets transmitted into LIS middleman without manual data entry. Zero transcription error protocol.',
+      timestamp: apiStageMap.get(4)?.time || `${regDateFormatted} • 11:22 AM`,
+      operator: apiStageMap.get(4)?.operator || 'LIS ASTM Receiver Socket',
+      details: apiStageMap.get(4)?.details || 'Raw parameter packets transmitted into LIS middleman without manual data entry. Zero transcription error protocol.',
       actionLabel: null,
     },
     {
@@ -185,9 +227,9 @@ export default function PatientJourneyTimeline({
       subtitle: 'Parameter Extraction & Panic Value Check',
       icon: FileSpreadsheet,
       color: 'teal',
-      timestamp: `${regDateFormatted} • 11:30 AM`,
-      operator: 'Automated Clinical Engine',
-      details: 'Numerical values matched against gender/age-specific biological reference intervals. Panic alerts evaluated.',
+      timestamp: apiStageMap.get(5)?.time || `${regDateFormatted} • 11:30 AM`,
+      operator: apiStageMap.get(5)?.operator || 'Automated Clinical Engine',
+      details: apiStageMap.get(5)?.details || 'Numerical values matched against gender/age-specific biological reference intervals. Panic alerts evaluated.',
       actionLabel: null,
     },
     {
@@ -196,9 +238,9 @@ export default function PatientJourneyTimeline({
       subtitle: 'Doctor & Pathologist Sign-Off',
       icon: ShieldCheck,
       color: 'emerald',
-      timestamp: `${regDateFormatted} • 11:45 AM`,
-      operator: 'Dr. S. Mukherjee, MD Pathologist (WBMC-45920)',
-      details: 'Clinical correlation and delta checks reviewed and certified by senior pathologist.',
+      timestamp: apiStageMap.get(6)?.time || `${regDateFormatted} • 11:45 AM`,
+      operator: apiStageMap.get(6)?.operator || 'Dr. S. Mukherjee, MD Pathologist (WBMC-45920)',
+      details: apiStageMap.get(6)?.details || 'Clinical correlation and delta checks reviewed and certified by senior pathologist.',
       actionLabel: currentStageIndex <= 6 && onOpenApproval ? 'Pathologist Sign-off' : null,
       onAction: onOpenApproval,
     },
@@ -208,9 +250,9 @@ export default function PatientJourneyTimeline({
       subtitle: 'NABL QR Code & Digital Signature PDF',
       icon: Printer,
       color: 'pink',
-      timestamp: `${regDateFormatted} • 12:05 PM`,
-      operator: 'Central Report Engine',
-      details: 'Diagnostic PDF report compiled with cryptographically signed digital signature and instant verification QR code.',
+      timestamp: apiStageMap.get(7)?.time || `${regDateFormatted} • 12:05 PM`,
+      operator: apiStageMap.get(7)?.operator || 'Central Report Engine',
+      details: apiStageMap.get(7)?.details || 'Diagnostic PDF report compiled with cryptographically signed digital signature and instant verification QR code.',
       actionLabel: onReleaseReport ? 'Release Report' : null,
       onAction: onReleaseReport,
       secondaryActionLabel: onRecallReport ? 'Recall Report' : null,
@@ -222,9 +264,9 @@ export default function PatientJourneyTimeline({
       subtitle: 'Automated Dispatch to Registered Mobile',
       icon: MessageSquare,
       color: 'green',
-      timestamp: `${regDateFormatted} • 12:10 PM`,
-      operator: `Meta WhatsApp Cloud API (${patient?.mobile || 'Patient'})`,
-      details: `Official diagnostic PDF and download link delivered to registered phone ${patient?.mobile || 'number'}. Supports 4 channels: Onboarding Msg, Report to Patient, Report to Doctor, Report to Referring Agent.`,
+      timestamp: apiStageMap.get(8)?.time || `${regDateFormatted} • 12:10 PM`,
+      operator: apiStageMap.get(8)?.operator || `Meta WhatsApp Cloud API (${patient?.mobile || 'Patient'})`,
+      details: apiStageMap.get(8)?.details || `Official diagnostic PDF and download link delivered to registered phone ${patient?.mobile || 'number'}. Supports 4 channels: Onboarding Msg, Report to Patient, Report to Doctor, Report to Referring Agent.`,
       actionLabel: (onOpenWhatsAppModal || onSendWhatsApp) ? 'Send WhatsApp' : null,
       onAction: () => {
         if (onOpenWhatsAppModal) {
@@ -240,9 +282,9 @@ export default function PatientJourneyTimeline({
       subtitle: 'Patient Experience & Service Rating',
       icon: Sparkles,
       color: 'amber',
-      timestamp: feedbackSubmitted ? 'Rating Recorded' : 'Awaiting Patient Rating',
-      operator: 'Patient Experience Desk',
-      details: 'Automated feedback survey dispatched. Rating helps lab maintain high clinical precision and care standards.',
+      timestamp: apiStageMap.get(9)?.time || (feedbackSubmitted ? 'Rating Recorded' : 'Awaiting Patient Rating'),
+      operator: apiStageMap.get(9)?.operator || 'Patient Experience Desk',
+      details: apiStageMap.get(9)?.details || 'Automated feedback survey dispatched. Rating helps lab maintain high clinical precision and care standards.',
       actionLabel: null,
     },
   ];
@@ -277,6 +319,40 @@ export default function PatientJourneyTimeline({
 
         {/* Overall Completion Badge & Bar */}
         <div className="flex items-center gap-3">
+          {/* Live Upstream API: GETJOURNEYSTAGES Indicator */}
+          <div className="flex items-center gap-1.5">
+            <span
+              className={`text-[10px] font-mono px-2.5 py-1 rounded-full border font-bold flex items-center gap-1.5 shadow-2xs transition-colors ${
+                journeyApiData?.isUpstreamLive
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                  : 'bg-blue-50 text-blue-700 border-blue-200'
+              }`}
+              title={`API: GETJOURNEYSTAGES | patientId=${cleanPatientId || '-'}`}
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  journeyApiData?.isUpstreamLive ? 'bg-emerald-500 animate-ping' : 'bg-blue-500'
+                }`}
+              />
+              <span>GETJOURNEYSTAGES {cleanPatientId ? `• ${cleanPatientId}` : ''}</span>
+              {journeyApiData?.isUpstreamLive && (
+                <span className="bg-emerald-600 text-white text-[8px] px-1 py-0.2 rounded uppercase font-sans">
+                  LIVE
+                </span>
+              )}
+            </span>
+
+            <button
+              type="button"
+              onClick={fetchJourneyStages}
+              disabled={loadingStages || !cleanPatientId}
+              title="Refresh Journey Stages from API_GET_JOURNEY_STAGES"
+              className="p-1 rounded-lg border border-slate-200 text-slate-500 hover:text-blue-600 hover:border-blue-300 transition-colors disabled:opacity-40 cursor-pointer"
+            >
+              <Clock className={`w-3.5 h-3.5 ${loadingStages ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+
           <div className="text-right hidden sm:block">
             <span className="text-[10px] uppercase font-bold text-slate-400 block">Progress</span>
             <span className="text-xs font-black text-slate-900 font-mono">

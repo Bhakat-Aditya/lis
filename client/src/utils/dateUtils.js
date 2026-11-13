@@ -311,3 +311,42 @@ export const formatAgeDisplay = (age, unit = 'Years') => {
   return `${num} ${resolvedUnit}`;
 };
 
+/**
+ * Convert GMT/UTC ISO string (e.g. "2026-11-13T02:35:34.807Z") to Indian Standard Time (IST, UTC+5:30)
+ * Returns formatted 12-hour time: "08:05 AM"
+ */
+export const formatGmtToIstTime = (gmtDateVal) => {
+  if (!gmtDateVal) return '';
+  let str = String(gmtDateVal).trim();
+  if (!str.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(str)) {
+    str = str.replace(' ', 'T') + 'Z';
+  }
+  const d = new Date(str);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString('en-US', {
+    timeZone: 'Asia/Kolkata',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
+};
+
+/**
+ * Convert GMT/UTC ISO string to Indian Standard Date (e.g. "Nov 13, 2026")
+ */
+export const formatGmtToIstDate = (gmtDateVal) => {
+  if (!gmtDateVal) return '';
+  let str = String(gmtDateVal).trim();
+  if (!str.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(str)) {
+    str = str.replace(' ', 'T') + 'Z';
+  }
+  const d = new Date(str);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', {
+    timeZone: 'Asia/Kolkata',
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric',
+  });
+};
+

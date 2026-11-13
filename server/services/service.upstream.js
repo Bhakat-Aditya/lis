@@ -5,6 +5,8 @@ export const API_LOGIN_V2 = "LOGINV2";
 export const API_DASHBOARD_REFRESH = "DASHBOARDREFRESH";
 export const API_GET_DASHBOARD_JSON = "GETDASHBOARDJSON";
 export const API_RECALL_REPORT = "RECALLPORT";
+export const API_ADD_TEST_MULTIPLE_REFRESH = "ADDTESTMULTIPLEREFRESH";
+export const API_GET_JOURNEY_STAGES = "GETJOURNEYSTAGES";
 
 export const UPSTREAM_ERROR_MAP = {
   '0001': 'API missing',
@@ -62,7 +64,7 @@ class UpstreamService {
   }
 
   /**
-   * Perform upstream login with master credentials using LOGINV2 (sandip / Life)
+   * Perform upstream login with master credentials using LOGINV2 (exsuper / exsuper)
    */
   async loginMaster() {
     try {
@@ -881,6 +883,43 @@ class UpstreamService {
     } catch (err) {
       console.warn(`[Upstream] SaveTemplateData error for ${cleanReportId}:`, err.message);
       return { success: false, message: err.message };
+    }
+  }
+
+  /**
+   * Fetch clinical journey stages for a patient (API_GET_JOURNEY_STAGES = "GETJOURNEYSTAGES")
+   * Upstream URL format: /GetAPIServlet?api=GETJOURNEYSTAGES&patientId=P26
+   * @param {string} patientId - Patient identifier (e.g. "P26")
+   * @param {string} [sid] - Optional session ID
+   */
+  async getJourneyStages(patientId, sid = null) {
+    const cleanPatientId = String(patientId || '').trim();
+    if (!cleanPatientId) {
+      throw new Error('patientId is required for GETJOURNEYSTAGES');
+    }
+
+    // 1. Primary: GetAPIServlet (All GET* APIs are hosted on GetAPIServlet)
+    try {
+      const res = await this.get(API_GET_JOURNEY_STAGES, { patientId: cleanPatientId }, sid);
+      if (res && res.StatusCode !== '1001') {
+        return res;
+      }
+    } catch (err) {
+      console.warn(`[Upstream] GetAPIServlet GETJOURNEYSTAGES failed for ${cleanPatientId}:`, err.message);
+    }
+
+    // 2. Secondary fallback: APIServlet (in case upstream route is mapped to APIServlet)
+    try {
+      const resPost = await this.post(API_GET_JOURNEY_STAGES, { patientId: cleanPatientId }, null, sid);
+      return resPost;
+    } catch (postErr) {
+      return {
+        STATUS: 'FAILED',
+        StatusCode: '1001',
+        Message: postErr.message || 'GETJOURNEYSTAGES unreachable',
+        api: API_GET_JOURNEY_STAGES,
+        patientId: cleanPatientId,
+      };
     }
   }
 }

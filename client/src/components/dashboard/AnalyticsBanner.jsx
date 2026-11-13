@@ -39,6 +39,7 @@ export default function AnalyticsBanner({
       const now = new Date();
       setCurrentTime(
         now.toLocaleTimeString('en-US', {
+          timeZone: 'Asia/Kolkata',
           hour: '2-digit',
           minute: '2-digit',
           hour12: true,
@@ -46,6 +47,7 @@ export default function AnalyticsBanner({
       );
       setCurrentDateFormatted(
         now.toLocaleDateString('en-US', {
+          timeZone: 'Asia/Kolkata',
           month: 'short',
           day: '2-digit',
           year: 'numeric',
@@ -73,46 +75,13 @@ export default function AnalyticsBanner({
   const todayDateObj = new Date();
   const todayStr = formatD(todayDateObj);
 
-  const yestDateObj = new Date(todayDateObj);
-  yestDateObj.setDate(todayDateObj.getDate() - 1);
-  const yestStr = formatD(yestDateObj);
-
-  const past7DateObj = new Date(todayDateObj);
-  past7DateObj.setDate(todayDateObj.getDate() - 6);
-  const past7Str = formatD(past7DateObj);
-
-  const past9DateObj = new Date(todayDateObj);
-  past9DateObj.setDate(todayDateObj.getDate() - 8);
-  const past9Str = formatD(past9DateObj);
-
   const isTodayActive = fromDate === todayStr && toDate === todayStr;
-  const isYesterdayActive = fromDate === yestStr && toDate === yestStr;
-  const is7DaysActive = fromDate === past7Str && toDate === todayStr;
-  const is9DaysActive = fromDate === past9Str && toDate === todayStr;
 
   const handleQuickPreset = (preset) => {
     if (preset === 'today') {
       onFromDateChange(todayStr);
       onToDateChange(todayStr);
       if (onSubmitDates) onSubmitDates(todayStr, todayStr);
-    } else if (preset === 'yesterday') {
-      onFromDateChange(yestStr);
-      onToDateChange(yestStr);
-      if (onSubmitDates) onSubmitDates(yestStr, yestStr);
-    } else if (preset === 'last7days') {
-      onFromDateChange(past7Str);
-      onToDateChange(todayStr);
-      if (onSubmitDates) onSubmitDates(past7Str, todayStr);
-    } else if (preset === 'last9days') {
-      onFromDateChange(past9Str);
-      onToDateChange(todayStr);
-      if (onSubmitDates) onSubmitDates(past9Str, todayStr);
-    } else if (preset === 'thismonth') {
-      const firstDay = new Date(todayDateObj.getFullYear(), todayDateObj.getMonth(), 1);
-      const firstStr = formatD(firstDay);
-      onFromDateChange(firstStr);
-      onToDateChange(todayStr);
-      if (onSubmitDates) onSubmitDates(firstStr, todayStr);
     }
   };
 
@@ -317,51 +286,18 @@ export default function AnalyticsBanner({
           }}
           className="flex items-center gap-2 flex-wrap"
         >
-          {/* Quick Date Presets (Visible across all screens with active highlighting) */}
-          <div className="flex flex-wrap items-center gap-1.5 text-xs mr-1">
+          {/* Quick Date Preset: Only Today */}
+          <div className="flex items-center text-xs mr-1">
             <button
               type="button"
               onClick={() => handleQuickPreset('today')}
-              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer text-xs ${
+              className={`px-3 py-1 rounded-lg transition-all cursor-pointer text-xs ${
                 isTodayActive
                   ? 'bg-white text-emerald-800 font-extrabold shadow-sm scale-105 ring-2 ring-white/60'
                   : 'bg-white/15 hover:bg-white/25 text-emerald-50 font-semibold'
               }`}
             >
               Today
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickPreset('yesterday')}
-              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer text-xs ${
-                isYesterdayActive
-                  ? 'bg-white text-emerald-800 font-extrabold shadow-sm scale-105 ring-2 ring-white/60'
-                  : 'bg-white/15 hover:bg-white/25 text-emerald-50 font-semibold'
-              }`}
-            >
-              Yesterday
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickPreset('last7days')}
-              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer text-xs ${
-                is7DaysActive
-                  ? 'bg-white text-emerald-800 font-extrabold shadow-sm scale-105 ring-2 ring-white/60'
-                  : 'bg-white/15 hover:bg-white/25 text-emerald-50 font-semibold'
-              }`}
-            >
-              7 Days
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickPreset('last9days')}
-              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer text-xs ${
-                is9DaysActive
-                  ? 'bg-white text-emerald-800 font-extrabold shadow-sm scale-105 ring-2 ring-white/60'
-                  : 'bg-white/15 hover:bg-white/25 text-emerald-50 font-semibold'
-              }`}
-            >
-              9-Day Window
             </button>
           </div>
 

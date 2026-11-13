@@ -403,13 +403,223 @@ export default function BillingPage() {
         </div>
       )}
 
+      {/* Branch Selector Bar (Pill buttons with counts & revenue) */}
+      <div className="bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 mr-1">
+            <Building className="w-4 h-4 text-indigo-600" />
+            <span>Branch View:</span>
+          </div>
+
+          {/* All Branches */}
+          <button
+            type="button"
+            onClick={() => setSelectedBranch('ALL')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
+              selectedBranch === 'ALL'
+                ? 'bg-indigo-600 text-white shadow-xs font-bold'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            <span>All Branches</span>
+            <span
+              className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                selectedBranch === 'ALL' ? 'bg-indigo-700 text-white' : 'bg-white text-slate-600 border border-slate-200'
+              }`}
+            >
+              {billingPatients.length}
+            </span>
+          </button>
+
+          {/* Dynamic Branch Pills */}
+          {Array.from(branchLookup.values()).map((b) => {
+            const isSelected = selectedBranch === b.branchId;
+            const bMet = branchMetrics[b.branchId] || { count: 0, invoiced: 0 };
+            return (
+              <button
+                key={b.branchId}
+                type="button"
+                onClick={() => setSelectedBranch(b.branchId)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
+                  isSelected
+                    ? 'bg-blue-600 text-white shadow-xs font-bold'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                <span>{b.name}</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                    isSelected ? 'bg-blue-700 text-white' : 'bg-white text-slate-600 border border-slate-200'
+                  }`}
+                >
+                  {bMet.count}
+                </span>
+                {bMet.invoiced > 0 && (
+                  <span className={`text-[10px] font-mono ${isSelected ? 'text-blue-100' : 'text-slate-500'}`}>
+                    ₹{bMet.invoiced.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowBranchBreakdown((prev) => !prev)}
+          className="text-xs font-semibold text-slate-600 hover:text-indigo-600 flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 hover:border-indigo-300 bg-slate-50 cursor-pointer transition-all self-end md:self-auto"
+        >
+          <Building className="w-3.5 h-3.5 text-indigo-500" />
+          <span>{showBranchBreakdown ? 'Hide Branch Cards' : 'Compare Branches'}</span>
+        </button>
+      </div>
+
+      {/* Branch-Wise Revenue Breakdown Comparison Grid */}
+      {showBranchBreakdown && (
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+              <Building className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Branch-Wise Revenue Breakdown</span>
+            </h2>
+            <span className="text-[11px] text-slate-400 italic">
+              Live financial comparison across all active collection centers
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {Array.from(branchLookup.values()).map((b) => {
+              const m = branchMetrics[b.branchId] || {
+                count: 0,
+                invoiced: 0,
+                collected: 0,
+                due: 0,
+                realizationPct: 100,
+                cash: 0,
+                upi: 0,
+                card: 0,
+              };
+              const isSelected = selectedBranch === b.branchId;
+
+              return (
+                <div
+                  key={b.branchId}
+                  onClick={() => setSelectedBranch(isSelected ? 'ALL' : b.branchId)}
+                  className={`bg-white rounded-2xl border p-4 shadow-2xs transition-all cursor-pointer relative overflow-hidden group ${
+                    isSelected
+                      ? 'border-blue-500 ring-2 ring-blue-500/20 shadow-sm'
+                      : 'border-slate-200/90 hover:border-indigo-300 hover:shadow-xs'
+                  }`}
+                >
+                  {/* Top Bar: Name, Badge, Count */}
+                  <div className="flex items-start justify-between gap-2 mb-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-slate-900 group-hover:text-indigo-600 transition-colors">
+                          {b.name}
+                        </span>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${b.badgeColor}`}>
+                          #{b.branchId}
+                        </span>
+                      </div>
+                      {b.location && (
+                        <p className="text-[11px] text-slate-400 mt-0.5 truncate max-w-[220px]">
+                          {b.location}
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="text-xs font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full border border-slate-200">
+                        {m.count} Bill{m.count === 1 ? '' : 's'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Financial Stats */}
+                  <div className="grid grid-cols-3 gap-2 bg-slate-50/80 rounded-xl p-2.5 mb-3 border border-slate-100">
+                    <div>
+                      <span className="text-[10px] font-semibold text-slate-400 block uppercase">Invoiced</span>
+                      <span className="text-xs font-extrabold text-slate-900 font-mono">
+                        ₹{m.invoiced.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-semibold text-emerald-600 block uppercase">Collected</span>
+                      <span className="text-xs font-extrabold text-emerald-600 font-mono">
+                        ₹{m.collected.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-semibold text-amber-600 block uppercase">Due</span>
+                      <span className={`text-xs font-extrabold font-mono ${m.due > 0 ? 'text-rose-600' : 'text-slate-400'}`}>
+                        ₹{m.due.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Realization Progress Bar */}
+                  <div className="space-y-1 mb-3">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500 font-medium">Realization Rate</span>
+                      <span className="font-bold text-slate-800 font-mono">{m.realizationPct}%</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          m.realizationPct >= 90
+                            ? 'bg-emerald-500'
+                            : m.realizationPct >= 50
+                            ? 'bg-amber-500'
+                            : 'bg-rose-500'
+                        }`}
+                        style={{ width: `${Math.max(4, m.realizationPct)}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Payment Mode Pills */}
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[10px]">
+                    <div className="flex items-center gap-1.5 text-slate-500 font-mono">
+                      <span>Cash: ₹{m.cash.toLocaleString('en-IN')}</span>
+                      <span>•</span>
+                      <span>UPI: ₹{m.upi.toLocaleString('en-IN')}</span>
+                    </div>
+                    <span className="text-indigo-600 font-bold group-hover:underline">
+                      {isSelected ? 'Viewing Branch ✓' : 'Filter Branch ↗'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Summary KPI Divs at the top of the list (Clickable with interactive popup breakdown) */}
       <div className="space-y-3">
         <div>
           <div className="flex items-center justify-between mb-2">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Financial Summary & Accounts Overview
-            </h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Financial Summary & Accounts Overview
+              </h2>
+              {selectedBranch !== 'ALL' && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-full">
+                  <span>Filtered: {branchLookup.get(selectedBranch)?.name || `Branch ${selectedBranch}`}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedBranch('ALL');
+                    }}
+                    className="ml-1 text-blue-600 hover:text-blue-900 font-extrabold cursor-pointer"
+                    title="Show all branches"
+                  >
+                    &times;
+                  </button>
+                </span>
+              )}
+            </div>
             <span className="text-[11px] text-slate-400 italic">
               Click on any card to view detailed bill-by-bill breakdown
             </span>
@@ -676,6 +886,7 @@ export default function BillingPage() {
                 <th className="py-3 px-3 w-12 text-center text-slate-500">SN</th>
                 <th className="py-3 px-3 w-28 text-slate-500">Barcode / SL No</th>
                 <th className="py-3 px-3 min-w-[150px]">Patient Name</th>
+                <th className="py-3 px-3 min-w-[120px] text-slate-500">Branch</th>
                 <th className="py-3 px-3 min-w-[110px] text-slate-500">Bill Ref</th>
                 <th className="py-3 px-3 min-w-[160px] text-slate-500">Particulars / Tests</th>
                 <th className="py-3 px-3 text-right">Total Bill</th>
@@ -691,7 +902,7 @@ export default function BillingPage() {
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan="13" className="py-12 text-center text-slate-400">
+                  <td colSpan="14" className="py-12 text-center text-slate-400">
                     <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-indigo-600" />
                     <span className="font-semibold text-xs">Loading correlated billing ledger...</span>
                   </td>
@@ -732,7 +943,30 @@ export default function BillingPage() {
                         </div>
                       </td>
 
-                      {/* 4. Bill Ref */}
+                      {/* 4. Branch */}
+                      <td className="py-3 px-3 whitespace-nowrap">
+                        {(() => {
+                          const bCode = String(p.branch ?? '0').trim();
+                          const bInfo = branchLookup.get(bCode) || {
+                            name: `Branch ${bCode}`,
+                            shortName: `B${bCode}`,
+                            badgeColor: 'bg-slate-100 text-slate-700 border-slate-200',
+                          };
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedBranch(bCode)}
+                              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold border cursor-pointer hover:opacity-80 transition-opacity ${bInfo.badgeColor}`}
+                              title={`Click to filter by ${bInfo.name}`}
+                            >
+                              <Building className="w-3 h-3 opacity-70 shrink-0" />
+                              <span className="truncate max-w-[120px]">{bInfo.shortName}</span>
+                            </button>
+                          );
+                        })()}
+                      </td>
+
+                      {/* 5. Bill Ref */}
                       <td className="py-3 px-3 text-slate-600 font-mono text-[11px]">
                         <span className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
                           {p.billName || 'TXN/RECEIPT'}
@@ -885,7 +1119,7 @@ export default function BillingPage() {
                 })
               ) : (
                 <tr>
-                  <td colSpan="13" className="py-12 text-center text-slate-400">
+                  <td colSpan="14" className="py-12 text-center text-slate-400">
                     <Receipt className="w-8 h-8 mx-auto mb-2 opacity-40 text-slate-400" />
                     <span className="font-semibold text-xs text-slate-600 block">No billing records found</span>
                     <span className="text-[11px] text-slate-400 block mt-0.5">Adjust the date range above to view invoices</span>
@@ -902,7 +1136,7 @@ export default function BillingPage() {
         isOpen={Boolean(drilldownType)}
         onClose={() => setDrilldownType(null)}
         type={drilldownType}
-        items={billingPatients}
+        items={activeBranchPatients}
         onOpenEditBill={(p) => setEditingBillPatient(p)}
         onOpenDeposit={(p) => {
           setDepositPatient(p);

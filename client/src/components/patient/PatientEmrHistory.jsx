@@ -32,9 +32,6 @@ export default function PatientEmrHistory({
   // Minimized by default as requested by user
   const [isCollapsed, setIsCollapsed] = useState(true);
 
-  const lastFetchedPidRef = useRef(null);
-  const inFlightRef = useRef(false);
-
   const cleanPid = patientId
     ? String(patientId).toUpperCase().startsWith('P')
       ? `P${String(patientId).replace(/^P+/i, '')}`
@@ -42,12 +39,11 @@ export default function PatientEmrHistory({
     : '';
 
   const fetchEmrHistory = async (forceRefresh = false) => {
-    if (!cleanPid) return;
-    if (inFlightRef.current) return;
-    if (!forceRefresh && lastFetchedPidRef.current === cleanPid && emrList.length > 0) return;
+    if (!cleanPid) {
+      setLoading(false);
+      return;
+    }
 
-    inFlightRef.current = true;
-    lastFetchedPidRef.current = cleanPid;
     setLoading(true);
     setError('');
 
@@ -60,24 +56,18 @@ export default function PatientEmrHistory({
     } catch (err) {
       console.warn('Failed to fetch patient EMR history:', err.message);
       setError('Unable to load EMR archive for this patient.');
-      lastFetchedPidRef.current = null;
     } finally {
-      inFlightRef.current = false;
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (!cleanPid) return;
-
-    // Guard against React StrictMode double invocation and redundant re-renders
-    if (lastFetchedPidRef.current === cleanPid || inFlightRef.current) {
+    if (!cleanPid) {
+      setLoading(false);
       return;
     }
 
-    let isMounted = true;
-    inFlightRef.current = true;
-    lastFetchedPidRef.current = cleanPid;
+    let isSubscribed = true;
     setLoading(true);
     setError('');
 
@@ -86,25 +76,34 @@ export default function PatientEmrHistory({
         params: { patientId: cleanPid },
       })
       .then((res) => {
-        if (!isMounted) return;
+        if (!isSubscribed) return;
         const list = res.data?.emrlist || [];
         setEmrList(list);
       })
       .catch((err) => {
-        if (!isMounted) return;
+        if (!isSubscribed) return;
         console.warn('Failed to fetch patient EMR history:', err.message);
         setError('Unable to load EMR archive for this patient.');
-        lastFetchedPidRef.current = null;
       })
       .finally(() => {
-        inFlightRef.current = false;
-        if (isMounted) setLoading(false);
+        if (isSubscribed) {
+          setLoading(false);
+        }
       });
 
     return () => {
-      isMounted = false;
+      isSubscribed = false;
+      setLoading(false);
     };
   }, [cleanPid]);
+
+  const toggleCollapse = () => {
+    const nextCollapsed = !isCollapsed;
+    setIsCollapsed(nextCollapsed);
+    if (!nextCollapsed && emrList.length === 0 && !loading) {
+      fetchEmrHistory();
+    }
+  };
 
   const currentPidStr = String(currentPatient?.patientId || cleanPid || '').trim().toUpperCase();
   const currentSlNo = String(currentPatient?.slNo || '').trim();
@@ -113,7 +112,7 @@ export default function PatientEmrHistory({
     <div className="w-full bg-white rounded-2xl border border-cyan-300/80 shadow-xs overflow-hidden transition-all duration-300">
       {/* Clickable Header Bar - Toggles Dropdown */}
       <div
-        onClick={() => setIsCollapsed(!isCollapsed)}
+        onClick={toggleCollapse}
         className="bg-gradient-to-r from-cyan-600 via-teal-600 to-cyan-700 px-4 py-3 flex items-center justify-between text-white cursor-pointer select-none hover:brightness-105 transition-all"
         title={isCollapsed ? 'Click to expand EMR records dropdown' : 'Click to minimize'}
       >
@@ -144,7 +143,6 @@ export default function PatientEmrHistory({
           <button
             type="button"
             onClick={() => fetchEmrHistory(true)}
-            disabled={loading}
             className="p-1.5 hover:bg-white/20 rounded-lg transition-colors text-white cursor-pointer"
             title="Refresh EMR history"
           >
@@ -153,7 +151,7 @@ export default function PatientEmrHistory({
 
           <button
             type="button"
-            onClick={() => setIsCollapsed(!isCollapsed)}
+            onClick={toggleCollapse}
             className="flex items-center gap-1.5 px-3 py-1 bg-white/15 hover:bg-white/25 rounded-lg text-xs font-bold text-white transition-all cursor-pointer shadow-2xs"
           >
             <span className="hidden sm:inline">{isCollapsed ? 'Show Full Records' : 'Minimize'}</span>

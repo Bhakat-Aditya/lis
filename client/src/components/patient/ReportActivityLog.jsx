@@ -20,9 +20,6 @@ export default function ReportActivityLog({ patientId }) {
   const [filterText, setFilterText] = useState('');
   const [copied, setCopied] = useState(false);
 
-  const lastFetchedPidRef = useRef(null);
-  const inFlightRef = useRef(false);
-
   const cleanPid = patientId
     ? String(patientId).toUpperCase().startsWith('P')
       ? `P${String(patientId).replace(/^P+/i, '')}`
@@ -30,12 +27,11 @@ export default function ReportActivityLog({ patientId }) {
     : '';
 
   const fetchLogs = async (forceRefresh = false) => {
-    if (!cleanPid) return;
-    if (inFlightRef.current) return;
-    if (!forceRefresh && lastFetchedPidRef.current === cleanPid && logs.length > 0) return;
+    if (!cleanPid) {
+      setLoading(false);
+      return;
+    }
 
-    inFlightRef.current = true;
-    lastFetchedPidRef.current = cleanPid;
     setLoading(true);
     setError('');
 
@@ -48,25 +44,18 @@ export default function ReportActivityLog({ patientId }) {
     } catch (err) {
       console.warn('Failed to load patient activity logs:', err.message);
       setError('Unable to fetch activity logs for this patient.');
-      // Allow retry on error
-      lastFetchedPidRef.current = null;
     } finally {
-      inFlightRef.current = false;
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (!cleanPid) return;
-
-    // Guard against React StrictMode double invocation and redundant renders
-    if (lastFetchedPidRef.current === cleanPid || inFlightRef.current) {
+    if (!cleanPid) {
+      setLoading(false);
       return;
     }
 
-    let isMounted = true;
-    inFlightRef.current = true;
-    lastFetchedPidRef.current = cleanPid;
+    let isSubscribed = true;
     setLoading(true);
     setError('');
 
@@ -75,25 +64,34 @@ export default function ReportActivityLog({ patientId }) {
         params: { patientId: cleanPid },
       })
       .then((res) => {
-        if (!isMounted) return;
+        if (!isSubscribed) return;
         const list = res.data?.logs || [];
         setLogs(list);
       })
       .catch((err) => {
-        if (!isMounted) return;
+        if (!isSubscribed) return;
         console.warn('Failed to load patient activity logs:', err.message);
         setError('Unable to fetch activity logs for this patient.');
-        lastFetchedPidRef.current = null;
       })
       .finally(() => {
-        inFlightRef.current = false;
-        if (isMounted) setLoading(false);
+        if (isSubscribed) {
+          setLoading(false);
+        }
       });
 
     return () => {
-      isMounted = false;
+      isSubscribed = false;
+      setLoading(false);
     };
   }, [cleanPid]);
+
+  const toggleCollapse = () => {
+    const nextCollapsed = !isCollapsed;
+    setIsCollapsed(nextCollapsed);
+    if (!nextCollapsed && logs.length === 0 && !loading) {
+      fetchLogs();
+    }
+  };
 
   const filteredLogs = useMemo(() => {
     if (!filterText.trim()) return logs;
@@ -121,7 +119,7 @@ export default function ReportActivityLog({ patientId }) {
     <div className="w-full bg-[#0c1322] rounded-2xl border border-emerald-600/30 shadow-md overflow-hidden transition-all duration-300">
       {/* Clickable Header Bar - Toggles Dropdown */}
       <div
-        onClick={() => setIsCollapsed(!isCollapsed)}
+        onClick={toggleCollapse}
         className="bg-gradient-to-r from-emerald-700 via-teal-800 to-slate-900 px-4 py-3 flex items-center justify-between text-white cursor-pointer select-none hover:brightness-105 transition-all"
         title={isCollapsed ? 'Click to expand Report Activity dropdown' : 'Click to minimize'}
       >
@@ -152,7 +150,6 @@ export default function ReportActivityLog({ patientId }) {
           <button
             type="button"
             onClick={() => fetchLogs(true)}
-            disabled={loading}
             className="p-1.5 hover:bg-white/20 rounded-lg transition-colors text-white cursor-pointer"
             title="Refresh logs"
           >
@@ -161,7 +158,7 @@ export default function ReportActivityLog({ patientId }) {
 
           <button
             type="button"
-            onClick={() => setIsCollapsed(!isCollapsed)}
+            onClick={toggleCollapse}
             className="flex items-center gap-1.5 px-3 py-1 bg-white/15 hover:bg-white/25 rounded-lg text-xs font-bold text-white transition-all cursor-pointer shadow-2xs"
           >
             <span className="hidden sm:inline">{isCollapsed ? 'Show Full Console' : 'Minimize'}</span>
