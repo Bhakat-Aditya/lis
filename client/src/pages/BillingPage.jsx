@@ -28,6 +28,7 @@ import Modal from '../components/common/Modal.jsx';
 import BillPreviewModal from '../components/billing/BillPreviewModal.jsx';
 import EditBillModal from '../components/billing/EditBillModal.jsx';
 import FinancialDrilldownModal from '../components/billing/FinancialDrilldownModal.jsx';
+import { useMaster } from '../context/context.master.jsx';
 import {
   formatDisplayDate,
   getLocalDateString,
@@ -52,12 +53,17 @@ export const normalizePaymentCategory = (raw) => {
 
 export default function BillingPage() {
   const navigate = useNavigate();
+  const { branches = [] } = useMaster();
 
   // Date Filtering: Default is TODAY, with presets: Yesterday, Last 7 Days, and Custom (From-To)
   const todayStr = getLocalDateString();
   const [dateFilterPreset, setDateFilterPreset] = useState('today'); // 'today' | 'yesterday' | 'last7days' | 'custom'
   const [fromDate, setFromDate] = useState(todayStr);
   const [toDate, setToDate] = useState(todayStr);
+
+  // Branch filtering & comparison view toggles
+  const [selectedBranch, setSelectedBranch] = useState('ALL'); // 'ALL' | '0' | '1' | '2' | ...
+  const [showBranchBreakdown, setShowBranchBreakdown] = useState(true);
 
   const [billingPatients, setBillingPatients] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -71,6 +77,119 @@ export default function BillingPage() {
   const [paymentMode, setPaymentMode] = useState('CASH');
   const [notification, setNotification] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // All known branches list including Branch 0 (Central / Main Lab)
+  const allBranches = useMemo(() => {
+    const list = [
+      {
+        branchId: '0',
+        name: 'Main Lab (Central)',
+        location: 'Keranitola, Midnapore',
+        shortName: 'Central Lab',
+        badgeColor: 'bg-slate-100 text-slate-800 border-slate-300',
+        activePill: 'bg-slate-800 text-white',
+      },
+    ];
+
+    branches.forEach((b) => {
+      const bid = String(b.branchId || b.id || '').trim();
+      if (bid && bid !== '0') {
+        list.push({
+          branchId: bid,
+          name: b.name ? `${b.name} Branch` : `Branch ${bid}`,
+          location: b.location || '',
+          contact: b.contact || '',
+          shortName: b.name || `B${bid}`,
+          badgeColor:
+            bid === '1'
+              ? 'bg-amber-50 text-amber-800 border-amber-300'
+              : bid === '2'
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+              : 'bg-indigo-50 text-indigo-800 border-indigo-300',
+          activePill:
+            bid === '1'
+              ? 'bg-amber-600 text-white'
+              : bid === '2'
+              ? 'bg-emerald-600 text-white'
+              : 'bg-indigo-600 text-white',
+        });
+      }
+    });
+
+    return list;
+  }, [branches]);
+
+  // Dynamic branch lookup mapping branchId string -> metadata
+  const branchLookup = useMemo(() => {
+    const map = new Map();
+    allBranches.forEach((b) => map.set(String(b.branchId), b));
+
+    // Register any dynamic branch from patients
+    billingPatients.forEach((p) => {
+      const bKey = String(p.branch ?? '0').trim();
+      if (!map.has(bKey)) {
+        map.set(bKey, {
+          branchId: bKey,
+          name: bKey === '0' ? 'Main Lab (Central)' : `Branch ${bKey}`,
+          location: bKey === '0' ? 'Keranitola, Midnapore' : '',
+          shortName: bKey === '0' ? 'Central Lab' : `B${bKey}`,
+          badgeColor: 'bg-purple-50 text-purple-800 border-purple-300',
+          activePill: 'bg-purple-600 text-white',
+        });
+      }
+    });
+
+    return map;
+  }, [allBranches, billingPatients]);
+
+  // Branch-wise revenue metrics comparison for all branches
+  const branchMetrics = useMemo(() => {
+    const metrics = {};
+
+    branchLookup.forEach((bInfo, bKey) => {
+      metrics[bKey] = {
+        ...bInfo,
+        count: 0,
+        invoiced: 0,
+        collected: 0,
+        due: 0,
+        discount: 0,
+        roundOff: 0,
+        cash: 0,
+        offlineUpi: 0,
+        onlineUpi: 0,
+        upi: 0,
+        card: 0,
+        others: 0,
+        realizationPct: 100,
+      };
+    });
+
+    billingPatients.forEach((p) => {
+      const bKey = String(p.branch ?? '0').trim();
+      const m = metrics[bKey];
+      if (m) {
+        m.count += 1;
+        m.invoiced += Number(p.totalBill || 0);
+        m.collected += Number(p.totalPayment || 0);
+        m.due += Number(p.totalOutstanding || 0);
+        m.discount += Number(p.discountAmount || 0);
+        m.roundOff += Number(p.roundOff || 0);
+        m.cash += Number(p.cashPayment || 0);
+        m.offlineUpi += Number(p.offlineUpiPayment || 0);
+        m.onlineUpi += Number(p.onlineUpiPayment || 0);
+        m.card += Number(p.cardPayment || 0);
+        m.others += Number(p.othersPayment || 0);
+      }
+    });
+
+    Object.values(metrics).forEach((m) => {
+      m.upi = m.offlineUpi + m.onlineUpi;
+      m.realizationPct = m.invoiced > 0 ? Math.min(100, Math.round((m.collected / m.invoiced) * 100)) : 100;
+    });
+
+    return metrics;
+  }, [branchLookup, billingPatients]);
 
   // Handle Preset Selection
   const handleDatePreset = (preset) => {
@@ -160,6 +279,7 @@ export default function BillingPage() {
         return {
           ...p,
           sn: idx + 1,
+          branch: String(p.branch ?? '0').trim(),
           bill: b,
           grossAmount,
           discountAmount,
@@ -215,14 +335,28 @@ export default function BillingPage() {
     }
   };
 
-  // Filter in-memory
+  // Patients belonging to currently selected branch (or all)
+  const activeBranchPatients = useMemo(() => {
+    if (selectedBranch === 'ALL') return billingPatients;
+    return billingPatients.filter((p) => String(p.branch ?? '0').trim() === selectedBranch);
+  }, [billingPatients, selectedBranch]);
+
+  // Filter in-memory with branch and search query
   const filtered = useMemo(() => {
     return billingPatients.filter((p) => {
+      // 1. Branch filter
+      if (selectedBranch !== 'ALL') {
+        const pBranch = String(p.branch ?? '0').trim();
+        if (pBranch !== selectedBranch) return false;
+      }
+
+      // 2. Status filter
       const isPaid = p.totalBill > 0 && p.totalOutstanding <= 0 && p.totalPayment >= p.totalBill;
 
       if (statusFilter === 'PAID' && !isPaid) return false;
       if (statusFilter === 'DUE' && isPaid) return false;
 
+      // 3. Search term filter (including branch name search)
       if (!searchTerm) return true;
       const term = searchTerm.toLowerCase().trim();
       const name = String(p.name || '').toLowerCase();
@@ -230,18 +364,21 @@ export default function BillingPage() {
       const slNo = String(p.slNo || '').toLowerCase();
       const doctor = String(p.referedDr || '').toLowerCase();
       const billName = String(p.billName || '').toLowerCase();
+      const bInfo = branchLookup.get(String(p.branch ?? '0').trim());
+      const branchName = bInfo ? bInfo.name.toLowerCase() : '';
 
       return (
         name.includes(term) ||
         slNo.includes(term) ||
         mobile.includes(term) ||
         doctor.includes(term) ||
-        billName.includes(term)
+        billName.includes(term) ||
+        branchName.includes(term)
       );
     });
-  }, [billingPatients, statusFilter, searchTerm]);
+  }, [billingPatients, selectedBranch, statusFilter, searchTerm, branchLookup]);
 
-  // Financial aggregates across all mapped bills (5 modes: CASH, OFFLINE_UPI, CARD, ONLINE_UPI, OTHERS)
+  // Financial aggregates across currently active branch view (5 modes: CASH, OFFLINE_UPI, CARD, ONLINE_UPI, OTHERS)
   const aggregates = useMemo(() => {
     let totalInvoiced = 0;
     let totalCollected = 0;
@@ -254,7 +391,7 @@ export default function BillingPage() {
     let totalOnlineUpi = 0;
     let totalOthers = 0;
 
-    billingPatients.forEach((p) => {
+    activeBranchPatients.forEach((p) => {
       totalInvoiced += Number(p.totalBill || 0);
       totalCollected += Number(p.totalPayment || 0);
       totalDue += Number(p.totalOutstanding || 0);
@@ -280,7 +417,7 @@ export default function BillingPage() {
       totalOthers,
       totalUpi: totalOfflineUpi + totalOnlineUpi,
     };
-  }, [billingPatients]);
+  }, [activeBranchPatients]);
 
   return (
     <section className="space-y-5">
