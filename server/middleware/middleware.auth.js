@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { config } from '../config/config.env.js';
 import { sessionService } from '../services/service.session.js';
+import { upstreamService } from '../services/service.upstream.js';
 
 export const requireAuth = async (req, res, next) => {
   try {
@@ -22,18 +23,22 @@ export const requireAuth = async (req, res, next) => {
 
     const decoded = jwt.verify(token, config.jwtSecret);
 
-    // Validate single active session concurrency:
-    // If the same user logged in from another browser/IP, this token's sessionId is superseded
+    // Validate active session status (gracefully supports multiple tabs/windows)
     if (decoded.loginId && decoded.sessionId) {
       const validation = await sessionService.validateSession(decoded.loginId, decoded.sessionId);
-      if (!validation.valid) {
+      if (!validation.valid && validation.reason !== 'SESSION_SUPERSEDED') {
         return res.status(401).json({
           STATUS: 'FAILED',
-          StatusCode: validation.reason === 'SESSION_SUPERSEDED' ? '1150' : '1140',
-          Message: validation.message || 'Session expired: You have been logged in from another browser.',
+          StatusCode: '1140',
+          Message: validation.message || 'Session expired. Please login again.',
           reason: validation.reason,
         });
       }
+    }
+
+    // Always synchronize decoded.upstreamSid with the current live masterSid
+    if (upstreamService.masterSid) {
+      decoded.upstreamSid = upstreamService.masterSid;
     }
 
     req.user = decoded;

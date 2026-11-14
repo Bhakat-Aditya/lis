@@ -92,8 +92,6 @@ As per clinic system requirements, the following 11 master lists are cached with
    LAB_DOMAIN=https://lis.newlifecaremidnapore.com
    LAB_WEBSITE=https://lis.newlifecaremidnapore.com
    LAB_COOKIE_NAME=lifecareauth
-   UPSTREAM_DEFAULT_USER=exsuper
-   UPSTREAM_DEFAULT_PASS=exsuper
    CLIENT_URL=https://your-frontend.vercel.app
    ```
 4. Click **Deploy**. Note your live Render URL (e.g. `https://lis-server.onrender.com`).

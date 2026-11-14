@@ -6,7 +6,51 @@ export const getMasterList = async (req, res, next) => {
     const { key } = req.params;
     const forceRefresh = req.query.refresh === 'true';
 
-    if (!CACHE_KEYS[key]) {
+    const KEY_MAP = {
+      test: 'TEST_LIST',
+      tests: 'TEST_LIST',
+      TEST_LIST: 'TEST_LIST',
+      department: 'DEPT_LIST',
+      departments: 'DEPT_LIST',
+      DEPT_LIST: 'DEPT_LIST',
+      unit: 'UNIT_LIST',
+      units: 'UNIT_LIST',
+      UNIT_LIST: 'UNIT_LIST',
+      method: 'METHOD_LIST',
+      methods: 'METHOD_LIST',
+      METHOD_LIST: 'METHOD_LIST',
+      profile: 'PROFILE_LIST',
+      profiles: 'PROFILE_LIST',
+      PROFILE_LIST: 'PROFILE_LIST',
+      package: 'PKG_LIST',
+      packages: 'PKG_LIST',
+      PKG_LIST: 'PKG_LIST',
+      doctor: 'DOCT_LIST',
+      doctors: 'DOCT_LIST',
+      DOCT_LIST: 'DOCT_LIST',
+      reference: 'REFERANCE_LIST',
+      references: 'REFERANCE_LIST',
+      REFERANCE_LIST: 'REFERANCE_LIST',
+      branch: 'BRANCH_LIST',
+      branches: 'BRANCH_LIST',
+      BRANCH_LIST: 'BRANCH_LIST',
+      user: 'USER_LIST',
+      users: 'USER_LIST',
+      USER_LIST: 'USER_LIST',
+      sample: 'SAMPLE_LIST',
+      samples: 'SAMPLE_LIST',
+      SAMPLE_LIST: 'SAMPLE_LIST',
+      template: 'TEMPLATE_LIST',
+      templates: 'TEMPLATE_LIST',
+      TEMPLATE_LIST: 'TEMPLATE_LIST',
+      interpretation: 'INTERPRETATION_LIST',
+      interpretations: 'INTERPRETATION_LIST',
+      INTERPRETATION_LIST: 'INTERPRETATION_LIST',
+    };
+
+    const resolvedKey = KEY_MAP[key] || KEY_MAP[String(key).toLowerCase()] || KEY_MAP[String(key).toUpperCase()] || key;
+
+    if (!CACHE_KEYS[resolvedKey]) {
       return res.status(400).json({
         STATUS: 'FAILED',
         StatusCode: '400',
@@ -14,12 +58,12 @@ export const getMasterList = async (req, res, next) => {
       });
     }
 
-    const result = await cacheService.getList(key, forceRefresh, req.user?.upstreamSid);
+    const result = await cacheService.getList(resolvedKey, forceRefresh, req.user?.upstreamSid);
 
     return res.json({
       STATUS: 'SUCCESS',
       StatusCode: '0000',
-      key,
+      key: resolvedKey,
       ...result,
     });
   } catch (err) {
@@ -477,8 +521,23 @@ export const updateSample = async (req, res, next) => {
  */
 export const updateTemplate = async (req, res, next) => {
   try {
+    let repId = req.body.reportId ?? req.body.id ?? '';
+    // Normalize if reportId was given as T-prefixed template id (e.g. 'T1' -> 'P14R1')
+    if (String(repId).toUpperCase().startsWith('T')) {
+      const num = String(repId).replace(/^T+/i, '');
+      repId = `P14R${num}`;
+    }
+    if (!repId) repId = 'P14R1';
+
+    let tmplId = req.body.templatesId ?? '';
+    if (!tmplId && repId) {
+      const num = String(repId).replace(/^P\d+R/i, '');
+      tmplId = `T${num}`;
+    }
+
     const params = {
-      reportId: req.body.reportId ?? req.body.id ?? '',
+      reportId: repId,
+      patientId: 'P14',
       status: req.body.status ?? req.body.Status ?? 'Active',
       price: req.body.price ?? req.body.rate ?? '0',
       price1: req.body.price1 ?? '',
@@ -490,6 +549,7 @@ export const updateTemplate = async (req, res, next) => {
       deptId: req.body.deptId ?? req.body.department ?? '',
       sign: req.body.sign !== undefined ? String(req.body.sign) : '',
       ...req.body,
+      reportId: repId,
     };
     let upstreamRes = null;
     try {
@@ -502,20 +562,33 @@ export const updateTemplate = async (req, res, next) => {
     // are stored as patient P14 or in internal configuration.
     // Update local cache and MongoDB CacheModel for TEMPLATE_LIST so the edit is persisted.
     try {
-      const templateId = req.body.reportId ?? req.body.templatesId ?? req.body.id ?? '';
       const list = await cacheService.getList(CACHE_KEYS.TEMPLATE_LIST);
       if (Array.isArray(list)) {
         const idx = list.findIndex(
-          (t) => String(t.templatesId || t.id || t.reportId).toUpperCase() === String(templateId).toUpperCase()
+          (t) =>
+            String(t.reportId || '').toUpperCase() === String(repId).toUpperCase() ||
+            String(t.templatesId || '').toUpperCase() === String(tmplId).toUpperCase() ||
+            String(t.templatesId || '').toUpperCase() === String(repId).toUpperCase() ||
+            String(t.id || '').toUpperCase() === String(repId).toUpperCase() ||
+            String(t.id || '').toUpperCase() === String(tmplId).toUpperCase()
         );
         if (idx !== -1) {
           list[idx] = {
             ...list[idx],
+            reportId: repId,
+            templatesId: tmplId || list[idx].templatesId,
             TEMPLATE_NAME: params.TEMPLATE_NAME || list[idx].TEMPLATE_NAME,
             name: params.TEMPLATE_NAME || list[idx].name,
             deptId: params.deptId || list[idx].deptId,
-            price: params.price || list[idx].price,
-            rate: params.price || list[idx].rate,
+            price: params.price || list[idx].price || '0',
+            rate: params.price || list[idx].rate || '0',
+            Rate: params.price || list[idx].Rate || '0',
+            price1: params.price1 ?? list[idx].price1 ?? '',
+            rate1: params.price1 ?? list[idx].rate1 ?? '',
+            Rate1: params.price1 ?? list[idx].Rate1 ?? '',
+            price2: params.price2 ?? list[idx].price2 ?? '',
+            rate2: params.price2 ?? list[idx].rate2 ?? '',
+            Rate2: params.price2 ?? list[idx].Rate2 ?? '',
             status: params.status || list[idx].status,
             Status: params.status || list[idx].Status,
             sign: params.sign !== undefined ? params.sign : (list[idx].sign || ''),

@@ -505,11 +505,16 @@ export default function MasterEditModal({
         status: item?.Status || item?.status || 'Active',
       });
     } else if (category === 'templates') {
+      const repId = item?.reportId || (item?.templatesId ? `P14R${String(item.templatesId).replace(/^T/i, '')}` : (item?.id || 'P14R1'));
+      const tmplId = item?.templatesId || (item?.reportId ? `T${String(item.reportId).replace(/^P\d+R/i, '')}` : 'T1');
       setFormData({
-        reportId: item?.templatesId || item?.reportId || item?.id || item?.nextId || '',
+        reportId: repId,
+        templatesId: tmplId,
         TEMPLATE_NAME: item?.TEMPLATE_NAME || item?.['Template Name'] || item?.name || '',
         deptId: item?.deptId || item?.department || departments[0]?.['Dept Id'] || '1',
-        price: item?.price || item?.Rate || item?.rate || '0',
+        price: item?.price !== undefined ? item.price : (item?.Rate !== undefined ? item.Rate : (item?.rate || '0')),
+        price1: item?.price1 !== undefined ? item.price1 : (item?.Rate1 !== undefined ? item.Rate1 : (item?.rate1 || '')),
+        price2: item?.price2 !== undefined ? item.price2 : (item?.Rate2 !== undefined ? item.Rate2 : (item?.rate2 || '')),
         status: item?.status || item?.Status || 'Active',
         sign: item?.sign || '',
       });
@@ -1838,7 +1843,7 @@ export default function MasterEditModal({
                   required
                   value={formData.login || ''}
                   onChange={(e) => handleChange('login', e.target.value)}
-                  placeholder="e.g. entry, exsuper"
+                  placeholder="e.g. entry, staff"
                   className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-bold"
                 />
               </div>
@@ -2031,7 +2036,7 @@ export default function MasterEditModal({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                  Template ID {isEditing ? '(Locked)' : '*'}
+                  Report ID {isEditing ? '(Locked)' : '*'}
                 </label>
                 <input
                   type="text"
@@ -2039,9 +2044,9 @@ export default function MasterEditModal({
                   disabled={isEditing}
                   value={formData.reportId || ''}
                   onChange={(e) => handleChange('reportId', e.target.value)}
-                  placeholder="e.g. T1, T2, ... T15"
-                  className={`w-full px-3 py-1.5 text-xs border rounded-lg font-mono ${
-                    isEditing ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-white border-slate-300'
+                  placeholder="e.g. P14R1, P14R2, ... P14R15"
+                  className={`w-full px-3 py-1.5 text-xs border rounded-lg font-mono font-bold ${
+                    isEditing ? 'bg-slate-100 text-purple-700 border-slate-200' : 'bg-white border-slate-300'
                   }`}
                 />
               </div>
@@ -2061,7 +2066,7 @@ export default function MasterEditModal({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
                   Department
@@ -2081,19 +2086,6 @@ export default function MasterEditModal({
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                  Price / Standard Rate (₹)
-                </label>
-                <input
-                  type="number"
-                  value={formData.price || '0'}
-                  onChange={(e) => handleChange('price', e.target.value)}
-                  placeholder="0"
-                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
                   Status
                 </label>
                 <select
@@ -2105,6 +2097,48 @@ export default function MasterEditModal({
                   <option value="Inactive">Inactive</option>
                   <option value="SAVED">SAVED</option>
                 </select>
+              </div>
+            </div>
+
+            {/* 3 Price Fields (Standard Rate, Special Rate 1, Special Rate 2) */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Standard Rate (₹) *
+                </label>
+                <input
+                  type="number"
+                  value={formData.price !== undefined && formData.price !== null ? formData.price : ''}
+                  onChange={(e) => handleChange('price', e.target.value)}
+                  placeholder="0"
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-mono font-bold text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Special Rate 1 (₹)
+                </label>
+                <input
+                  type="number"
+                  value={formData.price1 !== undefined && formData.price1 !== null ? formData.price1 : ''}
+                  onChange={(e) => handleChange('price1', e.target.value)}
+                  placeholder="Optional rate 1"
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Special Rate 2 (₹)
+                </label>
+                <input
+                  type="number"
+                  value={formData.price2 !== undefined && formData.price2 !== null ? formData.price2 : ''}
+                  onChange={(e) => handleChange('price2', e.target.value)}
+                  placeholder="Optional rate 2"
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-mono"
+                />
               </div>
             </div>
 

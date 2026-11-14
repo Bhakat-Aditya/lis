@@ -857,10 +857,14 @@ export function groupInvestigationsIntoLots(
         processedLotNames.add(String(matchedPkg.Name || name).toLowerCase().trim());
 
         const repWithRate = pkgReports.find((r) => r.rate !== undefined && r.rate !== '' && !isNaN(Number(r.rate)) && Number(r.rate) > 0);
-        // Prioritize official invoice amount from billing list (including explicit 0 / bundled rate)
-        const effectivePkgAmount = isExplicitBillAmount
+        const pkgCatalogRate = Number(matchedPkg.Rate) || Number(matchedPkg.Rate1) || Number(matchedPkg.Rate2) || 0;
+        let effectivePkgAmount = isExplicitBillAmount && billAmount > 0
           ? billAmount
-          : (Number(matchedPkg.Rate) || (repWithRate ? Number(repWithRate.rate) : 0));
+          : (pkgCatalogRate || (repWithRate ? Number(repWithRate.rate) : (isExplicitBillAmount ? billAmount : 0)));
+        if ((!effectivePkgAmount || effectivePkgAmount <= 0) && pkgReports.length > 0) {
+          const sumSubRates = pkgReports.reduce((acc, r) => acc + (parseFloat(r.rate) || 0), 0);
+          if (sumSubRates > 0) effectivePkgAmount = sumSubRates;
+        }
 
         lots.push({
           id: `EXISTING_PKG_${pkgId || idx + 1}`,
@@ -899,10 +903,14 @@ export function groupInvestigationsIntoLots(
         processedLotNames.add(String(matchedProf.Name || name).toLowerCase().trim());
 
         const profRepWithRate = profReports.find((r) => r.rate !== undefined && r.rate !== '' && !isNaN(Number(r.rate)) && Number(r.rate) > 0);
-        // Prioritize official invoice amount from billing list (including explicit 0 / bundled rate)
-        const effectiveProfAmount = isExplicitBillAmount
+        const profCatalogRate = Number(matchedProf.Rate) || Number(matchedProf.Rate1) || Number(matchedProf.Rate2) || 0;
+        let effectiveProfAmount = isExplicitBillAmount && billAmount > 0
           ? billAmount
-          : (Number(matchedProf.Rate) || (profRepWithRate ? Number(profRepWithRate.rate) : 0));
+          : (profCatalogRate || (profRepWithRate ? Number(profRepWithRate.rate) : (isExplicitBillAmount ? billAmount : 0)));
+        if ((!effectiveProfAmount || effectiveProfAmount <= 0) && profReports.length > 0) {
+          const sumSubRates = profReports.reduce((acc, r) => acc + (parseFloat(r.rate) || 0), 0);
+          if (sumSubRates > 0) effectiveProfAmount = sumSubRates;
+        }
 
         lots.push({
           id: `EXISTING_PROF_${profId || idx + 1}`,
@@ -942,13 +950,18 @@ export function groupInvestigationsIntoLots(
         processedLotNames.add(lower);
         processedLotNames.add(String(matchedTmpl.TEMPLATE_NAME || matchedTmpl.name || name).toLowerCase().trim());
 
+        const tmplRate = Number(matchedTmpl.price || matchedTmpl.Rate || matchedTmpl.Rate1 || 0);
+        const effectiveTmplAmount = isExplicitBillAmount && billAmount > 0
+          ? billAmount
+          : (tmplRate > 0 ? tmplRate : (isExplicitBillAmount ? billAmount : 0));
+
         lots.push({
           id: `EXISTING_TEMPLATE_${effectiveReportId || tmplId || idx + 1}`,
           testId: tmplId || effectiveReportId,
           reportId: effectiveReportId,
           type: 'TEMPLATE',
           name: matchedTmpl.TEMPLATE_NAME || matchedTmpl.name || name,
-          amount: isExplicitBillAmount ? billAmount : Number(matchedTmpl.price || matchedTmpl.Rate || 0),
+          amount: effectiveTmplAmount,
           category: 'Template',
           isNew: false,
           subTestCount: 0,

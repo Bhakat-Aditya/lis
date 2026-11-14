@@ -526,10 +526,24 @@ export default function TestSelectionView({
     };
   };
 
-  // Financial calculations based on lot rates (avoids duplicating sub-test rates)
+  // Booked lots (official investigations already committed on AWS server)
+  const bookedLots = useMemo(() => {
+    return selectedTests.filter((t) => !t.isNew);
+  }, [selectedTests]);
+
+  // Pending uncommitted lots (staged additions waiting to be saved to AWS)
+  const pendingLots = useMemo(() => {
+    return selectedTests.filter((t) => t.isNew);
+  }, [selectedTests]);
+
+  const pendingAmount = useMemo(() => {
+    return pendingLots.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+  }, [pendingLots]);
+
+  // Financial calculations based on OFFICIAL AWS booked lots ONLY (avoids visual confusion before saving!)
   const subtotal = useMemo(() => {
-    if (selectedTests.length > 0) {
-      return selectedTests.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    if (bookedLots.length > 0) {
+      return bookedLots.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
     }
     const disc = Number(patient?.discount || 0);
     const gross = Number(patient?.grossTotal || 0);
@@ -537,7 +551,7 @@ export default function TestSelectionView({
     const ptTotal = Number(patient?.totalBill || 0);
     if (ptTotal > 0 && disc > 0) return ptTotal + disc;
     return ptTotal;
-  }, [selectedTests, patient]);
+  }, [bookedLots, patient]);
 
   const discount = Number(patient?.discount || 0);
   const totalAmount = Math.max(0, subtotal - discount);
@@ -693,7 +707,9 @@ export default function TestSelectionView({
     setSaveSuccess('');
 
     try {
-      const formattedIds = newTests
+      // Send all investigations (both existing lots and newly added lots) so previous tests are never replaced
+      const allValidTests = selectedTests.filter((t) => t.testId);
+      const formattedIds = allValidTests
         .map((t) => {
           let prefix = t.type || 'TEST';
           if (prefix === 'TEMPLATE') prefix = 'TEMP';
@@ -714,12 +730,18 @@ export default function TestSelectionView({
       });
 
       if (res.data?.STATUS === 'SUCCESS' || res.data?.StatusCode === '0000') {
-        setSaveSuccess(`Added ${newTests.length} investigation lot(s) successfully!`);
+        setSaveSuccess(`Added ${newTests.length} investigation lot(s) successfully! Redirecting to Billing...`);
         // Immediately mark newly added items as booked so they transition without duplicate or delete trash icon
         setSelectedTests((prev) =>
           prev.map((t) => (t.isNew ? { ...t, isNew: false, isRepeat: false } : t))
         );
         if (onRefresh) await onRefresh();
+        // Redirect directly to billing tab as requested
+        if (onPrintInvoice) {
+          onPrintInvoice();
+        } else {
+          navigate(`/patients/${cleanPid || pid}?tab=billing`);
+        }
       } else {
         setSaveError(res.data?.Message || 'Failed to order tests');
       }
@@ -1129,7 +1151,7 @@ export default function TestSelectionView({
                   onClick={onPrintInvoice}
                   className="px-3 py-1 bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-100 rounded font-bold text-xs cursor-pointer"
                 >
-                  Print Invoice
+                  View Billing
                 </button>
               </div>
             </div>
@@ -1138,6 +1160,73 @@ export default function TestSelectionView({
           {saveError && (
             <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-semibold">
               {saveError}
+            </div>
+          )}
+
+          {/* Staged Investigations (Pending AWS Save) - Solves visual confusion before saving */}
+          {pendingLots.length > 0 && (
+            <div className="bg-amber-50/90 border-2 border-dashed border-amber-300 rounded-2xl p-4 space-y-3 shadow-xs animate-in fade-in">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="p-2 rounded-xl bg-amber-200 text-amber-900 shadow-2xs">
+                    <Layers className="w-5 h-5 text-amber-800" />
+                  </span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-xs sm:text-sm font-extrabold text-amber-950">
+                        {pendingLots.length} Staged Investigation Lot{pendingLots.length === 1 ? '' : 's'} (Pending Save)
+                      </h4>
+                      <span className="bg-amber-200/80 text-amber-900 text-[10px] font-bold px-2 py-0.5 rounded-full font-mono uppercase">
+                        Uncommitted
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-amber-800 mt-0.5">
+                      Items below are staged locally. Bill calculations & official billing will be generated by AWS once saved.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleClear}
+                    className="px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100/60 rounded-xl transition-colors cursor-pointer"
+                  >
+                    Discard Staged
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveTests}
+                    disabled={saving}
+                    className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-95 text-white font-extrabold text-xs py-2 px-4 rounded-xl shadow-xs transition-all cursor-pointer"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>{saving ? 'Saving to AWS...' : 'Save & View Billing →'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Staged Items Chips */}
+              <div className="flex flex-wrap gap-2 pt-1 border-t border-amber-200/70">
+                {pendingLots.map((t) => (
+                  <span
+                    key={t.id}
+                    className="inline-flex items-center gap-1.5 bg-white border border-amber-300 text-amber-950 px-2.5 py-1 rounded-lg text-xs font-bold shadow-2xs"
+                  >
+                    <span className="text-[10px] text-amber-600 uppercase font-mono">{t.category}</span>
+                    <span>{t.name}</span>
+                    <span className="font-mono text-amber-700 font-semibold">(₹{Number(t.amount || 0).toFixed(2)})</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveTest(t.id)}
+                      className="text-slate-400 hover:text-rose-600 ml-1 cursor-pointer transition-colors"
+                      title="Remove"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </span>
+                ))}
+              </div>
             </div>
           )}
 
@@ -1306,10 +1395,10 @@ export default function TestSelectionView({
               <div className="text-xs font-bold text-slate-900 flex items-center justify-between border-b border-slate-100 pb-2.5">
                 <span className="flex items-center gap-1.5">
                   <CreditCard className="w-4 h-4 text-indigo-600" />
-                  <span>Financial Ledger Summary</span>
+                  <span>Recorded Ledger (AWS Server)</span>
                 </span>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
-                  {selectedTests.length} Lots
+                  {bookedLots.length} Booked
                 </span>
               </div>
 
@@ -1356,21 +1445,34 @@ export default function TestSelectionView({
                 </div>
               </div>
 
+              {/* Pending Staged Additions Notification */}
+              {pendingLots.length > 0 && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1.5 animate-in fade-in text-xs">
+                  <div className="flex items-center justify-between text-amber-950 font-bold">
+                    <span>{pendingLots.length} Staged Addition{pendingLots.length === 1 ? '' : 's'}:</span>
+                    <span className="font-mono text-amber-800">+₹{pendingAmount.toFixed(2)} Est.</span>
+                  </div>
+                  <p className="text-[11px] text-amber-700 leading-tight">
+                    Official ledger & discounts will be calculated on AWS when saved.
+                  </p>
+                </div>
+              )}
+
               {/* Save Tests Action right after the Total */}
               <div className="pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={handleSaveTests}
-                  disabled={saving || selectedTests.filter((t) => t.isNew).length === 0}
-                  className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 disabled:opacity-50 text-white font-bold text-xs py-2.5 px-4 rounded-xl shadow-sm transition-all cursor-pointer"
+                  disabled={saving || pendingLots.length === 0}
+                  className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed text-white font-extrabold text-xs py-3 px-4 rounded-xl shadow-md transition-all cursor-pointer"
                 >
                   <Save className="w-4 h-4" />
                   <span>
                     {saving
-                      ? 'Saving Tests...'
-                      : selectedTests.filter((t) => t.isNew).length > 0
-                      ? `Save Tests (${selectedTests.filter((t) => t.isNew).length} New)`
-                      : 'Save Tests'}
+                      ? 'Saving to AWS...'
+                      : pendingLots.length > 0
+                      ? `Save & View Billing (${pendingLots.length} New) →`
+                      : 'Select Tests Above to Save'}
                   </span>
                 </button>
               </div>

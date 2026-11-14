@@ -186,9 +186,9 @@ export default function ResultsEntry({
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Automated / Manual Analyzer Sync state
+  // Automated / Manual Analyzer Sync state (Defaulted to false to prevent excessive polling of main server)
   const [isSyncing, setIsSyncing] = useState(false);
-  const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(false);
   const [lastSyncedTime, setLastSyncedTime] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [uploadingId, setUploadingId] = useState(null);
@@ -814,10 +814,6 @@ export default function ResultsEntry({
 
           return next;
         });
-
-        if (onRefresh) {
-          await onRefresh(true);
-        }
       }
 
       const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });

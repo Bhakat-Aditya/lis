@@ -189,6 +189,7 @@ class MasterCacheService {
       checkperiod: 600,
     });
     this.metadata = new Map();
+    this.inFlight = new Map();
   }
 
   /**
@@ -212,8 +213,17 @@ class MasterCacheService {
       };
     }
 
-    // Cache Miss, empty cache, or Force Refresh - Fetch from upstream or load from MongoDB
-    return await this.refreshList(cacheKey, sid);
+    if (this.inFlight.has(cacheKey)) {
+      return await this.inFlight.get(cacheKey);
+    }
+
+    const fetchPromise = this.refreshList(cacheKey, sid);
+    this.inFlight.set(cacheKey, fetchPromise);
+    try {
+      return await fetchPromise;
+    } finally {
+      this.inFlight.delete(cacheKey);
+    }
   }
 
   /**
@@ -279,7 +289,7 @@ class MasterCacheService {
       signList = DEFAULT_SIGNATURES;
     }
 
-    // Template signatures: merge any locally assigned or saved template signatures
+    // Template metadata: merge any locally assigned or saved template signatures and rates (Standard, Special 1, Special 2)
     if (cacheKey === CACHE_KEYS.TEMPLATE_LIST && Array.isArray(items) && items.length > 0) {
       let prevItems = this.cache.get(CACHE_KEYS.TEMPLATE_LIST) || [];
       if (!Array.isArray(prevItems) || prevItems.length === 0) {
@@ -296,15 +306,25 @@ class MasterCacheService {
       if (Array.isArray(prevItems)) {
         prevItems.forEach((p) => {
           const k = String(p.templatesId || p.reportId || p.id || '').toUpperCase();
-          if (p.sign) prevMap.set(k, p.sign);
+          prevMap.set(k, p);
         });
       }
       items = items.map((t) => {
         const k = String(t.templatesId || t.reportId || t.id || '').toUpperCase();
-        const existingSign = t.sign || prevMap.get(k) || '';
+        const prev = prevMap.get(k) || {};
         return {
+          ...prev,
           ...t,
-          sign: existingSign,
+          price: t.price || prev.price || prev.Rate || prev.rate || '0',
+          Rate: t.price || prev.price || prev.Rate || prev.rate || '0',
+          rate: t.price || prev.price || prev.Rate || prev.rate || '0',
+          price1: t.price1 !== undefined ? t.price1 : (prev.price1 || prev.Rate1 || prev.rate1 || ''),
+          Rate1: t.price1 !== undefined ? t.price1 : (prev.price1 || prev.Rate1 || prev.rate1 || ''),
+          rate1: t.price1 !== undefined ? t.price1 : (prev.price1 || prev.Rate1 || prev.rate1 || ''),
+          price2: t.price2 !== undefined ? t.price2 : (prev.price2 || prev.Rate2 || prev.rate2 || ''),
+          Rate2: t.price2 !== undefined ? t.price2 : (prev.price2 || prev.Rate2 || prev.rate2 || ''),
+          rate2: t.price2 !== undefined ? t.price2 : (prev.price2 || prev.Rate2 || prev.rate2 || ''),
+          sign: t.sign || prev.sign || '',
         };
       });
     }
@@ -452,13 +472,12 @@ class MasterCacheService {
       console.warn('[Cache] Could not pre-load from MongoDB:', dbInitErr.message);
     }
 
-    // 2. Fetch fresh data for any missing or un-synchronized lists
+    // 2. Fetch fresh data only for missing/empty lists
     const keys = Object.values(CACHE_KEYS);
     for (const key of keys) {
       try {
         const cached = this.cache.get(key);
-        const meta = this.metadata.get(key);
-        if (!cached || !Array.isArray(cached) || cached.length === 0 || !meta?.nextId) {
+        if (!cached || !Array.isArray(cached) || cached.length === 0) {
           await this.getList(key, true, sid);
         }
       } catch (err) {

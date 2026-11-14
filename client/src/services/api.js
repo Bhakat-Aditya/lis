@@ -24,24 +24,66 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor: preserve client session and only logout on explicit middleman superseded session
+// In-flight GET request deduplication to prevent duplicate concurrent network calls
+const inFlightGetRequests = new Map();
+const originalGet = api.get.bind(api);
+
+api.get = function (url, config = {}) {
+  // If caller provides a dedicated abort signal, execute directly without coalescing
+  if (config?.signal) {
+    return originalGet(url, config);
+  }
+
+  // Build a stable request key based on url and serialized query parameters
+  const paramKey = config?.params ? JSON.stringify(config.params) : '';
+  const requestKey = `${url}?${paramKey}`;
+
+  // If this exact GET request is already pending over the network, coalesce to same promise
+  if (inFlightGetRequests.has(requestKey)) {
+    return inFlightGetRequests.get(requestKey);
+  }
+
+  const promise = originalGet(url, config).finally(() => {
+    inFlightGetRequests.delete(requestKey);
+  });
+
+  inFlightGetRequests.set(requestKey, promise);
+  return promise;
+};
+
+// Response interceptor: redirect to login when session is timed out / expired
 api.interceptors.response.use(
   (response) => {
-    // Upstream 1140/1150 codes are auto-recovered by middleman and should NOT logout the client user
-    return response;
-  },
-  (error) => {
-    const isSuperseded =
-      error.response?.data?.reason === 'SESSION_SUPERSEDED' ||
-      error.response?.data?.Message?.includes('logged in from another browser');
-
-    // Only redirect to login if session was explicitly superseded by a newer login on another browser
-    if (isSuperseded) {
-      console.warn('[API] Session superseded by login from another browser/device.');
+    // If upstream or middleman returns session timed out / invalid code
+    if (
+      response.data &&
+      (response.data.StatusCode === '1140' ||
+        response.data.StatusCode === '1150' ||
+        response.data.isSessionExpired)
+    ) {
+      console.warn('[API] Session timed out from server response.');
       localStorage.removeItem('lis_auth_token');
       localStorage.removeItem('lis_user');
       if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
-        const reasonMsg = error.response?.data?.Message || 'Session expired: You have been logged in from another browser or device.';
+        const reasonMsg = response.data?.Message || 'Session timed out. Please login again.';
+        window.location.href = `/login?reason=${encodeURIComponent(reasonMsg)}`;
+      }
+    }
+    return response;
+  },
+  (error) => {
+    const isSessionExpired =
+      error.response?.status === 401 ||
+      error.response?.data?.StatusCode === '1140' ||
+      error.response?.data?.StatusCode === '1150' ||
+      error.response?.data?.isSessionExpired;
+
+    if (isSessionExpired) {
+      console.warn('[API] Session timed out or unauthorized. Redirecting to login.');
+      localStorage.removeItem('lis_auth_token');
+      localStorage.removeItem('lis_user');
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        const reasonMsg = error.response?.data?.Message || 'Session timed out. Please login again.';
         window.location.href = `/login?reason=${encodeURIComponent(reasonMsg)}`;
       }
     }

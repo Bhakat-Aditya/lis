@@ -29,6 +29,7 @@ import {
   FileText,
   User,
   CreditCard,
+  Percent,
   Edit,
   Trash2,
   Loader2,
@@ -60,6 +61,7 @@ export default function PatientDetailPage() {
   const [invoiceData, setInvoiceData] = useState(null);
   const [reportPdfUrl, setReportPdfUrl] = useState('');
   const [billPdfUrl, setBillPdfUrl] = useState('');
+  const [billRefreshKey, setBillRefreshKey] = useState(0);
 
   // Modals
   const [showApproval, setShowApproval] = useState(false);
@@ -560,6 +562,7 @@ export default function PatientDetailPage() {
       });
       setNotification(`Deposit receipt of ₹${amt} issued successfully!`);
       setShowDepositModal(false);
+      setBillRefreshKey((prev) => prev + 1);
       fetchPatientData();
     } catch (err) {
       setDepositError(err.response?.data?.Message || 'Failed to record deposit');
@@ -578,6 +581,7 @@ export default function PatientDetailPage() {
   const handleDiscountApplied = (data) => {
     setNotification(data?.message || `Clinical discount of ₹${data.value} applied successfully!`);
     setShowDiscountModal(false);
+    setBillRefreshKey((prev) => prev + 1);
     fetchPatientData();
   };
 
@@ -671,14 +675,14 @@ export default function PatientDetailPage() {
               Fill Results
             </button>
             <button
-              onClick={() => setSearchParams({ tab: 'invoice' })}
+              onClick={() => setSearchParams({ tab: 'billing' })}
               className={`py-1.5 px-3 rounded transition-all cursor-pointer ${
-                activeTab === 'invoice'
+                activeTab === 'billing' || activeTab === 'invoice'
                   ? 'bg-white text-indigo-700 font-bold shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Invoice
+              Billing
             </button>
           </div>
 
@@ -791,7 +795,7 @@ export default function PatientDetailPage() {
           reports={reports}
           templates={templates}
           onRefresh={fetchPatientData}
-          onPrintInvoice={() => setSearchParams({ tab: 'invoice' })}
+          onPrintInvoice={() => setSearchParams({ tab: 'billing' })}
           onFillResults={() => setSearchParams({ tab: 'results' })}
           onMakePayment={handleOpenDepositModal}
         />
@@ -806,23 +810,58 @@ export default function PatientDetailPage() {
         />
       )}
 
-      {activeTab === 'invoice' && (
+      {(activeTab === 'billing' || activeTab === 'invoice') && (
         <div className="space-y-3">
-          <div className="flex items-center justify-between bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
+          <div className="flex flex-wrap items-center justify-between bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs gap-3">
             <div>
-              <h4 className="text-xs font-bold text-slate-800">Diagnostic Invoice Particulars & Ledger</h4>
-              <p className="text-[11px] text-slate-500">Modify test billing rates, add items, or adjust charges</p>
+              <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <CreditCard className="w-4 h-4 text-emerald-600" />
+                <span>Diagnostic Billing & Financial Ledger</span>
+              </h4>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Official diagnostic charges, payments, concessions, and real-time AWS ledger
+              </p>
             </div>
-            <button
-              onClick={() => setShowEditBillModal(true)}
-              className="p-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl shadow-xs transition-all cursor-pointer"
-              title="Edit Bill Particulars & Rates (BILLUPDATE)"
-            >
-              <Edit className="w-4 h-4" />
-            </button>
+
+            <div className="flex items-center gap-2">
+              {/* Payment Button (Colored - Emerald Green) */}
+              <button
+                type="button"
+                onClick={handleOpenDepositModal}
+                className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+                title="Record Patient Payment / Deposit"
+              >
+                <CreditCard className="w-3.5 h-3.5" />
+                <span>Payment</span>
+              </button>
+
+              {/* Add Discount Button (Colored - Indigo) */}
+              <button
+                type="button"
+                onClick={() => setShowDiscountModal(true)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
+                title="Apply Concession or Discount to Bill"
+              >
+                <Percent className="w-3.5 h-3.5" />
+                <span>Add Discount</span>
+              </button>
+
+              {/* Edit Bill Particulars & Rates */}
+              <button
+                type="button"
+                onClick={() => setShowEditBillModal(true)}
+                className="p-2 bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 border border-slate-200 rounded-xl shadow-xs transition-all cursor-pointer"
+                title="Edit Bill Particulars & Rates (BILLUPDATE)"
+              >
+                <Edit className="w-4 h-4" />
+              </button>
+            </div>
           </div>
+
           <AwsBillViewer
+            key={`aws-bill-${id}-${billRefreshKey}`}
             patientId={id}
+            refreshKey={billRefreshKey}
             onBack={() => setSearchParams({ tab: 'profile' })}
             title="Official Diagnostic Bill & Receipt (AWS Server)"
           />
@@ -1022,6 +1061,7 @@ export default function PatientDetailPage() {
           patient={patient}
           onBillUpdated={async () => {
             setNotification('Bill invoice updated successfully via BILLUPDATE!');
+            setBillRefreshKey((prev) => prev + 1);
             await fetchPatientData();
             setShowEditBillModal(false);
           }}

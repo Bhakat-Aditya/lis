@@ -33,8 +33,6 @@ export const config = {
     },
     website: process.env.LAB_WEBSITE || 'https://lis.newlifecaremidnapore.com',
     cookieName: process.env.LAB_COOKIE_NAME || 'lifecareauth',
-    defaultUser: process.env.UPSTREAM_DEFAULT_USER || 'exsuper',
-    defaultPass: process.env.UPSTREAM_DEFAULT_PASS || 'exsuper',
   },
 
   // 24 Hour TTL for Master Data Lists

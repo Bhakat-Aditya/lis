@@ -21,21 +21,21 @@ export const DEFAULT_SAMPLES = [
 ];
 
 export const DEFAULT_TEMPLATES = [
-  { addDuplicate: true, TEMPLATE_NAME: 'URINE EXAMINATION', reportId: 'P14R1', patientId: 'P14', name: 'URINE EXAMINATION', templatesId: 'T1', templatesDate: '2026-11-01', status: 'Active', price: '150' },
-  { addDuplicate: true, TEMPLATE_NAME: 'URINE EXAMINATION - COMPLETE', reportId: 'P14R2', patientId: 'P14', name: 'URINE EXAMINATION - COMPLETE', templatesId: 'T2', templatesDate: '2026-11-01', status: 'Active', price: '200' },
-  { addDuplicate: true, TEMPLATE_NAME: 'STOOL EXAMINATION', reportId: 'P14R3', patientId: 'P14', name: 'STOOL EXAMINATION', templatesId: 'T3', templatesDate: '2026-11-01', status: 'Active', price: '120' },
-  { addDuplicate: true, TEMPLATE_NAME: 'ASCITIC FLUID EXAMINATION', reportId: 'P14R4', patientId: 'P14', name: 'ASCITIC FLUID EXAMINATION', templatesId: 'T4', templatesDate: '2026-11-01', status: 'Active', price: '450' },
-  { addDuplicate: true, TEMPLATE_NAME: 'SYNOVIAL FLUID EXAMINATION', reportId: 'P14R5', patientId: 'P14', name: 'SYNOVIAL FLUID EXAMINATION', templatesId: 'T5', templatesDate: '2026-11-01', status: 'Active', price: '450' },
-  { addDuplicate: true, TEMPLATE_NAME: 'PLEURAL/PERITONEAL/PERICARDIAL/BODY FLUID ANALYSIS REPORT', reportId: 'P14R6', patientId: 'P14', name: 'BIOCHEMISTRY TESTS', templatesId: 'T6', templatesDate: '2026-10-13', status: 'Active', price: '500' },
-  { addDuplicate: true, TEMPLATE_NAME: 'CSF', reportId: 'P14R7', patientId: 'P14', name: 'CSF', templatesId: 'T7', templatesDate: '2026-11-01', status: 'Active', price: '550' },
-  { addDuplicate: true, TEMPLATE_NAME: 'COMPLETE BLOOD COUNT', reportId: 'P14R8', patientId: 'P14', name: 'COMPLETE BLOOD COUNT', templatesId: 'T8', templatesDate: '2026-11-01', status: 'Active', price: '350' },
-  { addDuplicate: true, TEMPLATE_NAME: 'HISTOPATHOLOGY', reportId: 'P14R9', patientId: 'P14', name: 'HISTOPATHOLOGY', templatesId: 'T9', templatesDate: '2026-11-01', status: 'Active', price: '800' },
-  { addDuplicate: true, TEMPLATE_NAME: 'FNAC - ', reportId: 'P14R10', patientId: 'P14', name: 'FNAC - ', templatesId: 'T10', templatesDate: '2026-11-01', status: 'Active', price: '600' },
-  { addDuplicate: true, TEMPLATE_NAME: 'BACTERIOLOGY REPORT', reportId: 'P14R11', patientId: 'P14', name: 'BIOCHEMISTRY TESTS', templatesId: 'T11', templatesDate: '2026-10-13', status: 'Active', price: '400' },
-  { addDuplicate: true, TEMPLATE_NAME: 'SEMEN ANALYSIS', reportId: 'P14R12', patientId: 'P14', name: 'SEMEN ANALYSIS', templatesId: 'T12', templatesDate: '2026-11-01', status: 'Active', price: '300' },
-  { addDuplicate: true, TEMPLATE_NAME: 'Blank', reportId: 'P14R13', patientId: 'P14', name: 'Blank Template', templatesId: 'T13', templatesDate: '2026-11-01', status: 'Active', price: '100' },
-  { addDuplicate: false, TEMPLATE_NAME: 'HBA1C REPORT', reportId: 'P14R14', patientId: 'P14', name: 'BIOCHEMISTRY TESTS', templatesId: 'T14', templatesDate: '2026-10-09', status: 'Active', price: '400' },
-  { addDuplicate: true, TEMPLATE_NAME: 'PASS REPORT', reportId: 'P14R15', patientId: 'P14', name: 'BIOCHEMISTRY TESTS', templatesId: 'T15', templatesDate: '2026-10-13', status: 'Active', price: '150' },
+  { addDuplicate: true, TEMPLATE_NAME: 'URINE EXAMINATION', reportId: 'P14R1', patientId: 'P14', name: 'URINE EXAMINATION', templatesId: 'T1', templatesDate: '2026-11-01', status: 'Active', price: '150', Rate: '150', price1: '', price2: '', Rate1: '', Rate2: '' },
+  { addDuplicate: true, TEMPLATE_NAME: 'URINE EXAMINATION - COMPLETE', reportId: 'P14R2', patientId: 'P14', name: 'URINE EXAMINATION - COMPLETE', templatesId: 'T2', templatesDate: '2026-11-01', status: 'Active', price: '200', Rate: '200', price1: '', price2: '', Rate1: '', Rate2: '' },
+  { addDuplicate: true, TEMPLATE_NAME: 'STOOL EXAMINATION', reportId: 'P14R3', patientId: 'P14', name: 'STOOL EXAMINATION', templatesId: 'T3', templatesDate: '2026-11-01', status: 'Active', price: '120', Rate: '120', price1: '', price2: '', Rate1: '', Rate2: '' },
+  { addDuplicate: true, TEMPLATE_NAME: 'ASCITIC FLUID EXAMINATION', reportId: 'P14R4', patientId: 'P14', name: 'ASCITIC FLUID EXAMINATION', templatesId: 'T4', templatesDate: '2026-11-01', status: 'Active', price: '450', Rate: '450', price1: '', price2: '', Rate1: '', Rate2: '' },
+  { addDuplicate: true, TEMPLATE_NAME: 'SYNOVIAL FLUID EXAMINATION', reportId: 'P14R5', patientId: 'P14', name: 'SYNOVIAL FLUID EXAMINATION', templatesId: 'T5', templatesDate: '2026-11-01', status: 'Active', price: '450', Rate: '450', price1: '', price2: '', Rate1: '', Rate2: '' },
+  { addDuplicate: true, TEMPLATE_NAME: 'PLEURAL/PERITONEAL/PERICARDIAL/BODY FLUID ANALYSIS REPORT', reportId: 'P14R6', patientId: 'P14', name: 'BIOCHEMISTRY TESTS', templatesId: 'T6', templatesDate: '2026-10-13', status: 'Active', price: '500', Rate: '500', price1: '', price2: '', Rate1: '', Rate2: '' },
+  { addDuplicate: true, TEMPLATE_NAME: 'CSF', reportId: 'P14R7', patientId: 'P14', name: 'CSF', templatesId: 'T7', templatesDate: '2026-11-01', status: 'Active', price: '550', Rate: '550', price1: '', price2: '', Rate1: '', Rate2: '' },
+  { addDuplicate: true, TEMPLATE_NAME: 'COMPLETE BLOOD COUNT', reportId: 'P14R8', patientId: 'P14', name: 'COMPLETE BLOOD COUNT', templatesId: 'T8', templatesDate: '2026-11-01', status: 'Active', price: '350', Rate: '350', price1: '', price2: '', Rate1: '', Rate2: '' },
+  { addDuplicate: true, TEMPLATE_NAME: 'HISTOPATHOLOGY', reportId: 'P14R9', patientId: 'P14', name: 'HISTOPATHOLOGY', templatesId: 'T9', templatesDate: '2026-11-01', status: 'Active', price: '800', Rate: '800', price1: '', price2: '', Rate1: '', Rate2: '' },
+  { addDuplicate: true, TEMPLATE_NAME: 'FNAC - ', reportId: 'P14R10', patientId: 'P14', name: 'FNAC - ', templatesId: 'T10', templatesDate: '2026-11-01', status: 'Active', price: '600', Rate: '600', price1: '', price2: '', Rate1: '', Rate2: '' },
+  { addDuplicate: true, TEMPLATE_NAME: 'BACTERIOLOGY REPORT', reportId: 'P14R11', patientId: 'P14', name: 'BIOCHEMISTRY TESTS', templatesId: 'T11', templatesDate: '2026-10-13', status: 'Active', price: '400', Rate: '400', price1: '', price2: '', Rate1: '', Rate2: '' },
+  { addDuplicate: true, TEMPLATE_NAME: 'SEMEN ANALYSIS', reportId: 'P14R12', patientId: 'P14', name: 'SEMEN ANALYSIS', templatesId: 'T12', templatesDate: '2026-11-01', status: 'Active', price: '300', Rate: '300', price1: '', price2: '', Rate1: '', Rate2: '' },
+  { addDuplicate: true, TEMPLATE_NAME: 'Blank', reportId: 'P14R13', patientId: 'P14', name: 'Blank Template', templatesId: 'T13', templatesDate: '2026-11-01', status: 'Active', price: '100', Rate: '100', price1: '', price2: '', Rate1: '', Rate2: '' },
+  { addDuplicate: false, TEMPLATE_NAME: 'HBA1C REPORT', reportId: 'P14R14', patientId: 'P14', name: 'BIOCHEMISTRY TESTS', templatesId: 'T14', templatesDate: '2026-10-09', status: 'Active', price: '400', Rate: '400', price1: '', price2: '', Rate1: '', Rate2: '' },
+  { addDuplicate: true, TEMPLATE_NAME: 'PASS REPORT', reportId: 'P14R15', patientId: 'P14', name: 'BIOCHEMISTRY TESTS', templatesId: 'T15', templatesDate: '2026-10-13', status: 'Active', price: '150', Rate: '150', price1: '', price2: '', Rate1: '', Rate2: '' },
 ];
 
 export const DEFAULT_DEPARTMENTS = [

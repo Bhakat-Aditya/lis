@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import api from '../../services/api';
 
-export default function AwsBillViewer({ patientId, onBack, title }) {
+export default function AwsBillViewer({ patientId, onBack, title, refreshKey }) {
   const [blobUrl, setBlobUrl] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -27,9 +27,9 @@ export default function AwsBillViewer({ patientId, onBack, title }) {
     setLoading(true);
     setError('');
     try {
-      // Stream authentic PDF directly from AWS via backend endpoint
+      // Stream authentic PDF directly from AWS via backend endpoint with cache buster
       const res = await api.get('/billing/pdf', {
-        params: { patientId: cleanPid },
+        params: { patientId: cleanPid, _t: Date.now() },
         responseType: 'blob',
       });
 
@@ -54,7 +54,7 @@ export default function AwsBillViewer({ patientId, onBack, title }) {
     return () => {
       if (blobUrl) URL.revokeObjectURL(blobUrl);
     };
-  }, [cleanPid]);
+  }, [cleanPid, refreshKey]);
 
   const handlePrint = () => {
     if (iframeRef.current) {
@@ -178,6 +178,7 @@ export default function AwsBillViewer({ patientId, onBack, title }) {
           </div>
         ) : blobUrl ? (
           <iframe
+            key={blobUrl}
             ref={iframeRef}
             src={blobUrl}
             title={`AWS Bill - ${cleanPid}`}

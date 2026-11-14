@@ -127,8 +127,13 @@ export default function PatientJourneyTimeline({
   };
 
   useEffect(() => {
+    // If patient and reports are already supplied via props, stages are synthesized in-memory
+    // without making unnecessary network requests to the server
+    if (patient?.status || (reports && reports.length > 0)) {
+      return;
+    }
     fetchJourneyStages();
-  }, [cleanPatientId]);
+  }, [cleanPatientId, patient?.status, reports?.length]);
 
   const statusStr = String(patient?.status || '').toUpperCase().trim();
   const regDateFormatted = formatDisplayDate(patient?.regDate || patient?.collectionDate || new Date());

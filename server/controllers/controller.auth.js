@@ -56,10 +56,14 @@ export const login = async (req, res, next) => {
     upstreamService.masterSid = sid;
     upstreamService.lastLoginTime = Date.now();
 
-    // Trigger async cache check/warm in background with fresh sid
-    cacheService.warmAllCaches(sid).catch((err) => {
-      console.warn('[Auth] Background cache warm notice:', err.message);
-    });
+    // Trigger async cache warm only if any cache is cold/empty
+    const stats = cacheService.getCacheStats();
+    const hasUncached = Object.values(stats).some((s) => !s.isCached || s.itemCount === 0);
+    if (hasUncached) {
+      cacheService.warmAllCaches(sid).catch((err) => {
+        console.warn('[Auth] Background cache warm notice:', err.message);
+      });
+    }
 
     // Fetch user details from cached USER_LIST to identify role and permissions
     let matchedUser = null;

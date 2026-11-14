@@ -118,10 +118,14 @@ export default function TemplateReportEditPage() {
       let loadedPatient = null;
       let templatesList = [];
 
-      // 1. Fetch Patient Info & Templates directly via /reports/patient-report with fresh=true
+      // 1. Fetch Patient Info & Templates directly via /reports/patient-report
       try {
         const ptRes = await api.get('/reports/patient-report', {
-          params: { patientId: cleanPid, withBilling: isMasterTemplate ? 'false' : 'true', fresh: 'true' },
+          params: {
+            patientId: cleanPid,
+            withBilling: isMasterTemplate ? 'false' : 'true',
+            ...(isRefresh ? { fresh: 'true' } : {}),
+          },
         });
         if (ptRes.data?.patient) {
           loadedPatient = isMasterTemplate
@@ -189,7 +193,7 @@ export default function TemplateReportEditPage() {
             params: {
               reportId,
               templateName: effectiveName,
-              fresh: 'true',
+              ...(isRefresh ? { fresh: 'true' } : {}),
             },
           });
 
@@ -337,17 +341,6 @@ export default function TemplateReportEditPage() {
     if (patientId && reportId) {
       loadData(false);
     }
-  }, [patientId, reportId, loadData]);
-
-  // When user returns to tab after editing in AWS editor window, auto-sync fresh data
-  useEffect(() => {
-    const handleWindowFocus = () => {
-      if (patientId && reportId) {
-        loadData(true);
-      }
-    };
-    window.addEventListener('focus', handleWindowFocus);
-    return () => window.removeEventListener('focus', handleWindowFocus);
   }, [patientId, reportId, loadData]);
 
   // Handle Save

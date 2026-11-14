@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Modal from '../common/Modal.jsx';
 import api from '../../services/api';
 import { useMaster } from '../../context/context.master.jsx';
 import { Search, Plus, Check, Trash2, Layers } from 'lucide-react';
 
 export default function AddTestsModal({ isOpen, onClose, patient, reports = [], onTestsAdded }) {
+  const navigate = useNavigate();
   const { tests, profiles, packages } = useMaster();
   const [activeTab, setActiveTab] = useState('tests'); // tests, profiles, packages
   const [searchTerm, setSearchTerm] = useState('');
@@ -87,6 +89,7 @@ export default function AddTestsModal({ isOpen, onClose, patient, reports = [], 
 
       if (onTestsAdded) onTestsAdded();
       onClose();
+      navigate(`/patients/${cleanPid}?tab=billing`);
     } catch (err) {
       setError(err.response?.data?.Message || 'Failed to add tests');
     } finally {

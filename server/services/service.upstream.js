@@ -22,97 +22,91 @@ class UpstreamService {
     this.masterSid = null;
     this.masterCookie = null;
     this.lastLoginTime = null;
-    this.loginPromise = null;
     this.billingCache = new Map();
   }
 
   /**
-   * Ensure we have a valid upstream master session id (sid)
+   * Helper to inspect response and detect whether upstream session is dead, superseded, or logged out
    */
-  async ensureMasterSession(forceRefresh = false) {
-    const isExpired = !this.lastLoginTime || (Date.now() - this.lastLoginTime > 4 * 60 * 60 * 1000);
-    if (!this.masterSid || forceRefresh || isExpired) {
-      if (this.loginPromise) {
-        return this.loginPromise;
-      }
-      this.loginPromise = (async () => {
-        try {
-          await this.loginMaster();
-          return this.masterSid;
-        } catch (loginErr) {
-          // Fallback: recover session from MongoDB active session
-          try {
-            const { Session } = await import('../models/model.session.js');
-            const latestActive = await Session.findOne({ isActive: true }).sort({ createdAt: -1 });
-            if (latestActive?.upstreamSid) {
-              this.masterSid = latestActive.upstreamSid;
-              this.lastLoginTime = Date.now();
-              console.log(`[Upstream] Recovered master session from active MongoDB session: ${this.masterSid}`);
-              return this.masterSid;
-            }
-          } catch (dbErr) {
-            // MongoDB not accessible or no active session
-          }
-          throw loginErr;
-        } finally {
-          this.loginPromise = null;
-        }
-      })();
-      return this.loginPromise;
+  isSessionInvalid(res, data = null) {
+    if (!res && !data) return false;
+    const { status, headers } = res || {};
+    const d = data || res?.data;
+
+    // 1. HTTP 302 Redirect to login.jsp
+    if (status === 302) {
+      const location = headers?.location || '';
+      if (/login\.jsp/i.test(location)) return true;
     }
-    return this.masterSid;
+
+    // 2. HTML page returned containing login form
+    if (typeof d === 'string') {
+      if (/login\.jsp/i.test(d) || /<form[^>]*action=["'][^"']*login/i.test(d) || /name=["']loginid["']/i.test(d)) {
+        return true;
+      }
+      return false;
+    }
+
+    // 3. JSON error structures
+    if (typeof d === 'object' && d !== null) {
+      const code = String(d.StatusCode || d.statusCode || '');
+      if (code === '1140' || code === '1150' || code === '1000') {
+        return true;
+      }
+      // Upstream 1211 is Tomcat processing failure when sid is superseded/revoked
+      if (code === '1211' && d.STATUS === 'FAILED') {
+        return true;
+      }
+      const msg = String(d.Message || d.message || '').toLowerCase();
+      if (
+        msg.includes('no such session') ||
+        msg.includes('auto logout') ||
+        msg.includes('session invalid') ||
+        msg.includes('session expired') ||
+        msg.includes('login again')
+      ) {
+        return true;
+      }
+      const redirect = String(d.redirectURL || d.redirectUrl || '').toLowerCase();
+      if (redirect.includes('login.jsp')) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   /**
-   * Perform upstream login with master credentials using LOGINV2 (exsuper / exsuper)
+   * Resolve the active upstream session ID to use from the authenticated user.
+   * Never attempts background re-login using saved credentials.
    */
-  async loginMaster() {
+  async resolveActiveSid(requestedSid = null) {
+    if (requestedSid) {
+      return requestedSid;
+    }
+    if (this.masterSid) {
+      return this.masterSid;
+    }
+    // Check if an active session exists in MongoDB
     try {
-      const ip = '127.0.0.1';
-      const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
-      const queryParams = new URLSearchParams({
-        api: API_LOGIN_V2,
-        loginid: config.lab.defaultUser,
-        password: config.lab.defaultPass,
-        ip,
-        userAgent,
-      }).toString();
-
-      const url = `${this.baseUrl}/APIServlet?${queryParams}`;
-      const res = await axios.post(url, null, {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': userAgent,
-          'X-Forwarded-For': ip,
-          'X-Real-IP': ip,
-        },
-        timeout: 10000,
-      });
-
-      if (res.data && (res.data.STATUS === 'SUCCESS' || res.data.sid)) {
-        this.masterSid = res.data.sid;
+      const { Session } = await import('../models/model.session.js');
+      const latestActive = await Session.findOne({ isActive: true }).sort({ createdAt: -1 });
+      if (latestActive?.upstreamSid) {
+        this.masterSid = latestActive.upstreamSid;
         this.lastLoginTime = Date.now();
-        const setCookie = res.headers['set-cookie'];
-        if (setCookie && setCookie.length > 0) {
-          this.masterCookie = setCookie[0].split(';')[0];
-        } else {
-          this.masterCookie = `JSESSIONID=${this.masterSid}`;
-        }
-        console.log(`[Upstream] Master logged in successfully via ${API_LOGIN_V2}. sid: ${this.masterSid}`);
-        return { sid: this.masterSid, data: res.data };
-      } else {
-        throw new Error(res.data?.Message || 'Upstream login failed');
+        return this.masterSid;
       }
-    } catch (err) {
-      console.error('[Upstream] Master login error:', err.message);
-      throw err;
+    } catch (e) {
+      // ignore
     }
+    return null;
   }
 
   /**
-   * User login via upstream APIServlet v2 (LOGINV2) with compulsory IP and User-Agent
+   * User login via upstream APIServlet v2 (LOGINV2) with compulsory IP and User-Agent.
+   * Uses strictly the credentials entered by the user.
    */ 
-  async userLogin(loginId, password, totp = null, ip = null, userAgent = null) {
+  async userLogin(loginId, password, totp = null, ip = null, userAgent = null, attempt = 1) {
     try {
       const clientIp = String(ip || '').trim();
       const clientUa = String(userAgent || '').trim();
@@ -147,6 +141,24 @@ class UpstreamService {
         headers,
         timeout: 10000,
       });
+
+      // Handle 1130 rate limiting ("Currently not allowed, try again - 1130") with backoff
+      if (res.data?.StatusCode === '1130' && attempt <= 2) {
+        console.warn(`[Upstream] userLogin for ${loginId} received 1130 rate limit. Waiting 1500ms before retry (attempt ${attempt}/2)...`);
+        await new Promise((r) => setTimeout(r, 1500));
+        return await this.userLogin(loginId, password, totp, ip, userAgent, attempt + 1);
+      }
+
+      if (res.data && (res.data.STATUS === 'SUCCESS' || res.data.sid)) {
+        this.masterSid = res.data.sid;
+        this.lastLoginTime = Date.now();
+        const setCookie = res.headers['set-cookie'];
+        if (setCookie && setCookie.length > 0) {
+          this.masterCookie = setCookie[0].split(';')[0];
+        } else {
+          this.masterCookie = `JSESSIONID=${this.masterSid}`;
+        }
+      }
 
       return res.data;
     } catch (err) {
@@ -209,27 +221,17 @@ class UpstreamService {
   }
 
   /**
-   * Generic GET call to GetAPIServlet with auto-recovery on session invalidation (1140/1150)
+   * Generic GET call to GetAPIServlet
    */
-  async get(apiName, params = {}, sid = null, isRetry = false) {
-    let activeSid = sid;
+  async get(apiName, params = {}, sid = null) {
+    const activeSid = await this.resolveActiveSid(sid);
     if (!activeSid) {
-      try {
-        activeSid = await this.ensureMasterSession();
-      } catch (sidErr) {
-        try {
-          const { Session } = await import('../models/model.session.js');
-          const latest = await Session.findOne({ isActive: true }).sort({ createdAt: -1 });
-          if (latest?.upstreamSid) {
-            activeSid = latest.upstreamSid;
-            this.masterSid = activeSid;
-            this.lastLoginTime = Date.now();
-          }
-        } catch (dbErr) {
-          // ignore
-        }
-        if (!activeSid) throw sidErr;
-      }
+      return {
+        STATUS: 'FAILED',
+        StatusCode: '1140',
+        Message: 'No active session found. Please login.',
+        isSessionExpired: true,
+      };
     }
     const query = new URLSearchParams({ api: apiName, ...this._sanitizeParams(params) }).toString();
     const url = `${this.baseUrl}/GetAPIServlet;jsessionid=${activeSid}?${query}`;
@@ -240,23 +242,19 @@ class UpstreamService {
           'Cookie': `JSESSIONID=${activeSid}`,
         },
         timeout: 15000,
+        validateStatus: () => true,
       });
 
-      // Auto-recovery: If upstream returns 1140 (Session invalid) or 1150 (Auto logout), refresh session & retry once
-      if (!isRetry && res.data && (res.data.StatusCode === '1140' || res.data.StatusCode === '1150')) {
-        console.warn(`[Upstream] Session ${activeSid} invalid/superseded (${res.data.StatusCode}) on GET ${apiName}. Re-authenticating master session...`);
+      // If session timed out or invalid, report session timeout immediately
+      if (this.isSessionInvalid(res, res.data)) {
+        console.warn(`[Upstream] Session ${activeSid} timed out/invalid on GET ${apiName}.`);
         this.masterSid = null;
-        this.masterCookie = null;
-        this.lastLoginTime = null;
-        try {
-          const freshSid = await this.ensureMasterSession(true);
-          if (freshSid) {
-            console.log(`[Upstream] Retrying GET ${apiName} with fresh sid: ${freshSid}`);
-            return await this.get(apiName, params, freshSid, true);
-          }
-        } catch (recoverErr) {
-          console.error('[Upstream] Auto-recovery failed:', recoverErr.message);
-        }
+        return {
+          STATUS: 'FAILED',
+          StatusCode: '1140',
+          Message: 'Session timed out. Please login again.',
+          isSessionExpired: true,
+        };
       }
 
       if (res.data && res.data.StatusCode && UPSTREAM_ERROR_MAP[res.data.StatusCode]) {
@@ -275,25 +273,15 @@ class UpstreamService {
   /**
    * Generic GET call to APIServlet (used by ADDTEMPLATE, DELETEREPORT for templates, etc.)
    */
-  async getAPIServlet(apiName, params = {}, sid = null, isRetry = false) {
-    let activeSid = sid;
+  async getAPIServlet(apiName, params = {}, sid = null) {
+    const activeSid = await this.resolveActiveSid(sid);
     if (!activeSid) {
-      try {
-        activeSid = await this.ensureMasterSession();
-      } catch (sidErr) {
-        try {
-          const { Session } = await import('../models/model.session.js');
-          const latest = await Session.findOne({ isActive: true }).sort({ createdAt: -1 });
-          if (latest?.upstreamSid) {
-            activeSid = latest.upstreamSid;
-            this.masterSid = activeSid;
-            this.lastLoginTime = Date.now();
-          }
-        } catch (dbErr) {
-          // ignore
-        }
-        if (!activeSid) throw sidErr;
-      }
+      return {
+        STATUS: 'FAILED',
+        StatusCode: '1140',
+        Message: 'No active session found. Please login.',
+        isSessionExpired: true,
+      };
     }
     const query = new URLSearchParams({ api: apiName, ...this._sanitizeParams(params) }).toString();
     const url = `${this.baseUrl}/APIServlet;jsessionid=${activeSid}?${query}`;
@@ -304,22 +292,18 @@ class UpstreamService {
           'Cookie': `JSESSIONID=${activeSid}`,
         },
         timeout: 15000,
+        validateStatus: () => true,
       });
 
-      // Auto-recovery: If upstream returns 1140 (Session invalid) or 1150 (Auto logout), refresh session & retry once
-      if (!isRetry && res.data && (res.data.StatusCode === '1140' || res.data.StatusCode === '1150')) {
-        console.warn(`[Upstream] Session ${activeSid} invalid (${res.data.StatusCode}) on GET APIServlet ${apiName}. Re-authenticating master session...`);
+      if (this.isSessionInvalid(res, res.data)) {
+        console.warn(`[Upstream] Session ${activeSid} timed out/invalid on GET APIServlet ${apiName}.`);
         this.masterSid = null;
-        this.masterCookie = null;
-        this.lastLoginTime = null;
-        try {
-          const freshSid = await this.ensureMasterSession(true);
-          if (freshSid) {
-            return await this.getAPIServlet(apiName, params, freshSid, true);
-          }
-        } catch (recoverErr) {
-          console.error('[Upstream] Auto-recovery failed:', recoverErr.message);
-        }
+        return {
+          STATUS: 'FAILED',
+          StatusCode: '1140',
+          Message: 'Session timed out. Please login again.',
+          isSessionExpired: true,
+        };
       }
 
       return res.data;
@@ -330,27 +314,17 @@ class UpstreamService {
   }
 
   /**
-   * Generic POST call to APIServlet with auto-recovery on session invalidation (1140/1150)
+   * Generic POST call to APIServlet
    */
-  async post(apiName, params = {}, body = null, sid = null, customHeaders = {}, isRetry = false) {
-    let activeSid = sid;
+  async post(apiName, params = {}, body = null, sid = null, customHeaders = {}) {
+    const activeSid = await this.resolveActiveSid(sid);
     if (!activeSid) {
-      try {
-        activeSid = await this.ensureMasterSession();
-      } catch (sidErr) {
-        try {
-          const { Session } = await import('../models/model.session.js');
-          const latest = await Session.findOne({ isActive: true }).sort({ createdAt: -1 });
-          if (latest?.upstreamSid) {
-            activeSid = latest.upstreamSid;
-            this.masterSid = activeSid;
-            this.lastLoginTime = Date.now();
-          }
-        } catch (dbErr) {
-          // ignore
-        }
-        if (!activeSid) throw sidErr;
-      }
+      return {
+        STATUS: 'FAILED',
+        StatusCode: '1140',
+        Message: 'No active session found. Please login.',
+        isSessionExpired: true,
+      };
     }
     const query = new URLSearchParams({ api: apiName, ...this._sanitizeParams(params) }).toString();
     const url = `${this.baseUrl}/APIServlet;jsessionid=${activeSid}?${query}`;
@@ -366,23 +340,18 @@ class UpstreamService {
           ...customHeaders,
         },
         timeout: 15000,
+        validateStatus: () => true,
       });
 
-      // Auto-recovery: If upstream returns 1140 (Session invalid) or 1150 (Auto logout), refresh session & retry once
-      if (!isRetry && res.data && (res.data.StatusCode === '1140' || res.data.StatusCode === '1150')) {
-        console.warn(`[Upstream] Session ${activeSid} invalid/superseded (${res.data.StatusCode}) on POST ${apiName}. Re-authenticating master session...`);
+      if (this.isSessionInvalid(res, res.data)) {
+        console.warn(`[Upstream] Session ${activeSid} timed out/invalid on POST ${apiName}.`);
         this.masterSid = null;
-        this.masterCookie = null;
-        this.lastLoginTime = null;
-        try {
-          const freshSid = await this.ensureMasterSession(true);
-          if (freshSid) {
-            console.log(`[Upstream] Retrying POST ${apiName} with fresh sid: ${freshSid}`);
-            return await this.post(apiName, params, body, freshSid, customHeaders, true);
-          }
-        } catch (recoverErr) {
-          console.error('[Upstream] Auto-recovery failed:', recoverErr.message);
-        }
+        return {
+          STATUS: 'FAILED',
+          StatusCode: '1140',
+          Message: 'Session timed out. Please login again.',
+          isSessionExpired: true,
+        };
       }
 
       if (res.data && res.data.StatusCode && UPSTREAM_ERROR_MAP[res.data.StatusCode]) {
@@ -427,7 +396,15 @@ class UpstreamService {
    * Post payment transaction to BillingServlet
    */
   async postBilling(params = {}, sid = null) {
-    const activeSid = sid || await this.ensureMasterSession();
+    const activeSid = await this.resolveActiveSid(sid);
+    if (!activeSid) {
+      return {
+        STATUS: 'FAILED',
+        StatusCode: '1140',
+        Message: 'No active session found. Please login.',
+        isSessionExpired: true,
+      };
+    }
     const url = `${this.baseUrl}/BillingServlet;jsessionid=${activeSid}`;
     const formParams = new URLSearchParams(params);
 
@@ -438,7 +415,19 @@ class UpstreamService {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         timeout: 15000,
+        validateStatus: () => true,
       });
+
+      if (this.isSessionInvalid(res, res.data)) {
+        console.warn(`[Upstream] Session ${activeSid} timed out on BillingServlet.`);
+        this.masterSid = null;
+        return {
+          STATUS: 'FAILED',
+          StatusCode: '1140',
+          Message: 'Session timed out. Please login again.',
+          isSessionExpired: true,
+        };
+      }
 
       return { STATUS: 'SUCCESS', data: res.data };
     } catch (err) {
@@ -471,7 +460,8 @@ class UpstreamService {
     if (!patientId) return null;
     const rawId = String(patientId).trim();
     const cleanId = rawId.toUpperCase().startsWith('P') ? `P${rawId.replace(/^P+/i, '')}` : `P${rawId}`;
-    const activeSid = sid || await this.ensureMasterSession();
+    const activeSid = await this.resolveActiveSid(sid);
+    if (!activeSid) return null;
 
     // 1. Try native GETBILLJSON (accurate, structured JSON from upstream database)
     try {
@@ -644,7 +634,10 @@ class UpstreamService {
 
     const cleanPatientId = String(patientId).trim().toUpperCase();
     const cleanReportId = String(reportId).trim();
-    let activeSid = sid || await this.ensureMasterSession();
+    let activeSid = await this.resolveActiveSid(sid);
+    if (!activeSid) {
+      return { success: false, message: 'No active session found. Please login.', isSessionExpired: true };
+    }
 
     try {
       // 1. Fetch form from editTemplateV2.jsp
@@ -658,14 +651,8 @@ class UpstreamService {
 
       // Handle session expiry on GET
       if (getRes.status === 302 && getRes.headers?.location?.includes('login.jsp')) {
-        activeSid = await this.ensureMasterSession(true);
-        const retryUrl = `${this.baseUrl}/editTemplateV2.jsp;jsessionid=${activeSid}?patientId=${encodeURIComponent(cleanPatientId)}&reportId=${encodeURIComponent(cleanReportId)}`;
-        getRes = await axios.get(retryUrl, {
-          headers: { Cookie: `JSESSIONID=${activeSid}` },
-          timeout: 10000,
-          maxRedirects: 0,
-          validateStatus: () => true,
-        });
+        this.masterSid = null;
+        return { success: false, message: 'Session timed out. Please login again.', isSessionExpired: true };
       }
 
       const html = typeof getRes.data === 'string' ? getRes.data : '';

@@ -85,10 +85,11 @@ export default function DashboardPage({ onOpenNewPatient }) {
   }, []);
 
   useEffect(() => {
+    if (activeView !== 'machines') return;
     fetchHeartbeats();
     const interval = setInterval(fetchHeartbeats, 30000); // 30s auto-refresh
     return () => clearInterval(interval);
-  }, [fetchHeartbeats]);
+  }, [fetchHeartbeats, activeView]);
 
   // Refresh flow states: POST API_DASHBOARD_REFRESH="DASHBOARDREFRESH" -> 2-min wait -> GET API_GET_DASHBOARD_JSON="GETDASHBOARDJSON"
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -243,23 +244,44 @@ export default function DashboardPage({ onOpenNewPatient }) {
   const handleDatesSubmit = (newFrom, newTo) => {
     setFromDate(newFrom);
     setToDate(newTo);
-    fetchDashboardJson(newFrom, newTo);
+    // Note: useEffect automatically triggers fetchDashboardJson with new dates (prevent duplicate call)
   };
 
-  // Derived KPI values: prefer API kpiSummary, fallback to live loaded patient queue
-  const totalCount = analyticsData?.kpiSummary?.totalPatients ?? patients.length;
-  const samplePending = patients.filter((p) => {
-    const s = String(p.status || '').toUpperCase();
-    return s === 'REGISTERED' || s === 'SAMPLE';
-  }).length;
+  // Derived KPI values: strictly prefer API kpiSummary / analyticsData telemetry
+  const totalCount =
+    analyticsData?.kpiSummary?.totalPatients ??
+    analyticsData?.patientBillStatus?.total ??
+    analyticsData?.maleFemaleRatio?.total ??
+    patients.length;
 
-  const inTesting = patients.filter((p) => {
-    const s = String(p.status || '').toUpperCase();
-    return ['ENTRY', 'TESTING', 'SAVED', 'RESULT PARTLY'].includes(s);
-  }).length;
+  const samplePending =
+    analyticsData?.kpiSummary?.samplePending ??
+    analyticsData?.patientReportPreparationProgress?.dailyStatistics?.inDataEntry ??
+    (analyticsData?.patientReportPreparationProgress?.breakdown?.find(
+      (b) => b.label === 'SAMPLE' || b.label === 'ENTRY'
+    )?.count) ??
+    patients.filter((p) => {
+      const s = String(p.status || '').toUpperCase();
+      return s === 'REGISTERED' || s === 'SAMPLE';
+    }).length;
+
+  const inTesting =
+    analyticsData?.kpiSummary?.inTesting ??
+    analyticsData?.patientReportPreparationProgress?.dailyStatistics?.partiallyResulted ??
+    (analyticsData?.patientReportPreparationProgress?.breakdown?.find(
+      (b) => b.label === 'RESULT PARTLY' || b.label === 'TESTING'
+    )?.count) ??
+    patients.filter((p) => {
+      const s = String(p.status || '').toUpperCase();
+      return ['ENTRY', 'TESTING', 'SAVED', 'RESULT PARTLY'].includes(s);
+    }).length;
 
   const readyPrint =
     analyticsData?.kpiSummary?.reportsReadyForPrinting ??
+    analyticsData?.patientReportPreparationProgress?.dailyStatistics?.readyForDelivery ??
+    (analyticsData?.patientReportPreparationProgress?.breakdown?.find(
+      (b) => b.label === 'PRINTING' || b.label === 'RELEASED'
+    )?.count) ??
     patients.filter((p) => {
       const s = String(p.status || '').toUpperCase();
       return ['PRINTING', 'APPROVED', 'RELEASED', 'READY', 'REPORT READY', 'VERIFIED'].includes(s);
@@ -267,6 +289,8 @@ export default function DashboardPage({ onOpenNewPatient }) {
 
   const totalRevenue =
     analyticsData?.kpiSummary?.totalBilledAmount ??
+    analyticsData?.billAmountBreakup?.grossAmount ??
+    analyticsData?.billAmountBreakup?.dailyStatistics?.grossBilled ??
     patients.reduce((acc, p) => acc + (Number(p.totalBill) || 0), 0);
 
   // Derived Metrics for 3-in-a-row Grid Cards

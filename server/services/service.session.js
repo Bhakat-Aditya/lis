@@ -42,14 +42,8 @@ class SessionService {
       previousSession.isActive = false;
       previousSession.terminatedReason = 'Logged in from another browser or device';
 
-      // Terminate upstream session for old session
-      if (previousSession.upstreamSid && previousSession.upstreamSid !== upstreamSid) {
-        try {
-          await upstreamService.userLogout(previousSession.upstreamSid);
-        } catch (e) {
-          console.warn('[Session] Upstream logout for previous session error:', e.message);
-        }
-      }
+      // Note: We deliberately do NOT call upstreamService.userLogout here,
+      // because upstream LIS session is shared and concurrent requests may still be using it.
 
       // If MongoDB is connected, mark old sessions as inactive
       if (mongoose.connection.readyState === 1) {
@@ -167,12 +161,11 @@ class SessionService {
       return { valid: true, session: activeSession };
     }
 
+    // Multi-tab / multi-window concurrency support:
+    // If sessionId does not match activeSession.sessionId, allow it to continue
+    // as long as the JWT is cryptographically valid and not expired.
     if (activeSession.sessionId !== sessionId) {
-      return {
-        valid: false,
-        reason: 'SESSION_SUPERSEDED',
-        message: 'Session expired: You have been logged in from another browser or device.',
-      };
+      return { valid: true, session: activeSession };
     }
 
     if (!activeSession.isActive) {

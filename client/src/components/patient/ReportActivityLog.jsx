@@ -38,6 +38,7 @@ export default function ReportActivityLog({ patientId }) {
     try {
       const res = await api.get('/patients/logs', {
         params: { patientId: cleanPid, ...(forceRefresh ? { fresh: 'true' } : {}) },
+        timeout: 10000,
       });
       const list = res.data?.logs || [];
       setLogs(list);
@@ -49,42 +50,7 @@ export default function ReportActivityLog({ patientId }) {
     }
   };
 
-  useEffect(() => {
-    if (!cleanPid) {
-      setLoading(false);
-      return;
-    }
-
-    let isSubscribed = true;
-    setLoading(true);
-    setError('');
-
-    api
-      .get('/patients/logs', {
-        params: { patientId: cleanPid },
-      })
-      .then((res) => {
-        if (!isSubscribed) return;
-        const list = res.data?.logs || [];
-        setLogs(list);
-      })
-      .catch((err) => {
-        if (!isSubscribed) return;
-        console.warn('Failed to load patient activity logs:', err.message);
-        setError('Unable to fetch activity logs for this patient.');
-      })
-      .finally(() => {
-        if (isSubscribed) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      isSubscribed = false;
-      setLoading(false);
-    };
-  }, [cleanPid]);
-
+  // Lazy-load activity logs strictly on user expand (prevents unnecessary upstream GETLOGPATIENT calls)
   const toggleCollapse = () => {
     const nextCollapsed = !isCollapsed;
     setIsCollapsed(nextCollapsed);

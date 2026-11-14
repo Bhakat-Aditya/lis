@@ -35,7 +35,7 @@ export default function BillPreviewModal({
     setError('');
     try {
       const res = await api.get('/billing/pdf', {
-        params: { patientId: cleanPid },
+        params: { patientId: cleanPid, _t: Date.now() },
         responseType: 'blob',
       });
 
@@ -250,6 +250,7 @@ export default function BillPreviewModal({
             </div>
           ) : blobUrl ? (
             <iframe
+              key={blobUrl}
               ref={iframeRef}
               src={blobUrl}
               title={`AWS Bill Preview - ${cleanPid}`}

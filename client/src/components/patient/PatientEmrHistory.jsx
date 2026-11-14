@@ -50,6 +50,7 @@ export default function PatientEmrHistory({
     try {
       const res = await api.get('/patients/emr', {
         params: { patientId: cleanPid, ...(forceRefresh ? { fresh: 'true' } : {}) },
+        timeout: 10000,
       });
       const list = res.data?.emrlist || [];
       setEmrList(list);
@@ -61,42 +62,7 @@ export default function PatientEmrHistory({
     }
   };
 
-  useEffect(() => {
-    if (!cleanPid) {
-      setLoading(false);
-      return;
-    }
-
-    let isSubscribed = true;
-    setLoading(true);
-    setError('');
-
-    api
-      .get('/patients/emr', {
-        params: { patientId: cleanPid },
-      })
-      .then((res) => {
-        if (!isSubscribed) return;
-        const list = res.data?.emrlist || [];
-        setEmrList(list);
-      })
-      .catch((err) => {
-        if (!isSubscribed) return;
-        console.warn('Failed to fetch patient EMR history:', err.message);
-        setError('Unable to load EMR archive for this patient.');
-      })
-      .finally(() => {
-        if (isSubscribed) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      isSubscribed = false;
-      setLoading(false);
-    };
-  }, [cleanPid]);
-
+  // Lazy-load EMR history strictly on user expand (prevents unnecessary upstream GETEMRPATIENT calls)
   const toggleCollapse = () => {
     const nextCollapsed = !isCollapsed;
     setIsCollapsed(nextCollapsed);

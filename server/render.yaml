@@ -25,9 +25,5 @@ services:
         value: https://lis.newlifecaremidnapore.com
       - key: LAB_COOKIE_NAME
         value: lifecareauth
-      - key: UPSTREAM_DEFAULT_USER
-        value: exsuper
-      - key: UPSTREAM_DEFAULT_PASS
-        value: exsuper
       - key: CLIENT_URL
         value: https://your-lis-frontend.vercel.app

@@ -900,5 +900,66 @@
     "templatesId": "T14",
     "templatesDate": "2026-11-08",
     "status": "SAVED"
+  },
+  "P14R10": {
+    "reportId": "P14R10",
+    "patientId": "P14",
+    "resultJSON": {
+      "TEMPLATE_NAME": "FNAC -",
+      "headingName": "FNAC -",
+      "Exam": {
+        "FNAC": [
+          {
+            "Value": "",
+            "Name": "GROSS",
+            "Unit": "",
+            "showUnitInput": false,
+            "RefRange": "",
+            "Ref Range": ""
+          },
+          {
+            "Value": "",
+            "Name": "MICROSCOPY",
+            "Unit": "",
+            "showUnitInput": false,
+            "RefRange": "",
+            "Ref Range": ""
+          },
+          {
+            "Value": "",
+            "Name": "IMPRESSION",
+            "Unit": "",
+            "showUnitInput": false,
+            "RefRange": "",
+            "Ref Range": ""
+          }
+        ],
+        "Others": [
+          {
+            "Value": "",
+            "Name": "Others 1",
+            "Unit": "",
+            "showUnitInput": false,
+            "RefRange": "",
+            "Ref Range": ""
+          },
+          {
+            "Value": "",
+            "Name": "Others 2",
+            "Unit": "",
+            "showUnitInput": false,
+            "RefRange": "",
+            "Ref Range": ""
+          }
+        ]
+      },
+      "patientId": "P14",
+      "reportId": "P14R10",
+      "templateId": "T10",
+      "templateType": "GENERAL"
+    },
+    "TEMPLATE_NAME": "FNAC -",
+    "status": "SAVED",
+    "templatesDate": "2026-11-14"
   }
 }

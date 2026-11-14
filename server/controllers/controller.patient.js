@@ -1,6 +1,6 @@
 import { upstreamService, API_GET_JOURNEY_STAGES } from '../services/service.upstream.js';
 import { cacheService, CACHE_KEYS } from '../services/service.cache.js';
-import { invalidateReportCache } from './controller.report.js';
+import { invalidateReportCache, getCachedReport } from './controller.report.js';
 
 /**
  * Format date to YYYY-MM-DD
@@ -84,7 +84,7 @@ export const normalizeDateToYYYYMMDD = (dateVal) => {
   return formatDate();
 };
 
-// In-flight deduplication and short-lived cache (5s) for GETPATIENTLIST
+// In-flight deduplication and short-lived cache (15s) for GETPATIENTLIST
 const patientListCache = new Map();
 const inFlightPatientList = new Map();
 
@@ -92,12 +92,12 @@ export const invalidatePatientListCache = () => {
   patientListCache.clear();
 };
 
-const fetchUpstreamPatientList = async (fromDate, toDate, sid) => {
+export const fetchUpstreamPatientList = async (fromDate, toDate, sid) => {
   const cacheKey = `${fromDate}_${toDate}_${sid || 'default'}`;
 
-  // 1. Check 5s memory cache to coalesce simultaneous calls
+  // 1. Check 15s memory cache to coalesce simultaneous calls
   const cached = patientListCache.get(cacheKey);
-  if (cached && (Date.now() - cached.timestamp < 5000)) {
+  if (cached && (Date.now() - cached.timestamp < 15000)) {
     return cached.data;
   }
 
@@ -147,30 +147,6 @@ export const getPatients = async (req, res, next) => {
     );
 
     let patients = upstreamData?.payLoadJSON?.patients || [];
-
-    // If searched within a specific date range and no results, try searching broad date range
-    if (search && patients.length === 0 && explicitFrom) {
-      const broadData = await fetchUpstreamPatientList(
-        '2026-01-01',
-        '2026-12-31',
-        req.user?.upstreamSid
-      );
-      if (broadData?.payLoadJSON?.patients?.length > 0) {
-        patients = broadData.payLoadJSON.patients;
-      }
-    }
-
-    // If no explicit date was requested and today has 0 records, load recent records
-    if (!explicitFrom && !search && !allDates && patients.length === 0) {
-      const broadData = await fetchUpstreamPatientList(
-        '2026-01-01',
-        '2026-12-31',
-        req.user?.upstreamSid
-      );
-      if (broadData?.payLoadJSON?.patients?.length > 0) {
-        patients = broadData.payLoadJSON.patients;
-      }
-    }
 
     // Filter in-memory with safe string casting
     if (search) {
@@ -296,6 +272,93 @@ export const getPatients = async (req, res, next) => {
   }
 };
 
+/**
+ * Normalizes doctor, referring agent, and collection center branch strictly
+ * against the master catalog.
+ * - For doctor: 'Self' or walk-in always sets referDr to '' and referedDr to 'Self'.
+ *   If a doctor name is provided, referDr is matched against DOCT_LIST Doct Id.
+ * - For referral: refagent/referAgent are assigned from master REFERANCE_LIST.
+ * - For branch: assigned from master BRANCH_LIST or user's assigned branch.
+ */
+const resolvePatientDoctorAndAgents = async (referedDr, referDr, refagent, branch, userBranchId) => {
+  const trimmedReferedDr = String(referedDr || '').trim();
+  const rawReferDr = String(referDr || '').trim();
+  const isSelfDoctor =
+    !trimmedReferedDr ||
+    trimmedReferedDr.toLowerCase() === 'self' ||
+    rawReferDr.toLowerCase() === 'self';
+
+  let defaultDocId = 'D1';
+  let docList = [];
+  try {
+    const cachedDoctors = await cacheService.getList(CACHE_KEYS.DOCT_LIST, false);
+    docList = cachedDoctors?.data || [];
+    if (docList.length > 0) {
+      defaultDocId = String(docList[0]['Doct Id'] || docList[0].id || 'D1');
+    }
+  } catch (e) {
+    // ignore cache lookup error
+  }
+
+  let finalReferDr = defaultDocId;
+  let finalReferedDr = 'Self';
+
+  if (isSelfDoctor) {
+    finalReferedDr = 'Self';
+    finalReferDr = (rawReferDr && rawReferDr.toLowerCase() !== 'self') ? rawReferDr : defaultDocId;
+  } else {
+    finalReferedDr = trimmedReferedDr;
+    let matchedDocId = rawReferDr;
+    if (!matchedDocId || matchedDocId.toLowerCase() === 'self') {
+      const match = docList.find(
+        (d) =>
+          (d.Name && d.Name.toLowerCase() === trimmedReferedDr.toLowerCase()) ||
+          (d.Name && trimmedReferedDr.toLowerCase().includes(d.Name.toLowerCase())) ||
+          (d.name && d.name.toLowerCase() === trimmedReferedDr.toLowerCase())
+      );
+      if (match) {
+        matchedDocId = String(match['Doct Id'] || match.id || '');
+      }
+    }
+    finalReferDr = matchedDocId || defaultDocId;
+  }
+
+  let finalRefAgent = String(refagent || '').trim();
+  if (!finalRefAgent) {
+    try {
+      const cachedRefs = await cacheService.getList(CACHE_KEYS.REFERANCE_LIST, false);
+      const refList = cachedRefs?.data || [];
+      if (refList.length > 0) {
+        finalRefAgent = String(refList[0]['Refer Id'] ?? refList[0].id ?? refList[0]['Doct Id'] ?? '1');
+      }
+    } catch (e) {
+      // ignore
+    }
+    if (!finalRefAgent) finalRefAgent = '1';
+  }
+
+  let finalBranch = String(branch || userBranchId || '').trim();
+  if (!finalBranch) {
+    try {
+      const cachedBranches = await cacheService.getList(CACHE_KEYS.BRANCH_LIST, false);
+      const branchList = cachedBranches?.data || [];
+      if (branchList.length > 0) {
+        finalBranch = String(branchList[0].branchId ?? branchList[0]['Branch Id'] ?? branchList[0].id ?? '1');
+      }
+    } catch (e) {
+      // ignore
+    }
+    if (!finalBranch) finalBranch = '1';
+  }
+
+  return {
+    finalReferedDr,
+    finalReferDr,
+    finalRefAgent,
+    finalBranch,
+  };
+};
+
 export const addPatient = async (req, res, next) => {
   try {
     const {
@@ -309,7 +372,7 @@ export const addPatient = async (req, res, next) => {
       age_unit = 'Years',
       gender = 'Male',
       referedDr = 'Self',
-      referDr = 'D1',
+      referDr = '',
       refagent = '1',
       branch = req.user?.branchId || '1',
     } = req.body;
@@ -326,6 +389,13 @@ export const addPatient = async (req, res, next) => {
     const cleanAge = String(age || '30').replace(/\D/g, '') || '30';
     const cleanMobile = String(mobile || '').replace(/\D/g, '').slice(-10);
 
+    const {
+      finalReferedDr,
+      finalReferDr,
+      finalRefAgent,
+      finalBranch,
+    } = await resolvePatientDoctorAndAgents(referedDr, referDr, refagent, branch, req.user?.branchId);
+
     const params = {
       slNo: String(slNo || '').trim(),
       mobile: cleanMobile,
@@ -337,11 +407,11 @@ export const addPatient = async (req, res, next) => {
       age: cleanAge,
       age_unit: age_unit || 'Years',
       gender: normalizeGender(gender),
-      referedDr: (referedDr || 'Self').trim(),
-      referDr: referDr || 'D1',
-      refagent: refagent || '1',
-      referAgent: refagent || '1',
-      branch: branch || '1',
+      referedDr: finalReferedDr,
+      referDr: finalReferDr,
+      refagent: finalRefAgent,
+      referAgent: finalRefAgent,
+      branch: finalBranch,
     };
 
     const upstreamData = await upstreamService.post('ADDPATIENT', params, null, req.user?.upstreamSid);
@@ -386,7 +456,7 @@ export const updatePatient = async (req, res, next) => {
       age_unit = 'Years',
       gender = 'Male',
       referedDr = 'Self',
-      referDr = 'D1',
+      referDr = '',
       refagent = '1',
       branch = '1',
     } = req.body;
@@ -409,6 +479,13 @@ export const updatePatient = async (req, res, next) => {
     const cleanMobile = String(mobile || '').replace(/\D/g, '').slice(-10);
     const cleanSlNo = String(slNo || cleanPatientId || '').trim();
 
+    const {
+      finalReferedDr,
+      finalReferDr,
+      finalRefAgent,
+      finalBranch,
+    } = await resolvePatientDoctorAndAgents(referedDr, referDr, refagent, branch, req.user?.branchId);
+
     const params = {
       patientId: cleanPatientId,
       slNo: cleanSlNo,
@@ -421,11 +498,11 @@ export const updatePatient = async (req, res, next) => {
       age: cleanAge,
       age_unit: age_unit || 'Years',
       gender: normalizeGender(gender),
-      referedDr: (referedDr || 'Self').trim(),
-      referDr: referDr || 'D1',
-      refagent: refagent || '1',
-      referAgent: refagent || '1',
-      branch: branch || '1',
+      referedDr: finalReferedDr,
+      referDr: finalReferDr,
+      refagent: finalRefAgent,
+      referAgent: finalRefAgent,
+      branch: finalBranch,
     };
 
     const upstreamData = await upstreamService.post('UPDATEPATIENT', params, null, req.user?.upstreamSid);
@@ -806,7 +883,109 @@ export const addMultipleTests = async (req, res, next) => {
       }
     }
 
-    const uniqueValidTokens = Array.from(new Set(validTokens));
+    // Upstream API (Sandip Patra - 14/11/2026):
+    // 1. Templates are bundled as "TEMP|T1" alongside "TEST|...", "PROF|...", "PKG|..."
+    // 2. Fetch patient's existing active investigations from upstream to ensure old tests are NEVER replaced or wiped
+    // 3. New API: ADDTESTMULTIPLEREFRESH (do not call or update old API ADDTESTMULTIPLE)
+    const existingTokens = [];
+    const seenExisting = new Set();
+
+    try {
+      let repData = getCachedReport(cleanPatientId);
+      if (!repData || (!repData.reports && !repData.payLoadJSON?.reports)) {
+        repData = await upstreamService.get('GETPATIENTREPORT', { patientId: cleanPatientId }, req.user?.upstreamSid);
+      }
+      const existingReports = repData?.payLoadJSON?.reports || repData?.reports || [];
+      const existingTemplates = repData?.payLoadJSON?.templates || repData?.templates || [];
+
+      existingReports.forEach((r) => {
+        if (r.status === 'DELETED' || r.isDeleted || String(r.status || '').toUpperCase() === 'DELETED') return;
+        if (r.packageName && String(r.packageName).trim() !== 'undefined' && String(r.packageName).trim() !== '') {
+          const pkgVal = String(r.packageName).trim();
+          const matchedPkgId = pkgMap.get(pkgVal.toUpperCase()) || pkgNameMap.get(pkgVal.toLowerCase()) || pkgVal;
+          const token = `PKG|${matchedPkgId}`;
+          if (!seenExisting.has(token.toUpperCase())) {
+            seenExisting.add(token.toUpperCase());
+            existingTokens.push(token);
+          }
+        } else if (r.profileName && String(r.profileName).trim() !== 'undefined' && String(r.profileName).trim() !== '') {
+          const profVal = String(r.profileName).trim();
+          const matchedProfId = profMap.get(profVal.toUpperCase()) || profNameMap.get(profVal.toLowerCase()) || profVal;
+          const token = `PROF|${matchedProfId}`;
+          if (!seenExisting.has(token.toUpperCase())) {
+            seenExisting.add(token.toUpperCase());
+            existingTokens.push(token);
+          }
+        } else if (r.testId) {
+          const tidVal = String(r.testId).trim();
+          const matchedTestId = testMap.get(tidVal.toUpperCase()) || testNameMap.get(String(r.testName || '').toLowerCase().trim()) || tidVal;
+          const token = `TEST|${matchedTestId}`;
+          if (!seenExisting.has(token.toUpperCase())) {
+            seenExisting.add(token.toUpperCase());
+            existingTokens.push(token);
+          }
+        }
+      });
+
+      existingTemplates.forEach((t) => {
+        if (t.status === 'DELETED' || t.isDeleted || String(t.status || '').toUpperCase() === 'DELETED') return;
+        const tmplVal = String(t.templatesId || t.id || t.reportId || '').trim();
+        const matchedTmplId = templateMap.get(tmplVal.toUpperCase()) || templateNameMap.get(String(t.TEMPLATE_NAME || t.name || '').toLowerCase().trim()) || tmplVal;
+        const cleanTId = String(matchedTmplId).toUpperCase().startsWith('T') ? String(matchedTmplId).toUpperCase() : `T${matchedTmplId}`;
+        const token = `TEMP|${cleanTId}`;
+        if (!seenExisting.has(token.toUpperCase())) {
+          seenExisting.add(token.toUpperCase());
+          existingTokens.push(token);
+        }
+      });
+
+      // Also check patient.testList from billing in case reports array is empty/pre-generation
+      const billTestList = repData?.payLoadJSON?.patient?.testList || [];
+      if (Array.isArray(billTestList)) {
+        billTestList.forEach((item) => {
+          const name = String(item['Bill Particulars'] || item.name || '').trim();
+          if (!name) return;
+          const lower = name.toLowerCase();
+          const upper = name.toUpperCase();
+          if (pkgMap.has(upper) || pkgNameMap.has(lower)) {
+            const id = pkgMap.get(upper) || pkgNameMap.get(lower);
+            const token = `PKG|${id}`;
+            if (!seenExisting.has(token.toUpperCase())) {
+              seenExisting.add(token.toUpperCase());
+              existingTokens.push(token);
+            }
+          } else if (profMap.has(upper) || profNameMap.has(lower)) {
+            const id = profMap.get(upper) || profNameMap.get(lower);
+            const token = `PROF|${id}`;
+            if (!seenExisting.has(token.toUpperCase())) {
+              seenExisting.add(token.toUpperCase());
+              existingTokens.push(token);
+            }
+          } else if (templateMap.has(upper) || templateNameMap.has(lower)) {
+            const id = templateMap.get(upper) || templateNameMap.get(lower);
+            const cleanTId = String(id).toUpperCase().startsWith('T') ? String(id).toUpperCase() : `T${id}`;
+            const token = `TEMP|${cleanTId}`;
+            if (!seenExisting.has(token.toUpperCase())) {
+              seenExisting.add(token.toUpperCase());
+              existingTokens.push(token);
+            }
+          } else if (testMap.has(upper) || testNameMap.has(lower)) {
+            const id = testMap.get(upper) || testNameMap.get(lower);
+            const token = `TEST|${id}`;
+            if (!seenExisting.has(token.toUpperCase())) {
+              seenExisting.add(token.toUpperCase());
+              existingTokens.push(token);
+            }
+          }
+        });
+      }
+    } catch (err) {
+      console.warn('[AddTests] Could not fetch existing reports to merge:', err.message);
+    }
+
+    // Merge existing investigations with incoming new investigations so previous tests are NEVER replaced
+    const mergedTokens = [...existingTokens, ...validTokens];
+    const uniqueValidTokens = Array.from(new Set(mergedTokens));
 
     if (uniqueValidTokens.length === 0) {
       return res.status(400).json({
@@ -816,120 +995,7 @@ export const addMultipleTests = async (req, res, next) => {
       });
     }
 
-    // Duplicate Investigation Check against patient's existing worklist
-    let tokensToSend = uniqueValidTokens;
-    const duplicateLabels = [];
-    let existingTemplates = [];
-
-    if (!allowRepeat) {
-      try {
-        const repData = await upstreamService.get('GETPATIENTREPORT', { patientId: cleanPatientId }, req.user?.upstreamSid);
-        const existingReports = repData?.payLoadJSON?.reports || [];
-        existingTemplates = repData?.payLoadJSON?.templates || [];
-
-        const existingTestIds = new Set();
-        const existingProfIds = new Set();
-        const existingPkgIds = new Set();
-        const existingTemplateIds = new Set();
-        const existingNames = new Set();
-
-        existingReports.forEach((r) => {
-          if (r.status === 'DELETED' || r.isDeleted) return;
-          if (r.testId) {
-            const tid = String(r.testId).toUpperCase().trim();
-            existingTestIds.add(tid);
-            if (tid.startsWith('T')) existingTestIds.add(tid.slice(1));
-            else existingTestIds.add(`T${tid}`);
-          }
-          if (r.profileName && String(r.profileName).trim() !== 'undefined') {
-            const pid = String(r.profileName).toUpperCase().trim();
-            existingProfIds.add(pid);
-            existingProfIds.add(pid.replace(/^P+/i, ''));
-          }
-          if (r.packageName && String(r.packageName).trim() !== 'undefined') {
-            const kid = String(r.packageName).toUpperCase().trim();
-            existingPkgIds.add(kid);
-            existingPkgIds.add(kid.replace(/^K+/i, ''));
-          }
-          if (r.testName) {
-            existingNames.add(String(r.testName).toLowerCase().trim());
-          }
-        });
-
-        existingTemplates.forEach((t) => {
-          if (t.status === 'DELETED' || t.isDeleted) return;
-          const tid = String(t.templatesId || t.id || '').toUpperCase().trim();
-          if (tid) {
-            existingTemplateIds.add(tid);
-            if (tid.startsWith('T')) existingTemplateIds.add(tid.slice(1));
-            else existingTemplateIds.add(`T${tid}`);
-          }
-          if (t.reportId) {
-            existingTemplateIds.add(String(t.reportId).toUpperCase().trim());
-          }
-          if (t.TEMPLATE_NAME || t.name) {
-            existingNames.add(String(t.TEMPLATE_NAME || t.name).toLowerCase().trim());
-          }
-        });
-
-        const nonDuplicateTokens = [];
-        for (const token of uniqueValidTokens) {
-          const [prefix, id] = token.split('|');
-          const uId = (id || '').toUpperCase().trim();
-          let isDup = false;
-
-          if (prefix === 'TEST' && existingTestIds.has(uId)) isDup = true;
-          if (prefix === 'PROF' && (existingProfIds.has(uId) || existingProfIds.has(uId.replace(/^P+/i, '')))) isDup = true;
-          if (prefix === 'PKG' && (existingPkgIds.has(uId) || existingPkgIds.has(uId.replace(/^K+/i, '')))) isDup = true;
-          if ((prefix === 'TEMPLATE' || prefix === 'TEMP') && (existingTemplateIds.has(uId) || existingTemplateIds.has(uId.replace(/^T+/i, '')))) isDup = true;
-
-          if (isDup) {
-            // Find friendly readable name
-            let friendlyName = id;
-            if (prefix === 'TEST') {
-              const t = testList.find((x) => String(x['Test Id']).toUpperCase() === uId);
-              if (t?.Name) friendlyName = t.Name;
-            } else if (prefix === 'PROF') {
-              const p = profList.find((x) => String(x['Profile Id']).toUpperCase() === uId || String(x['Profile Id']).replace(/^P+/i, '') === uId.replace(/^P+/i, ''));
-              if (p?.Name) friendlyName = p.Name;
-            } else if (prefix === 'PKG') {
-              const k = pkgList.find((x) => String(x['Package Id']).toUpperCase() === uId || String(x['Package Id']).replace(/^K+/i, '') === uId.replace(/^K+/i, ''));
-              if (k?.Name) friendlyName = k.Name;
-            } else if (prefix === 'TEMPLATE' || prefix === 'TEMP') {
-              const tmpl = templateList.find((x) => String(x.templatesId || x.id).toUpperCase() === uId || String(x.templatesId || x.id).replace(/^T+/i, '') === uId.replace(/^T+/i, ''));
-              if (tmpl?.TEMPLATE_NAME || tmpl?.name) friendlyName = tmpl.TEMPLATE_NAME || tmpl.name;
-            }
-            duplicateLabels.push(friendlyName);
-          } else {
-            nonDuplicateTokens.push(token);
-          }
-        }
-
-        if (duplicateLabels.length > 0) {
-          if (nonDuplicateTokens.length === 0) {
-            // All requested investigations are duplicates
-            return res.status(409).json({
-              STATUS: 'DUPLICATE_BLOCKED',
-              StatusCode: '409',
-              Message: `Investigation(s) already in patient worklist: "${duplicateLabels.join(', ')}". Duplicate order was blocked to prevent double-billing.`,
-              duplicates: duplicateLabels,
-              canRepeat: true,
-            });
-          }
-          // Some are duplicates, some are new -> filter out duplicates and proceed with new items
-          tokensToSend = nonDuplicateTokens;
-        }
-      } catch (err) {
-        console.warn('[AddTests] Duplicate inspection warning:', err.message);
-      }
-    }
-
-    // Upstream update (Sandip Patra - 13/11/2026):
-    // 1. Templates must be bundled together as "TEMP|T1" alongside "TEST|...", "PROF|...", "PKG|..."
-    //    e.g. "PKG|4,PROF|21,TEST|T12,TEMP|T1"
-    // 2. DO NOT call ADDTEMPLATE separately!
-    // 3. Use new upstream API: ADDTESTMULTIPLEREFRESH
-    const normalizedTokens = tokensToSend.map((token) => {
+    const normalizedTokens = uniqueValidTokens.map((token) => {
       if (token.startsWith('TEMPLATE|')) {
         const val = token.split('|')[1] || '';
         const cleanTId = val.toUpperCase().startsWith('T') ? val.toUpperCase() : `T${val}`;
@@ -939,29 +1005,18 @@ export const addMultipleTests = async (req, res, next) => {
     });
 
     const sanitizedTestIds = normalizedTokens.join(',');
-    console.log(`[AddTests] Ordering ${normalizedTokens.length} item(s) for patient ${cleanPatientId}: ${sanitizedTestIds}`);
+    console.log(`[AddTests] Ordering ${normalizedTokens.length} item(s) (including ${existingTokens.length} retained) via ADDTESTMULTIPLEREFRESH for patient ${cleanPatientId}: ${sanitizedTestIds}`);
 
     const params = {
       patientId: cleanPatientId,
       selectedTestIds: sanitizedTestIds,
     };
 
-    let upstreamData = null;
-    try {
-      // Primary: call new upstream API ADDTESTMULTIPLEREFRESH
-      upstreamData = await upstreamService.post('ADDTESTMULTIPLEREFRESH', params, null, req.user?.upstreamSid);
-    } catch (err) {
-      console.warn('[AddTests] ADDTESTMULTIPLEREFRESH note:', err.message);
-    }
-
-    // Fallback to ADDTESTMULTIPLE if ADDTESTMULTIPLEREFRESH returned API missing (0001) or null
-    if (!upstreamData || upstreamData?.StatusCode === '0001') {
-      console.log('[AddTests] Falling back to ADDTESTMULTIPLE...');
-      upstreamData = await upstreamService.post('ADDTESTMULTIPLE', params, null, req.user?.upstreamSid);
-    }
+    // Primary & Only API: Call ADDTESTMULTIPLEREFRESH directly (do NOT update or fallback to old ADDTESTMULTIPLE)
+    const upstreamData = await upstreamService.post('ADDTESTMULTIPLEREFRESH', params, null, req.user?.upstreamSid);
 
     if (upstreamData?.StatusCode === '1211' || upstreamData?.STATUS === 'FAILED') {
-      console.error('[AddTests] Upstream returned error (1211):', {
+      console.error('[AddTests] Upstream ADDTESTMULTIPLEREFRESH returned error (1211):', {
         patientId: cleanPatientId,
         selectedTestIds: sanitizedTestIds,
         upstreamData,
@@ -983,17 +1038,12 @@ export const addMultipleTests = async (req, res, next) => {
     invalidateReportCache(cleanPatientId);
     invalidatePatientListCache();
 
-    const successMsg = duplicateLabels.length > 0
-      ? `Added ${tokensToSend.length} new test(s). Skipped duplicate(s): ${duplicateLabels.join(', ')}.`
-      : (upstreamData?.Message || 'Tests added successfully');
-
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
       StatusCode: upstreamData?.StatusCode || '0000',
-      Message: successMsg,
+      Message: upstreamData?.Message || 'Tests added successfully',
       patientId: cleanPatientId,
-      selectedTestIds: tokensToSend.join(','),
-      skippedDuplicates: duplicateLabels,
+      selectedTestIds: sanitizedTestIds,
       data: upstreamData,
     });
   } catch (err) {
@@ -1064,6 +1114,9 @@ export const getPatientLogs = async (req, res, next) => {
       inFlightLogs.set(cleanPatientId, fetchPromise);
       try {
         upstreamData = await fetchPromise;
+      } catch (err) {
+        console.warn(`[getPatientLogs] Upstream GETLOGPATIENT failed for ${cleanPatientId}:`, err.message);
+        upstreamData = { STATUS: 'FAILED', StatusCode: '500', Message: err.message, payLoadJSON: { logs: [] } };
       } finally {
         inFlightLogs.delete(cleanPatientId);
       }
@@ -1132,6 +1185,9 @@ export const getPatientEmr = async (req, res, next) => {
       inFlightEmr.set(cleanPatientId, fetchPromise);
       try {
         upstreamData = await fetchPromise;
+      } catch (err) {
+        console.warn(`[getPatientEmr] Upstream GETEMRPATIENT failed for ${cleanPatientId}:`, err.message);
+        upstreamData = { STATUS: 'FAILED', StatusCode: '500', Message: err.message, payLoadJSON: { emrlist: [] } };
       } finally {
         inFlightEmr.delete(cleanPatientId);
       }
@@ -1160,6 +1216,10 @@ export const getPatientEmr = async (req, res, next) => {
   }
 };
 
+// In-memory cache for journey stages to eliminate redundant upstream calls (30s TTL)
+const journeyStagesCache = new Map();
+let upstreamSupportsJourneyStages = null; // null = untested, false = unsupported (1001), true = supported
+
 /**
  * GET JOURNEY STAGES API
  * API_GET_JOURNEY_STAGES = "GETJOURNEYSTAGES"
@@ -1180,12 +1240,26 @@ export const getPatientJourneyStages = async (req, res, next) => {
       ? `P${String(rawPid).trim().replace(/^P+/i, '')}`
       : `P${String(rawPid).trim()}`;
 
-    // 1. Invoke upstream API: final String API_GET_JOURNEY_STAGES="GETJOURNEYSTAGES"; with patientId
+    // 0. Check in-memory cache
+    const cachedStages = journeyStagesCache.get(cleanPatientId);
+    if (cachedStages && (Date.now() - cachedStages.timestamp < 30000)) {
+      return res.json(cachedStages.data);
+    }
+
+    // 1. Invoke upstream API ONLY if not already known to be unsupported (avoids repeated 1001 roundtrips)
     let upstreamRes = null;
-    try {
-      upstreamRes = await upstreamService.getJourneyStages(cleanPatientId, req.user?.upstreamSid);
-    } catch (upErr) {
-      console.warn(`[JourneyStages] Upstream API error for ${cleanPatientId}:`, upErr.message);
+    if (upstreamSupportsJourneyStages !== false) {
+      try {
+        upstreamRes = await upstreamService.getJourneyStages(cleanPatientId, req.user?.upstreamSid);
+        if (upstreamRes?.StatusCode === '1001' || upstreamRes?.Message?.includes('1001')) {
+          upstreamSupportsJourneyStages = false;
+        } else if (upstreamRes && (upstreamRes.STATUS === 'SUCCESS' || upstreamRes.StatusCode === '0000')) {
+          upstreamSupportsJourneyStages = true;
+        }
+      } catch (upErr) {
+        upstreamSupportsJourneyStages = false;
+        console.warn(`[JourneyStages] Upstream API note for ${cleanPatientId}:`, upErr.message);
+      }
     }
 
     const isUpstreamSuccess = upstreamRes && (upstreamRes.STATUS === 'SUCCESS' || upstreamRes.StatusCode === '0000');
@@ -1193,7 +1267,7 @@ export const getPatientJourneyStages = async (req, res, next) => {
     const upstreamStages = upstreamPayload.stages || upstreamPayload.journeyStages || upstreamRes?.stages;
 
     if (isUpstreamSuccess && Array.isArray(upstreamStages) && upstreamStages.length > 0) {
-      return res.json({
+      const responseData = {
         STATUS: 'SUCCESS',
         StatusCode: '0000',
         Message: upstreamRes.Message || 'Journey stages retrieved successfully',
@@ -1203,7 +1277,9 @@ export const getPatientJourneyStages = async (req, res, next) => {
         stages: upstreamStages,
         payLoadJSON: upstreamPayload,
         data: upstreamRes,
-      });
+      };
+      journeyStagesCache.set(cleanPatientId, { timestamp: Date.now(), data: responseData });
+      return res.json(responseData);
     }
 
     // 2. Resilient Pipeline Synthesis (handles 1001 / pending upstream deployment):
@@ -1211,10 +1287,16 @@ export const getPatientJourneyStages = async (req, res, next) => {
     let patientData = null;
     let reports = [];
     try {
-      const repRes = await upstreamService.get('GETPATIENTREPORT', { patientId: cleanPatientId }, req.user?.upstreamSid);
-      if (repRes?.payLoadJSON) {
-        patientData = repRes.payLoadJSON.patient || null;
-        reports = repRes.payLoadJSON.reports || [];
+      const cached = getCachedReport(cleanPatientId);
+      if (cached && (cached.patient || cached.reports)) {
+        patientData = cached.patient || null;
+        reports = cached.reports || [];
+      } else {
+        const repRes = await upstreamService.get('GETPATIENTREPORT', { patientId: cleanPatientId }, req.user?.upstreamSid);
+        if (repRes?.payLoadJSON) {
+          patientData = repRes.payLoadJSON.patient || null;
+          reports = repRes.payLoadJSON.reports || [];
+        }
       }
     } catch (e) {
       // ignore
@@ -1351,7 +1433,7 @@ export const getPatientJourneyStages = async (req, res, next) => {
       },
     ];
 
-    return res.json({
+    const responseData = {
       STATUS: 'SUCCESS',
       StatusCode: '0000',
       Message: upstreamRes?.Message === 'No Such API - 1001'
@@ -1367,7 +1449,10 @@ export const getPatientJourneyStages = async (req, res, next) => {
         currentStageIndex,
         patient: patientData,
       },
-    });
+    };
+
+    journeyStagesCache.set(cleanPatientId, { timestamp: Date.now(), data: responseData });
+    return res.json(responseData);
   } catch (err) {
     next(err);
   }

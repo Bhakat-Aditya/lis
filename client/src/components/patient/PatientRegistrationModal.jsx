@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Modal from '../common/Modal.jsx';
 import api from '../../services/api';
 import { useMaster } from '../../context/context.master.jsx';
+import { useAuth } from '../../context/context.auth.jsx';
 import {
   UserPlus,
   Phone,
@@ -18,6 +20,8 @@ import {
 import { getLocalDateString } from '../../utils/dateUtils.js';
 
 export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdded }) {
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const { doctors = [], branches = [], references = [] } = useMaster();
 
   const [formData, setFormData] = useState({
@@ -31,7 +35,7 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
     age_unit: 'Years',
     sampleType: 'Inside', // 'Inside' or 'Outside'
     referedDr: 'Self',
-    referDr: 'D1',
+    referDr: '',
     refagent: '1',
     branch: '1',
   });
@@ -70,6 +74,23 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
   // Reset form when modal opens
   useEffect(() => {
     if (isOpen) {
+      let defaultBranchId = '1';
+      if (branches.length > 0) {
+        const userMatched = user?.branchId && branches.find((b) => String(b.branchId ?? b['Branch Id'] ?? b.id) === String(user.branchId));
+        if (userMatched) {
+          defaultBranchId = String(userMatched.branchId ?? userMatched['Branch Id'] ?? userMatched.id);
+        } else {
+          defaultBranchId = String(branches[0].branchId ?? branches[0]['Branch Id'] ?? branches[0].id ?? '1');
+        }
+      }
+
+      const defaultDoc = doctors.length > 0 ? doctors[0] : null;
+      const defaultDocId = defaultDoc ? String(defaultDoc['Doct Id'] || defaultDoc.id || 'D1') : 'D1';
+
+      const defaultRef = references.length > 0 ? references[0] : null;
+      const defaultRefId = defaultRef ? String(defaultRef['Refer Id'] ?? defaultRef.id ?? defaultRef['Doct Id'] ?? '1') : '1';
+      const defaultRefName = defaultRef ? (defaultRef.Name || defaultRef.name || '') : '';
+
       setFormData({
         slNo: '',
         title: 'Mr',
@@ -81,18 +102,18 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
         age_unit: 'Years',
         sampleType: 'Inside',
         referedDr: 'Self',
-        referDr: 'D1',
-        refagent: '1',
-        branch: '1',
+        referDr: defaultDocId,
+        refagent: defaultRefId,
+        branch: defaultBranchId,
       });
-      setDoctorSearchQuery('');
+      setDoctorSearchQuery('Self');
       setIsDoctorDropdownOpen(false);
       setIsReferDoctorDropdownOpen(false);
-      setReferralSearchQuery('');
+      setReferralSearchQuery(defaultRefName);
       setIsReferralDropdownOpen(false);
       setError('');
     }
-  }, [isOpen]);
+  }, [isOpen, branches, references, doctors, user]);
 
   // Handle Title Change with Automatic Gender Sync
   const handleTitleChange = (e) => {
@@ -154,21 +175,93 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
   };
 
   // When a doctor is selected from either Refer Doctor or Commission search:
-  // Auto-fill Refer Doctor text field WITH degree, set referDr ID, and update search input
   const handleSelectDoctor = (doc) => {
-    const docName = doc.Name || 'Self';
-    const docId = doc['Doct Id'] || 'D1';
-    const fullNameWithDeg = formatDoctorWithDegree(doc);
+    const defaultDoc = doctors.length > 0 ? doctors[0] : null;
+    const defaultDocId = defaultDoc ? String(defaultDoc['Doct Id'] || defaultDoc.id || 'D1') : 'D1';
+
+    const isSelf = !doc || !doc.Name || doc.Name === 'Self' || doc['Doct Id'] === 'Self' || doc['Doct Id'] === '';
+    const docId = isSelf ? defaultDocId : String(doc['Doct Id'] || doc.id || defaultDocId);
+    const fullNameWithDeg = isSelf ? 'Self' : formatDoctorWithDegree(doc);
 
     setFormData((prev) => ({
       ...prev,
       referDr: docId,
-      referedDr: fullNameWithDeg, // Includes degree: e.g. "DR. AMIT ROY (MBBS, MD)"
+      referedDr: fullNameWithDeg,
     }));
 
-    setDoctorSearchQuery(doc.Name && doc.Name !== 'Self' ? fullNameWithDeg : (doc.Name === 'Self' ? 'Self' : ''));
+    setDoctorSearchQuery(isSelf ? 'Self' : fullNameWithDeg);
     setIsDoctorDropdownOpen(false);
     setIsReferDoctorDropdownOpen(false);
+  };
+
+  // When user types directly into Refer Doctor field
+  const handleReferedDrChange = (e) => {
+    const defaultDoc = doctors.length > 0 ? doctors[0] : null;
+    const defaultDocId = defaultDoc ? String(defaultDoc['Doct Id'] || defaultDoc.id || 'D1') : 'D1';
+
+    const text = e.target.value;
+    setIsReferDoctorDropdownOpen(true);
+
+    if (!text.trim() || text.trim().toLowerCase() === 'self') {
+      setFormData((prev) => ({
+        ...prev,
+        referedDr: text || 'Self',
+        referDr: defaultDocId,
+      }));
+      setDoctorSearchQuery('Self');
+      return;
+    }
+
+    const match = doctors.find(
+      (d) =>
+        (d.Name && d.Name.toLowerCase() === text.trim().toLowerCase()) ||
+        String(d['Doct Id'] || d.id || '').toLowerCase() === text.trim().toLowerCase()
+    );
+
+    setFormData((prev) => ({
+      ...prev,
+      referedDr: text,
+      referDr: match ? String(match['Doct Id'] || match.id || '') : prev.referDr,
+    }));
+
+    if (match) {
+      setDoctorSearchQuery(formatDoctorWithDegree(match));
+    }
+  };
+
+  // When user types directly into Commission Doctor field
+  const handleDoctorSearchChange = (e) => {
+    const defaultDoc = doctors.length > 0 ? doctors[0] : null;
+    const defaultDocId = defaultDoc ? String(defaultDoc['Doct Id'] || defaultDoc.id || 'D1') : 'D1';
+
+    const text = e.target.value;
+    setDoctorSearchQuery(text);
+    setIsDoctorDropdownOpen(true);
+
+    if (!text.trim() || text.trim().toLowerCase() === 'self') {
+      setFormData((prev) => ({
+        ...prev,
+        referedDr: 'Self',
+        referDr: defaultDocId,
+      }));
+      return;
+    }
+
+    const match = doctors.find(
+      (d) =>
+        (d.Name && d.Name.toLowerCase() === text.trim().toLowerCase()) ||
+        String(d['Doct Id'] || d.id || '').toLowerCase() === text.trim().toLowerCase()
+    );
+
+    if (match) {
+      const docId = String(match['Doct Id'] || match.id || '');
+      const docName = formatDoctorWithDegree(match);
+      setFormData((prev) => ({
+        ...prev,
+        referDr: docId,
+        referedDr: docName,
+      }));
+    }
   };
 
   // Find currently matched doctor to display their degree pill
@@ -184,13 +277,13 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
     const q = referralSearchQuery.toLowerCase();
     const name = (ref.Name || ref.name || '').toLowerCase();
     const contact = String(ref.contact || '').toLowerCase();
-    const id = String(ref.id || '').toLowerCase();
+    const id = String(ref['Refer Id'] ?? ref.id ?? ref['Doct Id'] ?? '').toLowerCase();
     return name.includes(q) || contact.includes(q) || id.includes(q);
   });
 
   const handleSelectReferral = (ref) => {
     const refName = ref.Name || ref.name || '';
-    const refId = ref.id || '1';
+    const refId = String(ref['Refer Id'] ?? ref.id ?? ref['Doct Id'] ?? '1');
 
     setFormData((prev) => ({
       ...prev,
@@ -199,6 +292,22 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
 
     setReferralSearchQuery(refName);
     setIsReferralDropdownOpen(false);
+  };
+
+  const handleReferralSearchChange = (e) => {
+    const text = e.target.value;
+    setReferralSearchQuery(text);
+    setIsReferralDropdownOpen(true);
+
+    const match = references.find(
+      (r) =>
+        String(r.Name || r.name || '').toLowerCase() === text.toLowerCase().trim() ||
+        String(r['Refer Id'] ?? r.id ?? r['Doct Id'] ?? '').trim() === text.trim()
+    );
+    if (match) {
+      const matchId = String(match['Refer Id'] ?? match.id ?? match['Doct Id'] ?? '1');
+      setFormData((prev) => ({ ...prev, refagent: matchId }));
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -221,19 +330,55 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
         ? 'Female'
         : 'Transgender';
 
-      // Auto-assign slNo if left blank
+      // Strictly resolve doctor
+      const trimmedReferedDr = String(formData.referedDr || '').trim();
+      const isSelfDoctor = !trimmedReferedDr || trimmedReferedDr.toLowerCase() === 'self';
+      const defaultDoc = doctors.length > 0 ? doctors[0] : null;
+      const defaultDocId = defaultDoc ? String(defaultDoc['Doct Id'] || defaultDoc.id || 'D1') : 'D1';
+
+      let cleanReferedDr = 'Self';
+      let cleanReferDr = defaultDocId;
+
+      if (!isSelfDoctor) {
+        cleanReferedDr = trimmedReferedDr;
+        let docId = String(formData.referDr || '').trim();
+        if (!docId || docId.toLowerCase() === 'self') {
+          const match = doctors.find(
+            (d) =>
+              (d.Name && d.Name.toLowerCase() === cleanReferedDr.toLowerCase()) ||
+              (d.Name && cleanReferedDr.toLowerCase().includes(d.Name.toLowerCase()))
+          );
+          if (match) {
+            docId = String(match['Doct Id'] || match.id || '');
+          }
+        }
+        cleanReferDr = docId || defaultDocId;
+      } else {
+        cleanReferDr = (formData.referDr && formData.referDr.toLowerCase() !== 'self')
+          ? formData.referDr
+          : defaultDocId;
+      }
+
       const payload = {
         ...formData,
         gender: cleanGender,
         regDate: cleanRegDate,
         slNo: formData.slNo.trim() || `${Date.now()}`.slice(-9),
-        referedDr: formData.referedDr.trim() || 'Self',
+        referedDr: cleanReferedDr,
+        referDr: cleanReferDr,
+        refagent: String(formData.refagent || '1'),
+        referAgent: String(formData.refagent || '1'),
+        branch: String(formData.branch || '1'),
       };
 
       const res = await api.post('/patients/add', payload);
       if (res.data?.STATUS === 'SUCCESS' || res.data?.StatusCode === '0000') {
+        const pid = res.data?.patientId || res.data?.patient?.patientId || res.data?.patient?.slNo || payload.slNo;
         if (onPatientAdded) onPatientAdded(res.data);
         onClose();
+        if (pid) {
+          navigate(`/patients/${pid}?tab=tests`);
+        }
       } else {
         setError(res.data?.Message || 'Failed to register patient');
       }
@@ -480,10 +625,7 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
                   placeholder="Doctor Name (Degree)"
                   value={formData.referedDr}
                   onFocus={() => setIsReferDoctorDropdownOpen(true)}
-                  onChange={(e) => {
-                    handleInputChange(e);
-                    setIsReferDoctorDropdownOpen(true);
-                  }}
+                  onChange={handleReferedDrChange}
                   className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 shadow-2xs"
                 />
               </div>
@@ -495,11 +637,11 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
                     Select Doctor (Shows Degree)
                   </div>
                   <div
-                    onClick={() => handleSelectDoctor({ 'Doct Id': 'D1', Name: 'Self' })}
+                    onClick={() => handleSelectDoctor({ 'Doct Id': '', Name: 'Self' })}
                     className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-xs font-semibold text-slate-700 flex justify-between items-center"
                   >
                     <span>Self / Walk-in</span>
-                    <span className="text-[10px] text-slate-400 font-mono">D1</span>
+                    <span className="text-[10px] text-slate-400 font-mono italic">Walk-in</span>
                   </div>
 
                   {filteredReferDoctors.length > 0 ? (
@@ -550,10 +692,7 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
                   placeholder="Type initials to search doctor..."
                   value={doctorSearchQuery}
                   onFocus={() => setIsDoctorDropdownOpen(true)}
-                  onChange={(e) => {
-                    setDoctorSearchQuery(e.target.value);
-                    setIsDoctorDropdownOpen(true);
-                  }}
+                  onChange={handleDoctorSearchChange}
                   className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 shadow-2xs"
                 />
               </div>
@@ -565,11 +704,11 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
                     Select Doctor For Commission
                   </div>
                   <div
-                    onClick={() => handleSelectDoctor({ 'Doct Id': 'D1', Name: 'Self' })}
+                    onClick={() => handleSelectDoctor({ 'Doct Id': '', Name: 'Self' })}
                     className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-xs font-semibold text-slate-700 flex justify-between items-center"
                   >
                     <span>Self / Walk-in</span>
-                    <span className="text-[10px] text-slate-400 font-mono">D1</span>
+                    <span className="text-[10px] text-slate-400 font-mono italic">Walk-in</span>
                   </div>
 
                   {filteredDoctors.length > 0 ? (
@@ -599,24 +738,31 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
                   )}
                 </div>
               )}
+
+              {/* Selected doctor confirmation badge */}
+              <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
+                <span>
+                  Selected Doctor ID:{' '}
+                  <strong className="text-blue-600 font-mono">
+                    {formData.referDr ? `#${formData.referDr}` : 'None (Walk-in / Self)'}
+                  </strong>
+                  {matchedDoctor?.Name && formData.referDr ? ` (${matchedDoctor.Name})` : ''}
+                </span>
+              </div>
             </div>
 
-            {/* 11. Referral (Searchable Autocomplete & Free Typing) */}
+            {/* 11. Referral (Master Catalog Referring Agents) */}
             <div className="relative" ref={referralDropdownRef}>
               <label className="text-[11px] font-semibold text-slate-500 block mb-1.5">
-                Referral
+                Referring Agent (Master Catalog)
               </label>
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="Type initials to search referral..."
+                  placeholder="Search referring agent by name, contact or ID..."
                   value={referralSearchQuery}
                   onFocus={() => setIsReferralDropdownOpen(true)}
-                  onChange={(e) => {
-                    setReferralSearchQuery(e.target.value);
-                    setFormData((prev) => ({ ...prev, refagent: e.target.value }));
-                    setIsReferralDropdownOpen(true);
-                  }}
+                  onChange={handleReferralSearchChange}
                   className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 shadow-2xs"
                 />
               </div>
@@ -624,45 +770,78 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
               {/* Referral Dropdown List - Opens UPWARDS so it never clips at modal bottom */}
               {isReferralDropdownOpen && (
                 <div className="absolute left-0 right-0 bottom-full mb-1.5 bg-white border border-slate-300 rounded-lg shadow-2xl z-50 max-h-64 overflow-y-auto divide-y divide-slate-100">
-                  <div className="px-3 py-1.5 bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider sticky top-0 border-b border-slate-200">
-                    Select Referral Agent / Partner
-                  </div>
-                  <div
-                    onClick={() => handleSelectReferral({ id: '1', Name: 'Direct' })}
-                    className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-xs font-semibold text-slate-700 flex justify-between items-center"
-                  >
-                    <span>Direct / Main</span>
-                    <span className="text-[10px] text-slate-400 font-mono">1</span>
+                  <div className="px-3 py-1.5 bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider sticky top-0 border-b border-slate-200 flex items-center justify-between">
+                    <span>Select Master Referring Agent</span>
+                    <span className="font-mono text-[9px] text-slate-400">{filteredReferrals.length} in Catalog</span>
                   </div>
 
                   {filteredReferrals.length > 0 ? (
-                    filteredReferrals.map((ref, idx) => (
-                      <div
-                        key={ref.id || idx}
-                        onClick={() => handleSelectReferral(ref)}
-                        className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-xs text-slate-800 flex justify-between items-center"
-                      >
-                        <span className="font-bold">{ref.Name || ref.name}</span>
-                        {ref.contact && (
-                          <span className="text-[10px] text-slate-400 font-mono">
-                            {ref.contact}
-                          </span>
-                        )}
-                      </div>
-                    ))
+                    filteredReferrals.map((ref, idx) => {
+                      const refId = String(ref.id ?? ref['Doct Id'] ?? ref['Refer Id'] ?? idx + 1);
+                      const isSelected = String(formData.refagent) === refId;
+                      return (
+                        <div
+                          key={refId}
+                          onClick={() => handleSelectReferral(ref)}
+                          className={`px-3 py-2 hover:bg-blue-50 cursor-pointer text-xs flex justify-between items-center transition-colors ${
+                            isSelected ? 'bg-blue-50/80 font-bold text-blue-900' : 'text-slate-800'
+                          }`}
+                        >
+                          <div>
+                            <div className="font-bold">{ref.Name || ref.name}</div>
+                            {ref.Address && (
+                              <div className="text-[10px] text-slate-400 truncate max-w-xs">
+                                {ref.Address}
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span className="text-[10px] font-mono font-bold bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 text-indigo-700">
+                              Agent #{refId}
+                            </span>
+                            {ref.Contact && (
+                              <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                {ref.Contact}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
                   ) : (
                     <div className="p-3 text-center text-slate-400 italic text-xs">
-                      Press enter to use custom referral: "{referralSearchQuery}"
+                      No referring agents found matching "{referralSearchQuery}".
                     </div>
                   )}
                 </div>
               )}
+
+              {/* Selected agent confirmation badge */}
+              {(() => {
+                const selectedAgent = references.find(
+                  (r) => String(r.id ?? r['Doct Id'] ?? r['Refer Id']) === String(formData.refagent)
+                );
+                return (
+                  <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
+                    <span>
+                      Selected Master ID:{' '}
+                      <strong className="text-indigo-600 font-mono">
+                        #{formData.refagent}
+                      </strong>
+                      {selectedAgent?.Name ? ` (${selectedAgent.Name})` : ''}
+                    </span>
+                    {selectedAgent?.Rate && (
+                      <span className="text-slate-500 font-mono">Comm: {selectedAgent.Rate}</span>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
-            {/* 12. Collection Center */}
+            {/* 12. Collection Center (Master Catalog Branches) */}
             <div>
               <label className="text-[11px] font-semibold text-slate-500 block mb-1.5">
-                Collection Center
+                Collection Center (Master Catalog)
               </label>
               <select
                 name="branch"
@@ -670,13 +849,18 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
                 onChange={handleInputChange}
                 className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-600 shadow-2xs cursor-pointer"
               >
-                <option value="1">Main</option>
-                {branches.map((b) => (
-                  <option key={b.branchId || b.id} value={b.branchId || b.id}>
-                    {b.name || `Branch ${b.branchId}`}
-                  </option>
-                ))}
+                {branches.map((b) => {
+                  const bId = String(b.branchId ?? b['Branch Id'] ?? b.id ?? '');
+                  return (
+                    <option key={bId} value={bId}>
+                      {b.name || b.Name || `Branch ${bId}`} (Branch #{bId})
+                    </option>
+                  );
+                })}
               </select>
+              <span className="text-[10px] text-slate-400 block mt-1">
+                Selected Branch ID sent: <strong className="text-blue-600 font-mono">#{formData.branch}</strong>
+              </span>
             </div>
           </div>
 

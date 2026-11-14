@@ -27,6 +27,15 @@ export const invalidateReportCache = (patientId) => {
   upstreamService.clearBillingCache(alt);
 };
 
+export const getCachedReport = (cleanPatientId) => {
+  if (!cleanPatientId) return null;
+  const entry = reportCache.get(cleanPatientId);
+  if (entry && (Date.now() - entry.timestamp < 30000)) {
+    return entry.data;
+  }
+  return null;
+};
+
 export const getPatientReport = async (req, res, next) => {
   try {
     const { patientId } = req.query;
@@ -58,10 +67,10 @@ export const getPatientReport = async (req, res, next) => {
       // Continue
     }
 
-    // 1. Check cache (5s TTL to prevent duplicate calls from multiple component mounts)
+    // 1. Check cache (30s TTL to prevent duplicate calls during tab switching and component mounts; mutations auto-invalidate)
     const isFresh = req.query.fresh === 'true' || req.query.sync === 'true';
     const cached = reportCache.get(cleanPatientId);
-    if (!isFresh && cached && (Date.now() - cached.timestamp < 5000)) {
+    if (!isFresh && cached && (Date.now() - cached.timestamp < 30000)) {
       return res.json(cached.data);
     }
 
@@ -327,7 +336,7 @@ export const getPatientReport = async (req, res, next) => {
     });
 
     let billing = upstreamService.getCachedBilling(cleanPatientId);
-    if (!billing || req.query.withBilling === 'true' || req.query.fresh === 'true') {
+    if (!billing || isFresh) {
       try {
         billing = await upstreamService.getBillingSummary(cleanPatientId, req.user?.upstreamSid);
       } catch (e) {
@@ -1927,7 +1936,20 @@ export const getTemplateJson = async (req, res, next) => {
     }
 
     const cleanReportId = String(reportId).trim();
+    const isFresh = req.query.fresh === 'true';
     const stored = templateStore.get(cleanReportId);
+
+    // If template is already cached/stored and fresh is not requested, return immediately without hitting upstream
+    if (!isFresh && stored && stored.resultJSON) {
+      return res.json({
+        STATUS: 'SUCCESS',
+        StatusCode: '0000',
+        payLoadJSON: {
+          TemplateReport: stored,
+        },
+        templateReport: stored,
+      });
+    }
 
     // 1. Fetch from upstream GETTEMPLATEJSON
     try {
@@ -2283,11 +2305,14 @@ export const getTemplateEditUrl = async (req, res, next) => {
       isAlive = await upstreamService.isSessionAlive(activeSid);
     }
 
-    // 3. If invalid or expired, generate a fresh active upstream master session
+    // 3. If invalid or expired, do not attempt auto-relogin - report session expired
     if (!isAlive) {
-      console.log(`[TemplateEdit] Upstream session ${activeSid || 'none'} expired or inactive. Provisioning fresh upstream session...`);
-      activeSid = await upstreamService.ensureMasterSession(true);
-      upstreamService.masterSid = activeSid;
+      return res.status(401).json({
+        STATUS: 'FAILED',
+        StatusCode: '1140',
+        Message: 'Session timed out. Please login again.',
+        isSessionExpired: true,
+      });
     }
 
     // 4. Construct bulletproof upstream URL with session ID in both path and query parameters
@@ -2336,11 +2361,9 @@ export const redirectToTemplateEdit = async (req, res, next) => {
       isAlive = await upstreamService.isSessionAlive(activeSid);
     }
 
-    // 3. If missing or dead, provision a fresh session
+    // 3. If missing or dead, redirect to login
     if (!isAlive) {
-      console.log(`[TemplateEdit Redirect] Upstream session ${activeSid || 'none'} expired. Provisioning fresh upstream session...`);
-      activeSid = await upstreamService.ensureMasterSession(true);
-      upstreamService.masterSid = activeSid;
+      return res.redirect('/login?reason=Session%20timed%20out.%20Please%20login%20again.');
     }
 
     const domain = config.lab.domain;

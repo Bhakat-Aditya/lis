@@ -499,8 +499,9 @@ export default function MasterDataManager() {
             <table className="w-full text-left text-xs border-collapse">
               <thead className="bg-slate-100/90 text-slate-700 font-bold border-b border-slate-200 text-[11px] uppercase tracking-wider">
                 <tr>
-                  <th className="py-3 px-4 w-20">ID</th>
-                  <th className="py-3 px-4 min-w-[220px]">Template Report Name</th>
+                  <th className="py-3 px-4 w-28">Report ID</th>
+                  <th className="py-3 px-4 min-w-[200px]">Template Report Name</th>
+                  <th className="py-3 px-4 min-w-[140px]">Rate (₹)</th>
                   <th className="py-3 px-4 min-w-[180px]">Signatures Assigned</th>
                   <th className="py-3 px-4 w-28 whitespace-nowrap">Sync Date</th>
                   <th className="py-3 px-4 w-24 text-center">Status</th>
@@ -510,7 +511,7 @@ export default function MasterDataManager() {
               <tbody className="divide-y divide-slate-100 bg-white">
                 {templates.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-slate-400">
+                    <td colSpan={7} className="py-8 text-center text-slate-400">
                       No master template reports loaded.
                     </td>
                   </tr>
@@ -525,10 +526,10 @@ export default function MasterDataManager() {
                     })
                     .map((tmpl, idx) => (
                       <tr key={tmpl.templatesId || tmpl.reportId || idx} className="hover:bg-slate-50/80 transition-colors">
-                        {/* 1. Template ID */}
+                        {/* 1. Report ID */}
                         <td className="py-3 px-4 font-mono font-bold text-purple-700 whitespace-nowrap">
                           <span className="bg-purple-50 border border-purple-200/80 px-2 py-0.5 rounded text-[11px]">
-                            {tmpl.templatesId || `T${idx + 1}`}
+                            {tmpl.reportId || (tmpl.templatesId ? `P14R${String(tmpl.templatesId).replace(/^T/i, '')}` : `P14R${idx + 1}`)}
                           </span>
                         </td>
 
@@ -542,17 +543,30 @@ export default function MasterDataManager() {
                           </div>
                         </td>
 
-                        {/* 3. Signatures Assigned */}
+                        {/* 3. Rates: Standard Rate + Special Rate 1 & 2 */}
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          <div className="font-bold text-slate-900 text-xs font-mono">
+                            ₹{tmpl.price ?? tmpl.Rate ?? tmpl.rate ?? '0'}
+                          </div>
+                          {(tmpl.price1 || tmpl.Rate1 || tmpl.price2 || tmpl.Rate2) ? (
+                            <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center gap-1.5">
+                              {Boolean(tmpl.price1 || tmpl.Rate1) && <span>R1: ₹{tmpl.price1 || tmpl.Rate1}</span>}
+                              {Boolean(tmpl.price2 || tmpl.Rate2) && <span>R2: ₹{tmpl.price2 || tmpl.Rate2}</span>}
+                            </div>
+                          ) : null}
+                        </td>
+
+                        {/* 4. Signatures Assigned */}
                         <td className="py-3 px-4">
                           {renderSignatureBadges(tmpl.sign)}
                         </td>
 
-                        {/* 4. Sync Date */}
+                        {/* 5. Sync Date */}
                         <td className="py-3 px-4 font-mono text-slate-500 text-[11px] whitespace-nowrap">
                           {tmpl.templatesDate || '2026-11-01'}
                         </td>
 
-                        {/* 5. Status */}
+                        {/* 6. Status */}
                         <td className="py-3 px-4 text-center whitespace-nowrap">
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                             String(tmpl.status || '').toUpperCase() === 'SAVED'
@@ -563,7 +577,7 @@ export default function MasterDataManager() {
                           </span>
                         </td>
 
-                        {/* 6. Actions (Single-line, professional action group) */}
+                        {/* 7. Actions */}
                         <td className="py-3 px-4 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
                             {/* Primary: Modern Rich Template Editor */}

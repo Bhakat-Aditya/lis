@@ -1,7 +1,29 @@
 import axios from 'axios';
 import { upstreamService, UPSTREAM_ERROR_MAP } from '../services/service.upstream.js';
-import { invalidateReportCache } from './controller.report.js';
-import { invalidatePatientListCache } from './controller.patient.js';
+import { invalidateReportCache, getCachedReport } from './controller.report.js';
+import { invalidatePatientListCache, fetchUpstreamPatientList } from './controller.patient.js';
+
+// In-flight deduplication and short-lived caching for billing list and bill JSON (15s TTL)
+const billListCache = new Map();
+const inFlightBillList = new Map();
+
+export const invalidateBillListCache = () => {
+  billListCache.clear();
+};
+
+const billJsonCache = new Map();
+const inFlightBillJson = new Map();
+
+export const invalidateBillJsonCache = (patientId) => {
+  if (!patientId) {
+    billJsonCache.clear();
+    return;
+  }
+  const raw = String(patientId).trim().toUpperCase();
+  const clean = raw.startsWith('P') ? `P${raw.replace(/^P+/i, '')}` : `P${raw}`;
+  billJsonCache.delete(clean);
+  billJsonCache.delete(raw);
+};
 
 
 // Number to Words converter (for Indian Rupees on medical invoices)
@@ -166,11 +188,14 @@ export const generateBill = async (req, res, next) => {
     }
 
     // Bill is generated and modified internally upon recording payment;
-    // only fetch updated billing summary
+    // Clear billing cache so fresh summary and newest billUrl are loaded from upstream
+    upstreamService.clearBillingCache(cleanPatientId);
     const summary = await upstreamService.getBillingSummary(cleanPatientId, req.user?.upstreamSid);
 
     invalidateReportCache(cleanPatientId);
     invalidatePatientListCache();
+    invalidateBillJsonCache(cleanPatientId);
+    invalidateBillListCache();
 
     return res.json({
       STATUS: 'SUCCESS',
@@ -341,10 +366,13 @@ export const applyDiscount = async (req, res, next) => {
       });
     }
 
-    // Refresh summary only on success
+    // Refresh summary only on success after invalidating stale billing cache
+    upstreamService.clearBillingCache(cleanPatientId);
     const freshSummary = await upstreamService.getBillingSummary(cleanPatientId, req.user?.upstreamSid);
     invalidateReportCache(cleanPatientId);
     invalidatePatientListCache();
+    invalidateBillJsonCache(cleanPatientId);
+    invalidateBillListCache();
 
     return res.json({
       STATUS: 'SUCCESS',
@@ -498,6 +526,8 @@ export const updateBill = async (req, res, next) => {
     invalidateReportCache(cleanPatientId);
     invalidateReportCache(rawPid);
     invalidatePatientListCache();
+    invalidateBillJsonCache(cleanPatientId);
+    invalidateBillListCache();
 
     let freshSummary = null;
     try {
@@ -538,25 +568,52 @@ export const getBillJson = async (req, res, next) => {
     const cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
-    let data;
-    try {
-      data = await upstreamService.get('GETBILLJSON', { patientId: cleanPatientId }, req.user?.upstreamSid);
-    } catch (e) {
-      data = { STATUS: 'FAILED', Message: e.message };
+
+    const isFresh = req.query.fresh === 'true';
+
+    // 1. Check 15s memory cache
+    const cached = billJsonCache.get(cleanPatientId);
+    if (!isFresh && cached && (Date.now() - cached.timestamp < 15000)) {
+      return res.json(cached.data);
     }
 
-    // Call BILLGENERATE iff GETBILLJSON has FAILED response
-    if (data?.STATUS === 'FAILED' || !data?.payLoadJSON?.bill) {
+    // 2. In-flight request deduplication
+    if (inFlightBillJson.has(cleanPatientId)) {
+      return res.json(await inFlightBillJson.get(cleanPatientId));
+    }
+
+    const fetchPromise = (async () => {
+      let data;
       try {
-        console.log(`[Billing] GETBILLJSON returned FAILED, invoking BILLGENERATE recovery for ${cleanPatientId}`);
-        await upstreamService.post('BILLGENERATE', { patientId: cleanPatientId }, null, req.user?.upstreamSid);
         data = await upstreamService.get('GETBILLJSON', { patientId: cleanPatientId }, req.user?.upstreamSid);
-      } catch (err) {
-        console.warn('[Billing] BILLGENERATE recovery failed:', err.message);
+      } catch (e) {
+        data = { STATUS: 'FAILED', Message: e.message };
       }
-    }
 
-    return res.json(data);
+      // Call BILLGENERATE iff GETBILLJSON has FAILED response
+      if (data?.STATUS === 'FAILED' || !data?.payLoadJSON?.bill) {
+        try {
+          console.log(`[Billing] GETBILLJSON returned FAILED, invoking BILLGENERATE recovery for ${cleanPatientId}`);
+          await upstreamService.post('BILLGENERATE', { patientId: cleanPatientId }, null, req.user?.upstreamSid);
+          data = await upstreamService.get('GETBILLJSON', { patientId: cleanPatientId }, req.user?.upstreamSid);
+        } catch (err) {
+          console.warn('[Billing] BILLGENERATE recovery failed:', err.message);
+        }
+      }
+
+      if (data && (data.STATUS === 'SUCCESS' || data.payLoadJSON?.bill)) {
+        billJsonCache.set(cleanPatientId, { timestamp: Date.now(), data });
+      }
+      return data;
+    })();
+
+    inFlightBillJson.set(cleanPatientId, fetchPromise);
+    try {
+      const data = await fetchPromise;
+      return res.json(data);
+    } finally {
+      inFlightBillJson.delete(cleanPatientId);
+    }
   } catch (err) {
     next(err);
   }
@@ -574,19 +631,29 @@ export const getInvoice = async (req, res, next) => {
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
 
-    // Get patient report & details
-    const upstreamData = await upstreamService.get(
-      'GETPATIENTREPORT',
-      { patientId: cleanPatientId },
-      req.user?.upstreamSid
-    );
+    // 1. Get patient report & details - check cache first to avoid redundant upstream call
+    let patient = null;
+    let reports = [];
+    const cachedRep = getCachedReport(cleanPatientId);
+    if (cachedRep && (cachedRep.patient || cachedRep.reports)) {
+      patient = cachedRep.patient || {};
+      reports = cachedRep.reports || [];
+    } else {
+      const upstreamData = await upstreamService.get(
+        'GETPATIENTREPORT',
+        { patientId: cleanPatientId },
+        req.user?.upstreamSid
+      );
+      const payload = upstreamData?.payLoadJSON || {};
+      patient = payload.patient || {};
+      reports = payload.reports || [];
+    }
 
-    const payload = upstreamData?.payLoadJSON || {};
-    const patient = payload.patient || {};
-    const reports = payload.reports || [];
-
-    // Fetch real-time billing ledger summary from upstream (uses GETBILLJSON)
-    const summary = await upstreamService.getBillingSummary(cleanPatientId, req.user?.upstreamSid);
+    // 2. Fetch real-time billing ledger summary from upstream (check cache first!)
+    let summary = upstreamService.getCachedBilling(cleanPatientId);
+    if (!summary) {
+      summary = await upstreamService.getBillingSummary(cleanPatientId, req.user?.upstreamSid);
+    }
 
     // Build invoice items from official bill lots (Packages, Profiles, Standalone Tests)
     let testItems = [];
@@ -738,25 +805,37 @@ export const streamInvoicePdf = async (req, res, next) => {
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
 
-    let summary = await upstreamService.getBillingSummary(cleanPatientId, req.user?.upstreamSid);
+    // Check cached billing summary first for existing billUrl
+    let summary = upstreamService.getCachedBilling(cleanPatientId);
     let billUrl = summary?.billUrl;
 
     if (!billUrl) {
-      const bData = await upstreamService.get('GETBILLJSON', { patientId: cleanPatientId }, req.user?.upstreamSid);
-      billUrl = bData?.payLoadJSON?.billUrl;
+      summary = await upstreamService.getBillingSummary(cleanPatientId, req.user?.upstreamSid);
+      billUrl = summary?.billUrl;
     }
 
     if (!billUrl) {
       return res.status(404).json({ STATUS: 'FAILED', Message: 'Official bill PDF not found on upstream AWS server' });
     }
 
-    const pdfStream = await axios.get(billUrl, {
+    // Bypass any intermediate proxy/CDN caching by appending cache-busting timestamp
+    const separator = billUrl.includes('?') ? '&' : '?';
+    const freshBillUrl = `${billUrl}${separator}_t=${Date.now()}`;
+
+    const pdfStream = await axios.get(freshBillUrl, {
       responseType: 'stream',
       timeout: 25000,
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+      },
     });
 
     const isDownload = req.query.download === 'true';
     res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     if (isDownload) {
       res.setHeader('Content-Disposition', `attachment; filename="Bill_${cleanPatientId}.pdf"`);
     } else {
@@ -779,98 +858,142 @@ export const getBillList = async (req, res, next) => {
     const fromDate = req.query.fromDate || today;
     const toDate = req.query.toDate || today;
     const branch = req.query.branch || '';
+    const isFresh = req.query.fresh === 'true';
+    const cacheKey = `${fromDate}_${toDate}`;
 
-    try {
-      const upstreamData = await upstreamService.get(
-        'GETBILLLIST',
-        { fromDate, toDate },
-        req.user?.upstreamSid
-      );
-
-      const payload = upstreamData?.payLoadJSON;
-      let bills = [];
-      if (Array.isArray(payload)) {
-        bills = payload;
-      } else if (Array.isArray(payload?.bills)) {
-        bills = payload.bills;
-      } else if (Array.isArray(payload?.billList)) {
-        bills = payload.billList;
-      } else if (Array.isArray(payload?.bill)) {
-        bills = payload.bill;
-      } else if (Array.isArray(payload?.data)) {
-        bills = payload.data;
-      } else if (Array.isArray(upstreamData?.bills)) {
-        bills = upstreamData.bills;
-      }
-
-      // Cross-correlate with patient list to enrich bills with branch & build branchSummary
-      let branchSummary = {};
-      try {
-        const pRes = await upstreamService.get(
-          'GETPATIENTLIST',
-          { fromDate, toDate },
-          req.user?.upstreamSid
-        );
-        const patients = pRes?.payLoadJSON?.patientList || pRes?.payLoadJSON?.patients || [];
-        const pidToBranch = new Map();
-        patients.forEach((p) => {
-          const pid = String(p.patientId || p.slNo || '').trim().toUpperCase();
-          const bCode = String(p.branch ?? '0').trim();
-          if (pid) pidToBranch.set(pid, bCode);
-        });
-
-        bills.forEach((b) => {
-          const bPid = String(b['Patient Id'] || b.patientId || '').trim().toUpperCase();
-          const bBranch = pidToBranch.get(bPid) || '0';
-          b.branch = bBranch;
-
-          if (!branchSummary[bBranch]) {
-            branchSummary[bBranch] = {
-              branchId: bBranch,
-              count: 0,
-              totalInvoiced: 0,
-              totalCollected: 0,
-              totalDue: 0,
-            };
-          }
-          branchSummary[bBranch].count += 1;
-          branchSummary[bBranch].totalInvoiced += Number(b['Total Bill'] || b['Total Amount'] || 0);
-          branchSummary[bBranch].totalCollected += Number(b['Total Payment'] || 0);
-          branchSummary[bBranch].totalDue += Number(b['Total Outstanding'] || 0);
-        });
-
+    if (!isFresh) {
+      const cached = billListCache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < 15000) {
+        let bills = cached.data.bills || [];
         if (branch && branch !== 'ALL') {
           bills = bills.filter((b) => String(b.branch) === String(branch));
         }
-      } catch (pErr) {
-        console.warn('[GetBillList] Patient branch correlation skipped:', pErr.message);
-      }
-
-      if (bills.length > 0 || upstreamData?.STATUS === 'SUCCESS') {
         return res.json({
+          ...cached.data,
+          bills,
+        });
+      }
+    }
+
+    if (inFlightBillList.has(cacheKey) && !isFresh) {
+      const result = await inFlightBillList.get(cacheKey);
+      let bills = result.bills || [];
+      if (branch && branch !== 'ALL') {
+        bills = bills.filter((b) => String(b.branch) === String(branch));
+      }
+      return res.json({
+        ...result,
+        bills,
+      });
+    }
+
+    const fetchPromise = (async () => {
+      try {
+        const upstreamData = await upstreamService.get(
+          'GETBILLLIST',
+          { fromDate, toDate },
+          req.user?.upstreamSid
+        );
+
+        const payload = upstreamData?.payLoadJSON;
+        let bills = [];
+        if (Array.isArray(payload)) {
+          bills = payload;
+        } else if (Array.isArray(payload?.bills)) {
+          bills = payload.bills;
+        } else if (Array.isArray(payload?.billList)) {
+          bills = payload.billList;
+        } else if (Array.isArray(payload?.bill)) {
+          bills = payload.bill;
+        } else if (Array.isArray(payload?.data)) {
+          bills = payload.data;
+        } else if (Array.isArray(upstreamData?.bills)) {
+          bills = upstreamData.bills;
+        }
+
+        // Cross-correlate with patient list to enrich bills with branch & build branchSummary
+        let branchSummary = {};
+        try {
+          const pRes = await fetchUpstreamPatientList(
+            fromDate,
+            toDate,
+            req.user?.upstreamSid
+          );
+          const patients = pRes?.payLoadJSON?.patientList || pRes?.payLoadJSON?.patients || [];
+          const pidToBranch = new Map();
+          patients.forEach((p) => {
+            const pid = String(p.patientId || p.slNo || '').trim().toUpperCase();
+            const bCode = String(p.branch ?? '0').trim();
+            if (pid) pidToBranch.set(pid, bCode);
+          });
+
+          bills.forEach((b) => {
+            const bPid = String(b['Patient Id'] || b.patientId || '').trim().toUpperCase();
+            const bBranch = pidToBranch.get(bPid) || '0';
+            b.branch = bBranch;
+
+            if (!branchSummary[bBranch]) {
+              branchSummary[bBranch] = {
+                branchId: bBranch,
+                count: 0,
+                totalInvoiced: 0,
+                totalCollected: 0,
+                totalDue: 0,
+              };
+            }
+            branchSummary[bBranch].count += 1;
+            branchSummary[bBranch].totalInvoiced += Number(b['Total Bill'] || b['Total Amount'] || 0);
+            branchSummary[bBranch].totalCollected += Number(b['Total Payment'] || 0);
+            branchSummary[bBranch].totalDue += Number(b['Total Outstanding'] || 0);
+          });
+        } catch (pErr) {
+          console.warn('[GetBillList] Patient branch correlation skipped:', pErr.message);
+        }
+
+        const fullResult = {
           STATUS: 'SUCCESS',
           StatusCode: '0000',
           fromDate,
           toDate,
           branchSummary,
           bills,
+        };
+
+        billListCache.set(cacheKey, {
+          timestamp: Date.now(),
+          data: fullResult,
         });
+
+        return fullResult;
+      } catch (upstreamErr) {
+        console.warn('[GetBillList] Upstream GETBILLLIST call failed or not yet deployed:', upstreamErr.message);
+        return {
+          STATUS: 'SUCCESS',
+          StatusCode: '0000',
+          fromDate,
+          toDate,
+          branchSummary: {},
+          bills: [],
+          fallback: true,
+        };
       }
-    } catch (upstreamErr) {
-      console.warn('[GetBillList] Upstream GETBILLLIST call failed or not yet deployed:', upstreamErr.message);
+    })();
+
+    inFlightBillList.set(cacheKey, fetchPromise);
+    const result = await fetchPromise;
+    inFlightBillList.delete(cacheKey);
+
+    let bills = result.bills || [];
+    if (branch && branch !== 'ALL') {
+      bills = bills.filter((b) => String(b.branch) === String(branch));
     }
 
-    // Graceful fallback if upstream API is empty, in deployment, or 1001
     return res.json({
-      STATUS: 'SUCCESS',
-      StatusCode: '0000',
-      fromDate,
-      toDate,
-      branchSummary: {},
-      bills: [],
-      fallback: true,
+      ...result,
+      bills,
     });
   } catch (err) {
+    inFlightBillList.delete(`${req.query.fromDate || ''}_${req.query.toDate || ''}`);
     next(err);
   }
 };
