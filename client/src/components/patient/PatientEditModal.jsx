@@ -94,23 +94,19 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
         patient.title ||
         (resolvedGender === 'Female' ? 'Mrs' : 'Mr');
 
-      const defaultDoc = doctors.length > 0 ? doctors[0] : null;
-      const defaultDocId = defaultDoc ? String(defaultDoc['Doct Id'] || defaultDoc.id || 'D1') : 'D1';
+      const initialReferedDr = patient.referedDr || '';
+      const initialReferDr =
+        patient.referDr && String(patient.referDr).toLowerCase() !== 'self'
+          ? String(patient.referDr)
+          : '';
 
-      const isSelfDoctor =
-        !patient.referDr ||
-        String(patient.referDr).toLowerCase() === 'self' ||
-        String(patient.referedDr || '').toLowerCase() === 'self';
-      const initialReferedDr = isSelfDoctor ? 'Self' : (patient.referedDr || 'Self');
-      const initialReferDr = isSelfDoctor
-        ? (patient.referDr && String(patient.referDr).toLowerCase() !== 'self' ? String(patient.referDr) : defaultDocId)
-        : String(patient.referDr || defaultDocId);
+      const initialBranch = String(
+        patient.branch !== undefined && patient.branch !== null && String(patient.branch).trim() !== ''
+          ? patient.branch
+          : '0'
+      );
 
-      const defaultBranchId = branches.length > 0 ? String(branches[0].branchId ?? branches[0].id ?? '1') : '1';
-      const initialBranch = String(patient.branch || defaultBranchId);
-
-      const defaultRefId = references.length > 0 ? String(references[0].id ?? references[0]['Doct Id'] ?? references[0]['Refer Id'] ?? '1') : '1';
-      const initialRefagent = String(patient.referAgent || patient.refagent || defaultRefId);
+      const initialRefagent = String(patient.referAgent || patient.refagent || '');
 
       const rawDate = patient.regDate || patient.collectionDate;
       const initialRegDate = getLocalDateString(rawDate || new Date());
@@ -349,6 +345,10 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
       setError('Please enter patient name');
       return;
     }
+    if (!formData.referedDr || !formData.referedDr.trim()) {
+      setError('Please enter or select Refer Doctor (Required)');
+      return;
+    }
 
     try {
       setLoading(true);
@@ -365,34 +365,14 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
         ? 'Female'
         : 'Transgender';
 
-      // Strictly resolve doctor
       const trimmedReferedDr = String(formData.referedDr || '').trim();
-      const isSelfDoctor = !trimmedReferedDr || trimmedReferedDr.toLowerCase() === 'self';
-      const defaultDoc = doctors.length > 0 ? doctors[0] : null;
-      const defaultDocId = defaultDoc ? String(defaultDoc['Doct Id'] || defaultDoc.id || 'D1') : 'D1';
-
-      let cleanReferedDr = 'Self';
-      let cleanReferDr = defaultDocId;
-
-      if (!isSelfDoctor) {
-        cleanReferedDr = trimmedReferedDr;
-        let docId = String(formData.referDr || '').trim();
-        if (!docId || docId.toLowerCase() === 'self') {
-          const match = doctors.find(
-            (d) =>
-              (d.Name && d.Name.toLowerCase() === cleanReferedDr.toLowerCase()) ||
-              (d.Name && cleanReferedDr.toLowerCase().includes(d.Name.toLowerCase()))
-          );
-          if (match) {
-            docId = String(match['Doct Id'] || match.id || '');
-          }
-        }
-        cleanReferDr = docId || defaultDocId;
-      } else {
-        cleanReferDr = (formData.referDr && formData.referDr.toLowerCase() !== 'self')
-          ? formData.referDr
-          : defaultDocId;
-      }
+      const cleanReferDr = String(formData.referDr || '').trim();
+      const cleanRefAgent = String(formData.refagent || '').trim();
+      const cleanBranch = String(
+        formData.branch !== undefined && formData.branch !== null && formData.branch !== ''
+          ? formData.branch
+          : '0'
+      ).trim();
 
       const payload = {
         ...formData,
@@ -402,11 +382,11 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
         mobile: cleanMobile,
         regDate: cleanRegDate,
         age: cleanAge,
-        referedDr: cleanReferedDr,
+        referedDr: trimmedReferedDr,
         referDr: cleanReferDr,
-        refagent: String(formData.refagent || '1'),
-        referAgent: String(formData.refagent || '1'),
-        branch: String(formData.branch || '1'),
+        refagent: cleanRefAgent,
+        referAgent: cleanRefAgent,
+        branch: cleanBranch,
       };
 
       const res = await api.post('/patients/update', payload);
@@ -894,6 +874,9 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
                 onChange={handleInputChange}
                 className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-600 shadow-2xs cursor-pointer"
               >
+                {!branches.some((b) => String(b.branchId ?? b['Branch Id'] ?? b.id) === '0') && (
+                  <option value="0">Main Lab (Central) (Branch #0)</option>
+                )}
                 {branches.map((b) => {
                   const bId = String(b.branchId ?? b['Branch Id'] ?? b.id ?? '');
                   return (

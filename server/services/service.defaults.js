@@ -102,7 +102,8 @@ export const DEFAULT_DOCTORS = [
 ];
 
 export const DEFAULT_BRANCHES = [
-  { 'Branch Id': '1', id: '1', Name: 'New Life Care Main Diagnostic Lab', name: 'New Life Care Main Diagnostic Lab', Location: 'Hospital Road, Midnapore Town', Contact: '03222-265100', Status: 'Active', status: 'Active' },
+  { 'Branch Id': '0', id: '0', Name: 'Main Diagnostic Lab (Central)', name: 'Main Diagnostic Lab (Central)', Location: 'Hospital Road, Midnapore Town', Contact: '03222-265100', Status: 'Active', status: 'Active' },
+  { 'Branch Id': '1', id: '1', Name: 'New Life Care Diagnostic Branch 1', name: 'New Life Care Diagnostic Branch 1', Location: 'Hospital Road, Midnapore Town', Contact: '03222-265100', Status: 'Active', status: 'Active' },
   { 'Branch Id': '2', id: '2', Name: 'New Life Care Collection Center - Station Road', name: 'New Life Care Collection Center - Station Road', Location: 'Station Road, Midnapore', Contact: '03222-265101', Status: 'Active', status: 'Active' },
 ];
 

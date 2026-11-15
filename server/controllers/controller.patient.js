@@ -274,82 +274,29 @@ export const getPatients = async (req, res, next) => {
 
 /**
  * Normalizes doctor, referring agent, and collection center branch strictly
- * against the master catalog.
- * - For doctor: 'Self' or walk-in always sets referDr to '' and referedDr to 'Self'.
- *   If a doctor name is provided, referDr is matched against DOCT_LIST Doct Id.
- * - For referral: refagent/referAgent are assigned from master REFERANCE_LIST.
- * - For branch: assigned from master BRANCH_LIST or user's assigned branch.
+ * - For Refer Doctor: text name required, default blank.
+ * - For Doctor for Commission: default blank ('').
+ * - For referral agent: refagent/referAgent default blank ('').
+ * - For branch / collection center: default main value '0'.
  */
 const resolvePatientDoctorAndAgents = async (referedDr, referDr, refagent, branch, userBranchId) => {
   const trimmedReferedDr = String(referedDr || '').trim();
   const rawReferDr = String(referDr || '').trim();
-  const isSelfDoctor =
-    !trimmedReferedDr ||
-    trimmedReferedDr.toLowerCase() === 'self' ||
-    rawReferDr.toLowerCase() === 'self';
 
-  let defaultDocId = 'D1';
-  let docList = [];
-  try {
-    const cachedDoctors = await cacheService.getList(CACHE_KEYS.DOCT_LIST, false);
-    docList = cachedDoctors?.data || [];
-    if (docList.length > 0) {
-      defaultDocId = String(docList[0]['Doct Id'] || docList[0].id || 'D1');
-    }
-  } catch (e) {
-    // ignore cache lookup error
-  }
+  // Refer Doctor: textual referring doctor name (validated as required in addPatient)
+  const finalReferedDr = trimmedReferedDr;
 
-  let finalReferDr = defaultDocId;
-  let finalReferedDr = 'Self';
+  // Doctor for commission: default blank (''). If 'self', treat as blank.
+  const finalReferDr = rawReferDr.toLowerCase() === 'self' ? '' : rawReferDr;
 
-  if (isSelfDoctor) {
-    finalReferedDr = 'Self';
-    finalReferDr = (rawReferDr && rawReferDr.toLowerCase() !== 'self') ? rawReferDr : defaultDocId;
-  } else {
-    finalReferedDr = trimmedReferedDr;
-    let matchedDocId = rawReferDr;
-    if (!matchedDocId || matchedDocId.toLowerCase() === 'self') {
-      const match = docList.find(
-        (d) =>
-          (d.Name && d.Name.toLowerCase() === trimmedReferedDr.toLowerCase()) ||
-          (d.Name && trimmedReferedDr.toLowerCase().includes(d.Name.toLowerCase())) ||
-          (d.name && d.name.toLowerCase() === trimmedReferedDr.toLowerCase())
-      );
-      if (match) {
-        matchedDocId = String(match['Doct Id'] || match.id || '');
-      }
-    }
-    finalReferDr = matchedDocId || defaultDocId;
-  }
+  // Referring Agent: default blank ('')
+  const finalRefAgent = String(refagent || '').trim();
 
-  let finalRefAgent = String(refagent || '').trim();
-  if (!finalRefAgent) {
-    try {
-      const cachedRefs = await cacheService.getList(CACHE_KEYS.REFERANCE_LIST, false);
-      const refList = cachedRefs?.data || [];
-      if (refList.length > 0) {
-        finalRefAgent = String(refList[0]['Refer Id'] ?? refList[0].id ?? refList[0]['Doct Id'] ?? '1');
-      }
-    } catch (e) {
-      // ignore
-    }
-    if (!finalRefAgent) finalRefAgent = '1';
-  }
-
-  let finalBranch = String(branch || userBranchId || '').trim();
-  if (!finalBranch) {
-    try {
-      const cachedBranches = await cacheService.getList(CACHE_KEYS.BRANCH_LIST, false);
-      const branchList = cachedBranches?.data || [];
-      if (branchList.length > 0) {
-        finalBranch = String(branchList[0].branchId ?? branchList[0]['Branch Id'] ?? branchList[0].id ?? '1');
-      }
-    } catch (e) {
-      // ignore
-    }
-    if (!finalBranch) finalBranch = '1';
-  }
+  // Collection Center / Branch: default main value '0'
+  const finalBranch =
+    branch !== undefined && branch !== null && String(branch).trim() !== ''
+      ? String(branch).trim()
+      : (userBranchId ? String(userBranchId).trim() : '0');
 
   return {
     finalReferedDr,
@@ -371,17 +318,25 @@ export const addPatient = async (req, res, next) => {
       age = '30',
       age_unit = 'Years',
       gender = 'Male',
-      referedDr = 'Self',
+      referedDr = '',
       referDr = '',
-      refagent = '1',
-      branch = req.user?.branchId || '1',
+      refagent = '',
+      branch = '0',
     } = req.body;
 
-    if (!name) {
+    if (!name || !String(name).trim()) {
       return res.status(400).json({
         STATUS: 'FAILED',
         StatusCode: '400',
         Message: 'Patient name is required',
+      });
+    }
+
+    if (!referedDr || !String(referedDr).trim()) {
+      return res.status(400).json({
+        STATUS: 'FAILED',
+        StatusCode: '400',
+        Message: 'Refer Doctor is required',
       });
     }
 
@@ -455,17 +410,25 @@ export const updatePatient = async (req, res, next) => {
       age = '30',
       age_unit = 'Years',
       gender = 'Male',
-      referedDr = 'Self',
+      referedDr = '',
       referDr = '',
-      refagent = '1',
-      branch = '1',
+      refagent = '',
+      branch = '0',
     } = req.body;
 
-    if (!patientId || !name) {
+    if (!patientId || !name || !String(name).trim()) {
       return res.status(400).json({
         STATUS: 'FAILED',
         StatusCode: '400',
         Message: 'patientId and name are required',
+      });
+    }
+
+    if (!referedDr || !String(referedDr).trim()) {
+      return res.status(400).json({
+        STATUS: 'FAILED',
+        StatusCode: '400',
+        Message: 'Refer Doctor is required',
       });
     }
 
@@ -883,10 +846,10 @@ export const addMultipleTests = async (req, res, next) => {
       }
     }
 
-    // Upstream API (Sandip Patra - 14/11/2026):
+    // Upstream API:
     // 1. Templates are bundled as "TEMP|T1" alongside "TEST|...", "PROF|...", "PKG|..."
     // 2. Fetch patient's existing active investigations from upstream to ensure old tests are NEVER replaced or wiped
-    // 3. New API: ADDTESTMULTIPLEREFRESH (do not call or update old API ADDTESTMULTIPLE)
+    // 3. API: ADDTESTMULTIPLE
     const existingTokens = [];
     const seenExisting = new Set();
 
@@ -916,9 +879,9 @@ export const addMultipleTests = async (req, res, next) => {
             seenExisting.add(token.toUpperCase());
             existingTokens.push(token);
           }
-        } else if (r.testId) {
-          const tidVal = String(r.testId).trim();
-          const matchedTestId = testMap.get(tidVal.toUpperCase()) || testNameMap.get(String(r.testName || '').toLowerCase().trim()) || tidVal;
+        } else if (r.testId || r['Test Id'] || r.id) {
+          const tidVal = String(r.testId ?? r['Test Id'] ?? r.id ?? '').trim();
+          const matchedTestId = testMap.get(tidVal.toUpperCase()) || testNameMap.get(String(r.testName || r.name || r['Test Name'] || '').toLowerCase().trim()) || tidVal;
           const token = `TEST|${matchedTestId}`;
           if (!seenExisting.has(token.toUpperCase())) {
             seenExisting.add(token.toUpperCase());
@@ -984,8 +947,9 @@ export const addMultipleTests = async (req, res, next) => {
     }
 
     // Merge existing investigations with incoming new investigations so previous tests are NEVER replaced
-    const mergedTokens = [...existingTokens, ...validTokens];
-    const uniqueValidTokens = Array.from(new Set(mergedTokens));
+    const uniqueValidTokens = allowRepeat
+      ? [...existingTokens, ...Array.from(new Set(validTokens))]
+      : Array.from(new Set([...existingTokens, ...validTokens]));
 
     if (uniqueValidTokens.length === 0) {
       return res.status(400).json({
@@ -1005,18 +969,18 @@ export const addMultipleTests = async (req, res, next) => {
     });
 
     const sanitizedTestIds = normalizedTokens.join(',');
-    console.log(`[AddTests] Ordering ${normalizedTokens.length} item(s) (including ${existingTokens.length} retained) via ADDTESTMULTIPLEREFRESH for patient ${cleanPatientId}: ${sanitizedTestIds}`);
+    console.log(`[AddTests] Ordering ${normalizedTokens.length} item(s) (including ${existingTokens.length} retained) via ADDTESTMULTIPLE for patient ${cleanPatientId}: ${sanitizedTestIds}`);
 
     const params = {
       patientId: cleanPatientId,
       selectedTestIds: sanitizedTestIds,
     };
 
-    // Primary & Only API: Call ADDTESTMULTIPLEREFRESH directly (do NOT update or fallback to old ADDTESTMULTIPLE)
-    const upstreamData = await upstreamService.post('ADDTESTMULTIPLEREFRESH', params, null, req.user?.upstreamSid);
+    // Primary & Only API: Call ADDTESTMULTIPLE directly
+    const upstreamData = await upstreamService.post('ADDTESTMULTIPLE', params, null, req.user?.upstreamSid);
 
     if (upstreamData?.StatusCode === '1211' || upstreamData?.STATUS === 'FAILED') {
-      console.error('[AddTests] Upstream ADDTESTMULTIPLEREFRESH returned error (1211):', {
+      console.error('[AddTests] Upstream ADDTESTMULTIPLE returned error (1211):', {
         patientId: cleanPatientId,
         selectedTestIds: sanitizedTestIds,
         upstreamData,
