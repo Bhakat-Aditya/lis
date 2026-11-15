@@ -39,9 +39,6 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
   const [isDoctorDropdownOpen, setIsDoctorDropdownOpen] = useState(false);
   const doctorDropdownRef = useRef(null);
 
-  const [isReferDoctorDropdownOpen, setIsReferDoctorDropdownOpen] = useState(false);
-  const referDoctorDropdownRef = useRef(null);
-
   const [referralSearchQuery, setReferralSearchQuery] = useState('');
   const [isReferralDropdownOpen, setIsReferralDropdownOpen] = useState(false);
   const referralDropdownRef = useRef(null);
@@ -54,9 +51,6 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
     const handleOutsideClick = (e) => {
       if (doctorDropdownRef.current && !doctorDropdownRef.current.contains(e.target)) {
         setIsDoctorDropdownOpen(false);
-      }
-      if (referDoctorDropdownRef.current && !referDoctorDropdownRef.current.contains(e.target)) {
-        setIsReferDoctorDropdownOpen(false);
       }
       if (referralDropdownRef.current && !referralDropdownRef.current.contains(e.target)) {
         setIsReferralDropdownOpen(false);
@@ -153,7 +147,6 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
       setReferralSearchQuery(matchRef ? (matchRef.Name || matchRef.name || '') : '');
 
       setIsDoctorDropdownOpen(false);
-      setIsReferDoctorDropdownOpen(false);
       setIsReferralDropdownOpen(false);
       setError('');
     }
@@ -218,23 +211,9 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
     return deg ? `${doc.Name} (${deg})` : doc.Name;
   };
 
-  // When a doctor is selected from Refer Doctor search:
-  const handleSelectReferDoctor = (doc) => {
-    if (!doc || !doc.Name) return;
-    const isSelf = doc.Name === 'Self' || doc['Doct Id'] === 'Self';
-    const fullNameWithDeg = isSelf ? 'Self' : formatDoctorWithDegree(doc);
-
-    setFormData((prev) => ({
-      ...prev,
-      referedDr: fullNameWithDeg,
-    }));
-    setIsReferDoctorDropdownOpen(false);
-  };
-
   // When user types directly into Refer Doctor field
   const handleReferedDrChange = (e) => {
     const text = e.target.value;
-    setIsReferDoctorDropdownOpen(true);
     setFormData((prev) => ({
       ...prev,
       referedDr: text,
@@ -242,6 +221,7 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
   };
 
   // When a doctor is selected for Doctor For Commission:
+  // Automatically implicates and populates Refer Doctor!
   const handleSelectCommissionDoctor = (doc) => {
     if (!doc || !doc.Name || doc['Doct Id'] === '') {
       setFormData((prev) => ({
@@ -253,6 +233,7 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
       setFormData((prev) => ({
         ...prev,
         referDr: '',
+        referedDr: 'Self',
       }));
       setDoctorSearchQuery('Self / Walk-in');
     } else {
@@ -261,6 +242,7 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
       setFormData((prev) => ({
         ...prev,
         referDr: docId,
+        referedDr: fullNameWithDeg, // Implicates into Refer Doctor
       }));
       setDoctorSearchQuery(fullNameWithDeg);
     }
@@ -355,12 +337,33 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.name.trim()) {
-      setError('Please enter patient name');
+
+    // 1. Validate Patient Name (Cannot be empty)
+    if (!formData.name || !formData.name.trim()) {
+      setError('Please enter patient name (Required)');
       return;
     }
+
+    // 2. Validate Mobile Number (Cannot be empty and must be 10 digits)
+    const cleanMobile = String(formData.mobile || '').replace(/\D/g, '');
+    if (!cleanMobile) {
+      setError('Please enter mobile number (Required)');
+      return;
+    }
+    if (cleanMobile.length !== 10) {
+      setError('Please enter a valid 10-digit mobile number');
+      return;
+    }
+
+    // 3. Validate Age (Cannot be empty)
+    if (!formData.age || !String(formData.age).trim()) {
+      setError('Please enter patient age (Required)');
+      return;
+    }
+
+    // 4. Validate Refer Doctor (Cannot be empty)
     if (!formData.referedDr || !formData.referedDr.trim()) {
-      setError('Please enter or select Refer Doctor (Required)');
+      setError('Please select Doctor from commission or enter Refer Doctor (Required)');
       return;
     }
 
@@ -370,7 +373,6 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
       const rawDate = formData.regDate;
       const cleanRegDate = getLocalDateString(rawDate || new Date());
       const cleanAge = String(formData.age || '30').replace(/\D/g, '') || '30';
-      const cleanMobile = String(formData.mobile || '').replace(/\D/g, '').slice(-10);
 
       const rawGender = String(formData.gender || '').trim().toLowerCase();
       const cleanGender = rawGender.startsWith('m')
@@ -648,7 +650,7 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
             <div className="relative" ref={referDoctorDropdownRef}>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-[11px] font-semibold text-slate-500 block">
-                  Refer Doctor
+                  Refer Doctor <span className="text-rose-500 font-bold">*</span>
                 </label>
                 {matchedDoctor?.Deg && (
                   <span className="text-[10px] text-blue-700 font-bold bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded-md">
@@ -661,59 +663,12 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
                 <input
                   type="text"
                   name="referedDr"
-                  placeholder="Doctor Name (Degree)"
+                  placeholder="Doctor Name (Degree) - Required"
                   value={formData.referedDr}
-                  onFocus={() => setIsReferDoctorDropdownOpen(true)}
-                  onClick={() => setIsReferDoctorDropdownOpen(true)}
                   onChange={handleReferedDrChange}
+                  required
                   className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 shadow-2xs"
                 />
-
-                {/* Refer Doctor Autocomplete Dropdown - Anchored directly to input */}
-                {isReferDoctorDropdownOpen && (
-                  <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-300 rounded-lg shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-slate-100">
-                    <div className="px-3 py-1.5 bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider sticky top-0 border-b border-slate-200">
-                      Select Doctor (Shows Degree)
-                    </div>
-                    <div
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        handleSelectReferDoctor({ 'Doct Id': '', Name: 'Self' });
-                      }}
-                      className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-xs font-semibold text-slate-700 flex justify-between items-center"
-                    >
-                      <span>Self / Walk-in</span>
-                      <span className="text-[10px] text-slate-400 font-mono italic">Walk-in</span>
-                    </div>
-
-                    {filteredReferDoctors.length > 0 ? (
-                      filteredReferDoctors.map((doc, idx) => (
-                        <div
-                          key={doc['Doct Id'] || idx}
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            handleSelectReferDoctor(doc);
-                          }}
-                          className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-xs text-slate-800 flex justify-between items-center transition-colors"
-                        >
-                          <div>
-                            <span className="font-bold text-slate-900">{doc.Name}</span>
-                            {doc.Deg && (
-                              <span className="text-[11px] text-blue-700 font-semibold ml-1.5 bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded-md">
-                                {doc.Deg}
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[10px] text-slate-400 font-mono shrink-0 ml-2">
-                            {doc['Doct Id']}
-                          </span>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="px-3 py-2 text-xs text-slate-400 italic">No matching doctor found</div>
-                    )}
-                  </div>
-                )}
               </div>
 
               {matchedDoctor?.Deg && (
