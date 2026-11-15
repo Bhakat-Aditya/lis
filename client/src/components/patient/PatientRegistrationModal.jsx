@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import Modal from '../common/Modal.jsx';
 import api from '../../services/api';
 import { useMaster } from '../../context/context.master.jsx';
-import { useAuth } from '../../context/context.auth.jsx';
 import {
   UserPlus,
   Phone,
@@ -20,7 +19,6 @@ import { getLocalDateString } from '../../utils/dateUtils.js';
 
 export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdded }) {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const { doctors = [], branches = [], references = [] } = useMaster();
 
   const [formData, setFormData] = useState({

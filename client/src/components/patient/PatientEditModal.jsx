@@ -194,16 +194,6 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
     return name.includes(q) || deg.includes(q) || id.includes(q);
   });
 
-  // Filtered doctors for Refer Doctor field
-  const filteredReferDoctors = doctors.filter((doc) => {
-    const q = (formData.referedDr || '').toLowerCase().trim();
-    if (!q || q === 'self') return true;
-    const name = (doc.Name || '').toLowerCase();
-    const deg = (doc.Deg || '').toLowerCase();
-    const id = String(doc['Doct Id'] || '').toLowerCase();
-    return name.includes(q) || deg.includes(q) || id.includes(q);
-  });
-
   // Helper to format doctor name with degree
   const formatDoctorWithDegree = (doc) => {
     if (!doc || !doc.Name || doc.Name === 'Self') return 'Self';
@@ -646,8 +636,8 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
               </div>
             </div>
 
-            {/* 9. Refer Doctor (With searchable suggestions & degree display) */}
-            <div className="relative" ref={referDoctorDropdownRef}>
+            {/* 9. Refer Doctor (Directly editable text, auto-filled from Doctor For Commission) */}
+            <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-[11px] font-semibold text-slate-500 block">
                   Refer Doctor <span className="text-rose-500 font-bold">*</span>
