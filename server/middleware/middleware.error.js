@@ -6,7 +6,7 @@ export const errorHandler = (err, req, res, next) => {
 
   res.status(statusCode).json({
     STATUS: 'FAILED',
-    StatusCode: err.customCode || '9999',
+    StatusCode: err.customCode || (err.isSessionExpired ? '1140' : '9999'),
     Message: message,
     stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
   });

@@ -25,8 +25,18 @@ export const AuthProvider = ({ children }) => {
             localStorage.setItem('lis_user', JSON.stringify(res.data.user));
           }
         })
-        .catch(() => {
-          logout();
+        .catch((err) => {
+          const code = String(
+            err.response?.data?.StatusCode ??
+            err.response?.data?.statusCode ??
+            err.response?.data?.code ??
+            ''
+          );
+          if (code === '1140') {
+            logout();
+          } else {
+            console.warn('[Auth] /auth/me verification failed with non-1140 error (session preserved):', err.message);
+          }
         })
         .finally(() => {
           setLoading(false);

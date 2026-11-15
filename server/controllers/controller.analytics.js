@@ -99,9 +99,10 @@ export const getDashboardAnalytics = async (req, res, next) => {
       );
 
       // Check if session expired
-      if (upstreamAnalytics?.isSessionExpired || upstreamAnalytics?.StatusCode === '1140') {
+      if (upstreamAnalytics?.StatusCode === '1140' || upstreamAnalytics?.isSessionExpired) {
         const err = new Error('Session timed out. Please login again.');
         err.statusCode = 401;
+        err.customCode = '1140';
         err.isSessionExpired = true;
         throw err;
       }

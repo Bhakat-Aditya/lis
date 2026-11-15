@@ -51,11 +51,8 @@ class UpstreamService {
     // 3. JSON error structures
     if (typeof d === 'object' && d !== null) {
       const code = String(d.StatusCode || d.statusCode || '');
-      if (code === '1140' || code === '1150' || code === '1000') {
-        return true;
-      }
-      // Upstream 1211 is Tomcat processing failure when sid is superseded/revoked
-      if (code === '1211' && d.STATUS === 'FAILED') {
+      // ONLY 1140 is Session Invalid / Session Timed Out
+      if (code === '1140') {
         return true;
       }
       const msg = String(d.Message || d.message || '').toLowerCase();

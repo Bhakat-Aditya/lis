@@ -51,17 +51,31 @@ api.get = function (url, config = {}) {
   return promise;
 };
 
-// Response interceptor: redirect to login when session is timed out / expired
+// Helper to detect if server response strictly indicates session timeout (StatusCode 1140)
+const isSessionTimeout = (data) => {
+  if (!data) return false;
+  if (typeof data === 'object') {
+    const code = String(data.StatusCode ?? data.statusCode ?? data.code ?? '');
+    return code === '1140';
+  }
+  if (typeof data === 'string') {
+    try {
+      const parsed = JSON.parse(data);
+      const code = String(parsed.StatusCode ?? parsed.statusCode ?? parsed.code ?? '');
+      return code === '1140';
+    } catch {
+      return false;
+    }
+  }
+  return false;
+};
+
+// Response interceptor: redirect to login ONLY when session is timed out (StatusCode: 1140)
 api.interceptors.response.use(
   (response) => {
-    // If upstream or middleman returns session timed out / invalid code
-    if (
-      response.data &&
-      (response.data.StatusCode === '1140' ||
-        response.data.StatusCode === '1150' ||
-        response.data.isSessionExpired)
-    ) {
-      console.warn('[API] Session timed out from server response.');
+    // If upstream or middleman explicitly returns StatusCode 1140 (Session Timed Out)
+    if (isSessionTimeout(response.data)) {
+      console.warn('[API] Session timed out (StatusCode 1140). Redirecting to login.');
       localStorage.removeItem('lis_auth_token');
       localStorage.removeItem('lis_user');
       if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
@@ -72,20 +86,24 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    const isSessionExpired =
-      error.response?.status === 401 ||
-      error.response?.data?.StatusCode === '1140' ||
-      error.response?.data?.StatusCode === '1150' ||
-      error.response?.data?.isSessionExpired;
+    // ONLY log out if StatusCode is explicitly 1140 (Session Timed Out)
+    const isTimeout = isSessionTimeout(error.response?.data);
 
-    if (isSessionExpired) {
-      console.warn('[API] Session timed out or unauthorized. Redirecting to login.');
+    if (isTimeout) {
+      console.warn('[API] Session timed out (StatusCode 1140). Redirecting to login.');
       localStorage.removeItem('lis_auth_token');
       localStorage.removeItem('lis_user');
       if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
         const reasonMsg = error.response?.data?.Message || 'Session timed out. Please login again.';
         window.location.href = `/login?reason=${encodeURIComponent(reasonMsg)}`;
       }
+    } else {
+      // General error (500, 400, 404, network error, etc.) - NEVER log out!
+      console.warn('[API] Server or network error (non-1140, session preserved):', {
+        status: error.response?.status,
+        url: error.config?.url,
+        message: error.message,
+      });
     }
     return Promise.reject(error);
   }
