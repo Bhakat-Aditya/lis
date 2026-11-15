@@ -43,7 +43,10 @@ export default function Modal({
             </button>
           </div>
         )}
-        <div data-lenis-prevent="true" className="p-3 sm:p-4 overflow-y-auto flex-1 min-h-0">
+        <div
+          data-lenis-prevent="true"
+          className={`p-3 sm:p-4 flex-1 min-h-0 ${overflow === 'overflow-visible' ? 'overflow-visible' : 'overflow-y-auto'}`}
+        >
           {children}
         </div>
       </div>

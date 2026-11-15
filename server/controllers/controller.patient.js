@@ -296,7 +296,7 @@ const resolvePatientDoctorAndAgents = async (referedDr, referDr, refagent, branc
   const finalBranch =
     branch !== undefined && branch !== null && String(branch).trim() !== ''
       ? String(branch).trim()
-      : (userBranchId ? String(userBranchId).trim() : '0');
+      : '0';
 
   return {
     finalReferedDr,

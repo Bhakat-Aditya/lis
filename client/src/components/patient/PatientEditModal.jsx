@@ -29,10 +29,10 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
     age: '',
     age_unit: 'Years',
     sampleType: 'Inside', // 'Inside' or 'Outside'
-    referedDr: 'Self',
+    referedDr: '',
     referDr: '',
-    refagent: '1',
-    branch: '1',
+    refagent: '',
+    branch: '0',
   });
 
   const [doctorSearchQuery, setDoctorSearchQuery] = useState('');
@@ -129,15 +129,21 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
       });
 
       // Initialize Doctor for Commission search query
-      const matchDoc = doctors.find(
-        (d) => String(d['Doct Id'] || '').toLowerCase() === String(initialReferDr).toLowerCase()
-      );
-      if (matchDoc) {
-        setDoctorSearchQuery(
-          matchDoc.Deg ? `${matchDoc.Name} (${matchDoc.Deg})` : matchDoc.Name
-        );
+      if (!initialReferDr) {
+        setDoctorSearchQuery('');
       } else {
-        setDoctorSearchQuery(initialReferedDr !== 'Self' ? initialReferedDr : 'Self');
+        const matchDoc = doctors.find(
+          (d) => String(d['Doct Id'] || '').toLowerCase() === String(initialReferDr).toLowerCase()
+        );
+        if (matchDoc) {
+          setDoctorSearchQuery(
+            matchDoc.Deg ? `${matchDoc.Name} (${matchDoc.Deg})` : matchDoc.Name
+          );
+        } else if (initialReferDr.toLowerCase() === 'self') {
+          setDoctorSearchQuery('Self / Walk-in');
+        } else {
+          setDoctorSearchQuery(initialReferDr);
+        }
       }
 
       // Initialize Referral agent search query from master catalog
@@ -212,20 +218,16 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
     return deg ? `${doc.Name} (${deg})` : doc.Name;
   };
 
-  // When a doctor is selected from either Refer Doctor or Commission search:
-  const handleSelectDoctor = (doc) => {
-    const isSelf = !doc || !doc.Name || doc.Name === 'Self' || doc['Doct Id'] === 'Self' || doc['Doct Id'] === '';
-    const docId = isSelf ? '' : String(doc['Doct Id'] || doc.id || '');
+  // When a doctor is selected from Refer Doctor search:
+  const handleSelectReferDoctor = (doc) => {
+    if (!doc || !doc.Name) return;
+    const isSelf = doc.Name === 'Self' || doc['Doct Id'] === 'Self';
     const fullNameWithDeg = isSelf ? 'Self' : formatDoctorWithDegree(doc);
 
     setFormData((prev) => ({
       ...prev,
-      referDr: docId,
       referedDr: fullNameWithDeg,
     }));
-
-    setDoctorSearchQuery(isSelf ? 'Self' : fullNameWithDeg);
-    setIsDoctorDropdownOpen(false);
     setIsReferDoctorDropdownOpen(false);
   };
 
@@ -233,32 +235,36 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
   const handleReferedDrChange = (e) => {
     const text = e.target.value;
     setIsReferDoctorDropdownOpen(true);
-
-    if (!text.trim() || text.trim().toLowerCase() === 'self') {
-      setFormData((prev) => ({
-        ...prev,
-        referedDr: text,
-        referDr: '',
-      }));
-      setDoctorSearchQuery('Self');
-      return;
-    }
-
-    const match = doctors.find(
-      (d) =>
-        (d.Name && d.Name.toLowerCase() === text.trim().toLowerCase()) ||
-        String(d['Doct Id'] || d.id || '').toLowerCase() === text.trim().toLowerCase()
-    );
-
     setFormData((prev) => ({
       ...prev,
       referedDr: text,
-      referDr: match ? String(match['Doct Id'] || match.id || '') : prev.referDr,
     }));
+  };
 
-    if (match) {
-      setDoctorSearchQuery(formatDoctorWithDegree(match));
+  // When a doctor is selected for Doctor For Commission:
+  const handleSelectCommissionDoctor = (doc) => {
+    if (!doc || !doc.Name || doc['Doct Id'] === '') {
+      setFormData((prev) => ({
+        ...prev,
+        referDr: '',
+      }));
+      setDoctorSearchQuery('');
+    } else if (doc['Doct Id'] === 'Self' || doc.Name === 'Self') {
+      setFormData((prev) => ({
+        ...prev,
+        referDr: '',
+      }));
+      setDoctorSearchQuery('Self / Walk-in');
+    } else {
+      const docId = String(doc['Doct Id'] || doc.id || '');
+      const fullNameWithDeg = formatDoctorWithDegree(doc);
+      setFormData((prev) => ({
+        ...prev,
+        referDr: docId,
+      }));
+      setDoctorSearchQuery(fullNameWithDeg);
     }
+    setIsDoctorDropdownOpen(false);
   };
 
   // When user types directly into Commission Doctor field
@@ -267,10 +273,9 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
     setDoctorSearchQuery(text);
     setIsDoctorDropdownOpen(true);
 
-    if (!text.trim() || text.trim().toLowerCase() === 'self') {
+    if (!text.trim()) {
       setFormData((prev) => ({
         ...prev,
-        referedDr: 'Self',
         referDr: '',
       }));
       return;
@@ -284,11 +289,9 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
 
     if (match) {
       const docId = String(match['Doct Id'] || match.id || '');
-      const docName = formatDoctorWithDegree(match);
       setFormData((prev) => ({
         ...prev,
         referDr: docId,
-        referedDr: docName,
       }));
     }
   };
@@ -296,8 +299,8 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
   // Find currently matched doctor to display their degree pill
   const matchedDoctor = doctors.find(
     (d) =>
-      d['Doct Id'] === formData.referDr ||
-      (d.Name && formData.referedDr.toLowerCase().includes(d.Name.toLowerCase()))
+      (formData.referDr && d['Doct Id'] === formData.referDr) ||
+      (formData.referedDr && d.Name && formData.referedDr.toLowerCase().includes(d.Name.toLowerCase()))
   );
 
   // Filtered referrals based on search
@@ -311,15 +314,21 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
   });
 
   const handleSelectReferral = (ref) => {
-    const refName = ref.Name || ref.name || '';
-    const refId = String(ref['Refer Id'] ?? ref.id ?? ref['Doct Id'] ?? '1');
-
-    setFormData((prev) => ({
-      ...prev,
-      refagent: refId,
-    }));
-
-    setReferralSearchQuery(refName);
+    if (!ref || !ref.Name) {
+      setFormData((prev) => ({
+        ...prev,
+        refagent: '',
+      }));
+      setReferralSearchQuery('');
+    } else {
+      const refName = ref.Name || ref.name || '';
+      const refId = String(ref['Refer Id'] ?? ref.id ?? ref['Doct Id'] ?? '');
+      setFormData((prev) => ({
+        ...prev,
+        refagent: refId,
+      }));
+      setReferralSearchQuery(refName);
+    }
     setIsReferralDropdownOpen(false);
   };
 
@@ -328,13 +337,18 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
     setReferralSearchQuery(text);
     setIsReferralDropdownOpen(true);
 
+    if (!text.trim()) {
+      setFormData((prev) => ({ ...prev, refagent: '' }));
+      return;
+    }
+
     const match = references.find(
       (r) =>
         String(r.Name || r.name || '').toLowerCase() === text.toLowerCase().trim() ||
         String(r['Refer Id'] ?? r.id ?? r['Doct Id'] ?? '').trim() === text.trim()
     );
     if (match) {
-      const matchId = String(match['Refer Id'] ?? match.id ?? match['Doct Id'] ?? '1');
+      const matchId = String(match['Refer Id'] ?? match.id ?? match['Doct Id'] ?? '');
       setFormData((prev) => ({ ...prev, refagent: matchId }));
     }
   };
@@ -643,57 +657,64 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
                 )}
               </div>
               <div className="relative">
-                <User className="w-4 h-4 text-blue-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <User className="w-4 h-4 text-blue-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
                   name="referedDr"
                   placeholder="Doctor Name (Degree)"
                   value={formData.referedDr}
                   onFocus={() => setIsReferDoctorDropdownOpen(true)}
+                  onClick={() => setIsReferDoctorDropdownOpen(true)}
                   onChange={handleReferedDrChange}
                   className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 shadow-2xs"
                 />
-              </div>
 
-              {/* Refer Doctor Autocomplete Dropdown */}
-              {isReferDoctorDropdownOpen && (
-                <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-300 rounded-lg shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-slate-100">
-                  <div className="px-3 py-1.5 bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider sticky top-0 border-b border-slate-200">
-                    Select Doctor (Shows Degree)
-                  </div>
-                  <div
-                    onClick={() => handleSelectDoctor({ 'Doct Id': '', Name: 'Self' })}
-                    className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-xs font-semibold text-slate-700 flex justify-between items-center"
-                  >
-                    <span>Self / Walk-in</span>
-                    <span className="text-[10px] text-slate-400 font-mono italic">Walk-in</span>
-                  </div>
+                {/* Refer Doctor Autocomplete Dropdown - Anchored directly to input */}
+                {isReferDoctorDropdownOpen && (
+                  <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-300 rounded-lg shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-slate-100">
+                    <div className="px-3 py-1.5 bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider sticky top-0 border-b border-slate-200">
+                      Select Doctor (Shows Degree)
+                    </div>
+                    <div
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        handleSelectReferDoctor({ 'Doct Id': '', Name: 'Self' });
+                      }}
+                      className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-xs font-semibold text-slate-700 flex justify-between items-center"
+                    >
+                      <span>Self / Walk-in</span>
+                      <span className="text-[10px] text-slate-400 font-mono italic">Walk-in</span>
+                    </div>
 
-                  {filteredReferDoctors.length > 0 ? (
-                    filteredReferDoctors.map((doc, idx) => (
-                      <div
-                        key={doc['Doct Id'] || idx}
-                        onClick={() => handleSelectDoctor(doc)}
-                        className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-xs text-slate-800 flex justify-between items-center transition-colors"
-                      >
-                        <div>
-                          <span className="font-bold text-slate-900">{doc.Name}</span>
-                          {doc.Deg && (
-                            <span className="text-[11px] text-blue-700 font-semibold ml-1.5 bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded-md">
-                              {doc.Deg}
-                            </span>
-                          )}
+                    {filteredReferDoctors.length > 0 ? (
+                      filteredReferDoctors.map((doc, idx) => (
+                        <div
+                          key={doc['Doct Id'] || idx}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            handleSelectReferDoctor(doc);
+                          }}
+                          className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-xs text-slate-800 flex justify-between items-center transition-colors"
+                        >
+                          <div>
+                            <span className="font-bold text-slate-900">{doc.Name}</span>
+                            {doc.Deg && (
+                              <span className="text-[11px] text-blue-700 font-semibold ml-1.5 bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded-md">
+                                {doc.Deg}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-mono shrink-0 ml-2">
+                            {doc['Doct Id']}
+                          </span>
                         </div>
-                        <span className="text-[10px] text-slate-400 font-mono shrink-0 ml-2">
-                          {doc['Doct Id']}
-                        </span>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="px-3 py-2 text-xs text-slate-400 italic">No matching doctor found</div>
-                  )}
-                </div>
-              )}
+                      ))
+                    ) : (
+                      <div className="px-3 py-2 text-xs text-slate-400 italic">No matching doctor found</div>
+                    )}
+                  </div>
+                )}
+              </div>
 
               {matchedDoctor?.Deg && (
                 <div className="mt-1 flex items-center gap-1 text-[11px] text-slate-600">
@@ -707,69 +728,86 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
           {/* Row 4: Doctor For Commission (Searchable Combobox) | Referral | Collection Center */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* 10. Doctor For Commission (Searchable Autocomplete) */}
-            <div className="relative" ref={doctorDropdownRef}>
+            <div className={`relative ${isDoctorDropdownOpen ? 'z-40' : 'z-20'}`} ref={doctorDropdownRef}>
               <label className="text-[11px] font-semibold text-slate-500 block mb-1.5">
                 Doctor For Commission
               </label>
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="Type initials to search doctor..."
+                  placeholder="Type initials to search doctor (optional)..."
                   value={doctorSearchQuery}
                   onFocus={() => setIsDoctorDropdownOpen(true)}
+                  onClick={() => setIsDoctorDropdownOpen(true)}
                   onChange={handleDoctorSearchChange}
                   className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 shadow-2xs"
                 />
-              </div>
 
-              {/* Autocomplete Dropdown List - Opens UPWARDS so it never clips at modal bottom */}
-              {isDoctorDropdownOpen && (
-                <div className="absolute left-0 right-0 bottom-full mb-1.5 bg-white border border-slate-300 rounded-lg shadow-2xl z-50 max-h-64 overflow-y-auto divide-y divide-slate-100">
-                  <div className="px-3 py-1.5 bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider sticky top-0 border-b border-slate-200">
-                    Select Doctor For Commission
-                  </div>
-                  <div
-                    onClick={() => handleSelectDoctor({ 'Doct Id': '', Name: 'Self' })}
-                    className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-xs font-semibold text-slate-700 flex justify-between items-center"
-                  >
-                    <span>Self / Walk-in</span>
-                    <span className="text-[10px] text-slate-400 font-mono italic">Walk-in</span>
-                  </div>
-
-                  {filteredDoctors.length > 0 ? (
-                    filteredDoctors.map((doc, idx) => (
-                      <div
-                        key={doc['Doct Id'] || idx}
-                        onClick={() => handleSelectDoctor(doc)}
-                        className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-xs text-slate-800 flex justify-between items-center"
-                      >
-                        <div>
-                          <span className="font-bold">{doc.Name}</span>
-                          {doc.Deg && (
-                            <span className="text-[11px] text-blue-700 font-semibold ml-1.5 bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded-md">
-                              {doc.Deg}
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-[10px] text-slate-400 font-mono shrink-0 ml-2">
-                          {doc['Doct Id']}
-                        </span>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="p-3 text-center text-slate-400 italic text-xs">
-                      No matching doctor found
+                {/* Autocomplete Dropdown List - Anchored directly below input */}
+                {isDoctorDropdownOpen && (
+                  <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-300 rounded-lg shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-slate-100">
+                    <div className="px-3 py-1.5 bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider sticky top-0 border-b border-slate-200">
+                      Select Doctor For Commission
                     </div>
-                  )}
-                </div>
-              )}
+                    <div
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        handleSelectCommissionDoctor({ 'Doct Id': '', Name: '' });
+                      }}
+                      className="px-3 py-2 hover:bg-rose-50 text-rose-600 cursor-pointer text-xs font-semibold flex justify-between items-center"
+                    >
+                      <span>None / No Commission (Blank)</span>
+                      <span className="text-[10px] font-mono italic">Blank</span>
+                    </div>
+                    <div
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        handleSelectCommissionDoctor({ 'Doct Id': 'Self', Name: 'Self' });
+                      }}
+                      className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-xs font-semibold text-slate-700 flex justify-between items-center"
+                    >
+                      <span>Self / Walk-in</span>
+                      <span className="text-[10px] text-slate-400 font-mono italic">Walk-in</span>
+                    </div>
+
+                    {filteredDoctors.length > 0 ? (
+                      filteredDoctors.map((doc, idx) => (
+                        <div
+                          key={doc['Doct Id'] || idx}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            handleSelectCommissionDoctor(doc);
+                          }}
+                          className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-xs text-slate-800 flex justify-between items-center"
+                        >
+                          <div>
+                            <span className="font-bold">{doc.Name}</span>
+                            {doc.Deg && (
+                              <span className="text-[11px] text-blue-700 font-semibold ml-1.5 bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded-md">
+                                {doc.Deg}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-mono shrink-0 ml-2">
+                            {doc['Doct Id']}
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-3 text-center text-slate-400 italic text-xs">
+                        No matching doctor found
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
               {/* Selected doctor confirmation badge */}
               <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
                 <span>
                   Selected Doctor ID:{' '}
                   <strong className="text-blue-600 font-mono">
-                    {formData.referDr ? `#${formData.referDr}` : 'None (Walk-in / Self)'}
+                    {formData.referDr ? `#${formData.referDr}` : 'None (Blank)'}
                   </strong>
                   {matchedDoctor?.Name && formData.referDr ? ` (${matchedDoctor.Name})` : ''}
                 </span>
@@ -777,69 +815,84 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
             </div>
 
             {/* 11. Referral (Master Catalog Referring Agents) */}
-            <div className="relative" ref={referralDropdownRef}>
+            <div className={`relative ${isReferralDropdownOpen ? 'z-40' : 'z-20'}`} ref={referralDropdownRef}>
               <label className="text-[11px] font-semibold text-slate-500 block mb-1.5">
                 Referring Agent (Master Catalog)
               </label>
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="Search referring agent by name, contact or ID..."
+                  placeholder="Search referring agent by name, contact or ID (optional)..."
                   value={referralSearchQuery}
                   onFocus={() => setIsReferralDropdownOpen(true)}
+                  onClick={() => setIsReferralDropdownOpen(true)}
                   onChange={handleReferralSearchChange}
                   className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 shadow-2xs"
                 />
-              </div>
 
-              {/* Referral Dropdown List - Opens UPWARDS so it never clips at modal bottom */}
-              {isReferralDropdownOpen && (
-                <div className="absolute left-0 right-0 bottom-full mb-1.5 bg-white border border-slate-300 rounded-lg shadow-2xl z-50 max-h-64 overflow-y-auto divide-y divide-slate-100">
-                  <div className="px-3 py-1.5 bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider sticky top-0 border-b border-slate-200 flex items-center justify-between">
-                    <span>Select Master Referring Agent</span>
-                    <span className="font-mono text-[9px] text-slate-400">{filteredReferrals.length} in Catalog</span>
-                  </div>
-
-                  {filteredReferrals.length > 0 ? (
-                    filteredReferrals.map((ref, idx) => {
-                      const refId = String(ref.id ?? ref['Doct Id'] ?? ref['Refer Id'] ?? idx + 1);
-                      const isSelected = String(formData.refagent) === refId;
-                      return (
-                        <div
-                          key={refId}
-                          onClick={() => handleSelectReferral(ref)}
-                          className={`px-3 py-2 hover:bg-blue-50 cursor-pointer text-xs flex justify-between items-center transition-colors ${
-                            isSelected ? 'bg-blue-50/80 font-bold text-blue-900' : 'text-slate-800'
-                          }`}
-                        >
-                          <div>
-                            <div className="font-bold">{ref.Name || ref.name}</div>
-                            {ref.Address && (
-                              <div className="text-[10px] text-slate-400 truncate max-w-xs">
-                                {ref.Address}
-                              </div>
-                            )}
-                          </div>
-                          <div className="text-right shrink-0">
-                            <span className="text-[10px] font-mono font-bold bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 text-indigo-700">
-                              Agent #{refId}
-                            </span>
-                            {ref.Contact && (
-                              <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                                {ref.Contact}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="p-3 text-center text-slate-400 italic text-xs">
-                      No referring agents found matching "{referralSearchQuery}".
+                {/* Referral Dropdown List - Anchored directly below input */}
+                {isReferralDropdownOpen && (
+                  <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-300 rounded-lg shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-slate-100">
+                    <div className="px-3 py-1.5 bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider sticky top-0 border-b border-slate-200 flex items-center justify-between">
+                      <span>Select Master Referring Agent</span>
+                      <span className="font-mono text-[9px] text-slate-400">{filteredReferrals.length} in Catalog</span>
                     </div>
-                  )}
-                </div>
-              )}
+
+                    <div
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        handleSelectReferral(null);
+                      }}
+                      className="px-3 py-2 hover:bg-rose-50 text-rose-600 cursor-pointer text-xs font-semibold flex justify-between items-center"
+                    >
+                      <span>None / Direct (No Agent - Blank)</span>
+                      <span className="text-[10px] font-mono italic">Blank</span>
+                    </div>
+
+                    {filteredReferrals.length > 0 ? (
+                      filteredReferrals.map((ref, idx) => {
+                        const refId = String(ref.id ?? ref['Doct Id'] ?? ref['Refer Id'] ?? idx + 1);
+                        const isSelected = String(formData.refagent) === refId;
+                        return (
+                          <div
+                            key={refId}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              handleSelectReferral(ref);
+                            }}
+                            className={`px-3 py-2 hover:bg-blue-50 cursor-pointer text-xs flex justify-between items-center transition-colors ${
+                              isSelected ? 'bg-blue-50/80 font-bold text-blue-900' : 'text-slate-800'
+                            }`}
+                          >
+                            <div>
+                              <div className="font-bold">{ref.Name || ref.name}</div>
+                              {ref.Address && (
+                                <div className="text-[10px] text-slate-400 truncate max-w-xs">
+                                  {ref.Address}
+                                </div>
+                              )}
+                            </div>
+                            <div className="text-right shrink-0">
+                              <span className="text-[10px] font-mono font-bold bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 text-indigo-700">
+                                Agent #{refId}
+                              </span>
+                              {ref.Contact && (
+                                <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                  {ref.Contact}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="p-3 text-center text-slate-400 italic text-xs">
+                        No referring agents found matching "{referralSearchQuery}".
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
               {/* Selected agent confirmation badge */}
               {(() => {
@@ -851,7 +904,7 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
                     <span>
                       Selected Master ID:{' '}
                       <strong className="text-indigo-600 font-mono">
-                        #{formData.refagent}
+                        {formData.refagent ? `#${formData.refagent}` : 'None (Blank)'}
                       </strong>
                       {selectedAgent?.Name ? ` (${selectedAgent.Name})` : ''}
                     </span>
