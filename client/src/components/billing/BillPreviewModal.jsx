@@ -35,7 +35,7 @@ export default function BillPreviewModal({
     setError('');
     try {
       const res = await api.get('/billing/pdf', {
-        params: { patientId: cleanPid, _t: Date.now() },
+        params: { patientId: cleanPid, preview: 'true', _t: Date.now() },
         responseType: 'blob',
       });
 

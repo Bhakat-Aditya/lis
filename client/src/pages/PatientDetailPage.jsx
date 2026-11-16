@@ -42,6 +42,9 @@ import {
   Send,
   MessageSquare,
   Undo2,
+  Activity,
+  FlaskConical,
+  Receipt,
 } from 'lucide-react';
 import { formatDisplayDate, getLocalDateString } from '../utils/dateUtils.js';
 
@@ -49,7 +52,7 @@ export default function PatientDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { activePatient, setActivePatient, activeModal, openModal, closeModal } = usePatientContext();
+  const { activePatient, setActivePatient, clearActivePatient, activeModal, openModal, closeModal } = usePatientContext();
   const { tests: catalogTests = [], profiles: catalogProfiles = [], packages: catalogPackages = [], templates: catalogTemplates = [] } = useMaster();
 
   const activeTab = searchParams.get('tab') || 'profile'; // profile, tests, results, invoice
@@ -153,18 +156,49 @@ export default function PatientDetailPage() {
     return 0;
   };
 
-  // Listen to sidebar trigger
+  // Listen to right panel / sidebar modal triggers
   useEffect(() => {
+    if (!activeModal || !patient) return;
     if (activeModal === 'barcode') setShowBarcodeModal(true);
-    if (activeModal === 'deposit') {
-      const due = calculateDueAmount(patient, reports);
-      setDepositAmount(due > 0 ? String(due) : '');
-      setDepositError('');
-      setShowDepositModal(true);
-    }
+    if (activeModal === 'deposit') handleOpenDepositModal();
     if (activeModal === 'discount') setShowDiscountModal(true);
-    if (activeModal) closeModal();
+    if (activeModal === 'edit' || activeModal === 'update') setShowEditPatientModal(true);
+    if (activeModal === 'whatsapp') {
+      setWhatsAppDefaultType('patientReportMsg');
+      setShowWhatsAppModal(true);
+    }
+    if (activeModal === 'bill' || activeModal === 'invoice') setShowBillPreviewModal(true);
+    if (activeModal === 'approval') setShowApproval(true);
+    if (activeModal === 'receive_sample') handleReceiveSample();
+    if (activeModal === 'release_report') handleReleaseReport();
+    if (activeModal === 'recall_report') handleRecallReport();
+    if (activeModal === 'delete') handleDeletePatient();
+    closeModal();
   }, [activeModal, closeModal, patient, reports]);
+
+  // Listen to modal query param from external navigation (e.g. sidebar from another page)
+  useEffect(() => {
+    const modalParam = searchParams.get('modal');
+    if (!modalParam || !patient) return;
+    if (modalParam === 'barcode') setShowBarcodeModal(true);
+    else if (modalParam === 'deposit') handleOpenDepositModal();
+    else if (modalParam === 'discount') setShowDiscountModal(true);
+    else if (modalParam === 'edit' || modalParam === 'update') setShowEditPatientModal(true);
+    else if (modalParam === 'whatsapp') {
+      setWhatsAppDefaultType('patientReportMsg');
+      setShowWhatsAppModal(true);
+    }
+    else if (modalParam === 'bill' || modalParam === 'invoice') setShowBillPreviewModal(true);
+    else if (modalParam === 'approval') setShowApproval(true);
+    else if (modalParam === 'receive_sample') handleReceiveSample();
+    else if (modalParam === 'release_report') handleReleaseReport();
+    else if (modalParam === 'recall_report') handleRecallReport();
+    else if (modalParam === 'delete') handleDeletePatient();
+
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('modal');
+    setSearchParams(newParams, { replace: true });
+  }, [searchParams, patient]);
 
   const fetchPatientData = async (isFresh = false) => {
     setLoading(true);
@@ -186,12 +220,8 @@ export default function PatientDetailPage() {
 
       if (pt) {
         setPatient(pt);
-        if (repList.length > 0) {
-          setReports(repList);
-        }
-        if (Array.isArray(res.data?.templates)) {
-          setTemplates(res.data.templates);
-        }
+        setReports(Array.isArray(repList) ? repList : []);
+        setTemplates(Array.isArray(res.data?.templates) ? res.data.templates : []);
         setActivePatient(pt);
       } else if (!isRateLimited) {
         // Only apply fallback patient if not rate-limited and no existing data
@@ -256,6 +286,7 @@ export default function PatientDetailPage() {
           if (res.data?.STATUS === 'FAILED') {
             throw new Error(res.data?.Message || 'Failed to delete patient');
           }
+          clearActivePatient();
           navigate('/patients');
         } catch (err) {
           setErrorMessage(err.response?.data?.Message || err.message || 'Error deleting patient');
@@ -366,6 +397,16 @@ export default function PatientDetailPage() {
 
   useEffect(() => {
     if (id) {
+      // Immediately reset previous patient state to avoid stale data leakage when switching or adding patients
+      setPatient(null);
+      setReports([]);
+      setTemplates([]);
+      setInvoiceData(null);
+      setReportPdfUrl('');
+      setBillPdfUrl('');
+      setDepositAmount('');
+      setNotification('');
+      setErrorMessage('');
       fetchPatientData();
     }
   }, [id]);
@@ -610,7 +651,10 @@ export default function PatientDetailPage() {
       <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <button
-            onClick={() => navigate('/patients')}
+            onClick={() => {
+              clearActivePatient();
+              navigate('/patients');
+            }}
             className="p-1.5 hover:bg-slate-100 rounded text-slate-600 transition-colors cursor-pointer"
             title="Back to patient worklist"
           >
@@ -631,85 +675,51 @@ export default function PatientDetailPage() {
           </div>
         </div>
 
-        {/* View Switcher Tabs matching screenshot capabilities */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex border border-slate-200 rounded-lg p-0.5 bg-slate-100 text-xs font-semibold">
-            <button
-              onClick={() => setSearchParams({ tab: 'profile' })}
-              className={`py-1.5 px-3 rounded transition-all cursor-pointer ${
-                activeTab === 'profile'
-                  ? 'bg-white text-indigo-700 font-bold shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Overview
-            </button>
-            <button
-              onClick={() => setSearchParams({ tab: 'journey' })}
-              className={`py-1.5 px-3 rounded transition-all cursor-pointer ${
-                activeTab === 'journey'
-                  ? 'bg-white text-indigo-700 font-bold shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              10-Stage Journey
-            </button>
-            <button
-              onClick={() => setSearchParams({ tab: 'tests' })}
-              className={`py-1.5 px-3 rounded transition-all cursor-pointer ${
-                activeTab === 'tests'
-                  ? 'bg-white text-indigo-700 font-bold shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Test Selection
-            </button>
-            <button
-              onClick={() => setSearchParams({ tab: 'results' })}
-              className={`py-1.5 px-3 rounded transition-all cursor-pointer ${
-                activeTab === 'results'
-                  ? 'bg-white text-indigo-700 font-bold shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Fill Results
-            </button>
-            <button
-              onClick={() => setSearchParams({ tab: 'billing' })}
-              className={`py-1.5 px-3 rounded transition-all cursor-pointer ${
-                activeTab === 'billing' || activeTab === 'invoice'
-                  ? 'bg-white text-indigo-700 font-bold shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Billing
-            </button>
-          </div>
-
+        {/* Clean, High-Contrast View Switcher Tabs */}
+        <div className="inline-flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200 shadow-2xs">
           <button
-            onClick={() => setShowEditPatientModal(true)}
-            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shadow-xs"
-            title="Edit Patient Demographic Details"
+            type="button"
+            onClick={() => setSearchParams({ tab: 'profile' })}
+            className={`py-1.5 px-3.5 rounded-lg text-xs transition-all cursor-pointer ${
+              activeTab === 'profile'
+                ? 'bg-blue-600 text-white font-bold shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/80 font-medium'
+            }`}
           >
-            <Edit className="w-3.5 h-3.5" />
-            <span>Edit Patient</span>
+            Overview
           </button>
-
           <button
-            onClick={handleDeletePatient}
-            className="flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 active:scale-95 text-xs font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer shadow-2xs"
-            title="Delete Patient Record"
+            type="button"
+            onClick={() => setSearchParams({ tab: 'journey' })}
+            className={`py-1.5 px-3.5 rounded-lg text-xs transition-all cursor-pointer ${
+              activeTab === 'journey'
+                ? 'bg-blue-600 text-white font-bold shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/80 font-medium'
+            }`}
           >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span>Delete</span>
+            10-Stage Journey
           </button>
-
           <button
-            onClick={() => setShowApproval(true)}
-            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shadow-xs"
+            type="button"
+            onClick={() => setSearchParams({ tab: 'tests' })}
+            className={`py-1.5 px-3.5 rounded-lg text-xs transition-all cursor-pointer ${
+              activeTab === 'tests'
+                ? 'bg-blue-600 text-white font-bold shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/80 font-medium'
+            }`}
           >
-            <FileCheck className="w-3.5 h-3.5" />
-            <span>Doctor Sign-off</span>
+            Test Selection
+          </button>
+          <button
+            type="button"
+            onClick={() => setSearchParams({ tab: 'billing' })}
+            className={`py-1.5 px-3.5 rounded-lg text-xs transition-all cursor-pointer ${
+              activeTab === 'billing' || activeTab === 'invoice'
+                ? 'bg-blue-600 text-white font-bold shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/80 font-medium'
+            }`}
+          >
+            Billing
           </button>
         </div>
       </div>
@@ -749,6 +759,7 @@ export default function PatientDetailPage() {
       {/* Main Tab Content */}
       {activeTab === 'profile' && (
         <PatientProfileView
+          key={patient?.patientId || id}
           patient={patient}
           reports={reports}
           templates={templates}
@@ -768,13 +779,16 @@ export default function PatientDetailPage() {
           onAddDiscount={() => setShowDiscountModal(true)}
           onOpenSettings={() => setShowBarcodeModal(true)}
           onEditPatient={() => setShowEditPatientModal(true)}
+          onDeletePatient={handleDeletePatient}
           onEditBill={() => setShowEditBillModal(true)}
           onTrackJourney={() => setSearchParams({ tab: 'journey' })}
+          onOpenApproval={() => setShowApproval(true)}
         />
       )}
 
       {activeTab === 'journey' && (
         <PatientJourneyTimeline
+          key={patient?.patientId || id}
           patient={patient}
           reports={reports}
           onReceiveSample={handleReceiveSample}
@@ -791,6 +805,7 @@ export default function PatientDetailPage() {
 
       {activeTab === 'tests' && (
         <TestSelectionView
+          key={patient?.patientId || id}
           patient={patient}
           reports={reports}
           templates={templates}
@@ -798,11 +813,13 @@ export default function PatientDetailPage() {
           onPrintInvoice={() => setSearchParams({ tab: 'billing' })}
           onFillResults={() => setSearchParams({ tab: 'results' })}
           onMakePayment={handleOpenDepositModal}
+          onAddDiscount={() => setShowDiscountModal(true)}
         />
       )}
 
       {activeTab === 'results' && (
         <ResultsEntry
+          key={patient?.patientId || id}
           patient={patient}
           reports={reports}
           templates={templates}

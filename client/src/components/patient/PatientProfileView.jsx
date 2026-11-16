@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import api from '../../services/api.js';
 import {
   User,
   Phone,
@@ -34,6 +35,7 @@ import {
   Building2,
   Undo2,
   ExternalLink,
+  Trash2,
 } from 'lucide-react';
 import { formatDisplayDate, formatAgeDisplay } from '../../utils/dateUtils.js';
 import { useMaster } from '../../context/context.master.jsx';
@@ -68,11 +70,14 @@ export default function PatientProfileView({
   onAddDiscount,
   onOpenSettings,
   onEditPatient,
+  onDeletePatient,
   onEditBill,
   onTrackJourney,
+  onOpenApproval,
 }) {
   const [activeTab, setActiveTab] = useState('tests'); // 'tests' | 'timeline' | 'deposits'
   const [showWhatsAppDropdown, setShowWhatsAppDropdown] = useState(false);
+  const [journeyData, setJourneyData] = useState(null);
 
   if (!patient) {
     return (
@@ -90,6 +95,24 @@ export default function PatientProfileView({
   const { canViewPatientLogs, canViewPatientEmr } = useAuth();
   const { tests: catalogTests = [], profiles: catalogProfiles = [], packages: catalogPackages = [], templates: catalogTemplates = [] } = useMaster();
   const [expandedLots, setExpandedLots] = useState({});
+
+  useEffect(() => {
+    if (!pid) return;
+    let isMounted = true;
+    api
+      .get('/patients/journey-stages', { params: { patientId: pid } })
+      .then((res) => {
+        if (isMounted && res.data?.STATUS === 'SUCCESS') {
+          setJourneyData(res.data);
+        }
+      })
+      .catch((err) => {
+        console.warn('[PatientProfileView] Journey fetch note:', err.message);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [pid]);
 
   const investigationLots = useMemo(() => {
     return groupInvestigationsIntoLots(
@@ -159,20 +182,45 @@ export default function PatientProfileView({
   const advanceAmount = Number(patient.advance || 0);
   const paymentLines = patient.paymentLines || patient.payments || [];
 
-  // Status percentage and normalization
+  // Status percentage and normalization bound to the 10-stage journey
   const statusStr = String(patient.status || '').toUpperCase();
   const isReady = ['APPROVED', 'PRINTING', 'RELEASED', 'READY', 'REPORT READY', 'VERIFIED'].includes(statusStr);
-  const progressPercent = isReady
-    ? 100
-    : statusStr.includes('PRINT')
-    ? 85
-    : statusStr.includes('FULL') || statusStr.includes('TEST')
-    ? 70
-    : statusStr.includes('PART')
-    ? 60
-    : statusStr.includes('SAMPLE')
-    ? 50
-    : 25;
+
+  const journeyMeta =
+    journeyData?.journeyMeta ||
+    journeyData?.payLoadJSON?.journey?.journeyMeta ||
+    null;
+  const journeyStages =
+    journeyData?.stages ||
+    journeyData?.payLoadJSON?.journey?.stages ||
+    [];
+
+  const currentStageStep = journeyMeta?.currentStageStep;
+  const currentStageTitle = useMemo(() => {
+    if (!journeyStages.length || !currentStageStep) return null;
+    const current = journeyStages.find((s) => s.step === currentStageStep);
+    return current?.title || null;
+  }, [journeyStages, currentStageStep]);
+
+  const journeyPercent =
+    journeyMeta?.completedStages !== undefined && journeyMeta?.totalStages
+      ? Math.round((journeyMeta.completedStages / journeyMeta.totalStages) * 100)
+      : null;
+
+  const progressPercent =
+    journeyPercent !== null
+      ? journeyPercent
+      : isReady
+      ? 100
+      : statusStr.includes('PRINT')
+      ? 85
+      : statusStr.includes('FULL') || statusStr.includes('TEST')
+      ? 70
+      : statusStr.includes('PART')
+      ? 60
+      : statusStr.includes('SAMPLE')
+      ? 50
+      : 25;
 
   const renderStatusBadge = () => {
     if (statusStr.includes('SAMPLE')) {
@@ -250,6 +298,17 @@ export default function PatientProfileView({
                 <Edit className="w-3.5 h-3.5" />
                 <span>Edit</span>
               </button>
+              {onDeletePatient && (
+                <button
+                  type="button"
+                  onClick={() => onDeletePatient(patient)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                  title="Delete Patient Record"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete</span>
+                </button>
+              )}
               <button
                 onClick={onOpenSettings}
                 className="p-1.5 hover:bg-slate-200/70 rounded-lg transition-colors text-slate-500 cursor-pointer"
@@ -353,8 +412,15 @@ export default function PatientProfileView({
               />
             </div>
 
-            <div className="pt-1 flex items-center justify-between">
-              {renderStatusBadge()}
+            <div className="pt-1 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                {renderStatusBadge()}
+                {currentStageTitle && (
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    Stage {currentStageStep || 1}: {currentStageTitle}
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => {
@@ -364,7 +430,7 @@ export default function PatientProfileView({
                     setActiveTab('timeline');
                   }
                 }}
-                className="text-[11px] text-blue-600 hover:text-blue-800 font-bold hover:underline cursor-pointer inline-flex items-center gap-1"
+                className="text-[11px] text-blue-600 hover:text-blue-800 font-bold hover:underline cursor-pointer inline-flex items-center gap-1 shrink-0"
                 title="View 10-Stage Flipkart-style diagnostic journey"
               >
                 <span>Track 10-Stage Journey →</span>
@@ -445,16 +511,7 @@ export default function PatientProfileView({
               <span className="truncate">Add Discount</span>
             </button>
 
-            {/* 4. Fill Results (Vibrant Blue) */}
-            <button
-              onClick={onFillResults}
-              className="flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer"
-            >
-              <FileEdit className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">Fill Results</span>
-            </button>
-
-            {/* 5. Receive Sample (Vibrant Indigo) */}
+            {/* 4. Receive Sample (Vibrant Indigo) */}
             <button
               onClick={onReceiveSample}
               className="flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer"
@@ -1068,8 +1125,10 @@ export default function PatientProfileView({
                 reports={reports}
                 onReceiveSample={onReceiveSample}
                 onReleaseReport={onReleaseReport}
+                onRecallReport={onRecallReport}
                 onSendWhatsApp={onSendWhatsApp}
                 onOpenWhatsAppModal={onOpenWhatsAppModal}
+                onOpenApproval={onOpenApproval}
               />
             </div>
           )}

@@ -229,7 +229,7 @@ export const applyDiscount = async (req, res, next) => {
     // 1. Fetch current bill JSON
     let billJson = null;
     try {
-      billJson = await upstreamService.get('GETBILLJSON', { patientId: cleanPatientId }, req.user?.upstreamSid);
+      billJson = await upstreamService.get('GETBILLJSON', { patientId: cleanPatientId, preview: 'true' }, req.user?.upstreamSid);
     } catch (e) {
       console.warn('[Billing] GETBILLJSON failed:', e.message);
     }
@@ -238,8 +238,8 @@ export const applyDiscount = async (req, res, next) => {
     if (billJson?.STATUS === 'FAILED' || !billJson?.payLoadJSON?.bill) {
       try {
         console.log(`[Billing] GETBILLJSON failed/empty for ${cleanPatientId}, invoking BILLGENERATE fallback...`);
-        await upstreamService.post('BILLGENERATE', { patientId: cleanPatientId }, null, req.user?.upstreamSid);
-        billJson = await upstreamService.get('GETBILLJSON', { patientId: cleanPatientId }, req.user?.upstreamSid);
+        await upstreamService.post('BILLGENERATE', { patientId: cleanPatientId, preview: 'true' }, null, req.user?.upstreamSid);
+        billJson = await upstreamService.get('GETBILLJSON', { patientId: cleanPatientId, preview: 'true' }, req.user?.upstreamSid);
       } catch (err) {
         console.warn('[Billing] BILLGENERATE fallback note:', err.message);
       }
@@ -585,7 +585,7 @@ export const getBillJson = async (req, res, next) => {
     const fetchPromise = (async () => {
       let data;
       try {
-        data = await upstreamService.get('GETBILLJSON', { patientId: cleanPatientId }, req.user?.upstreamSid);
+        data = await upstreamService.get('GETBILLJSON', { patientId: cleanPatientId, preview: 'true' }, req.user?.upstreamSid);
       } catch (e) {
         data = { STATUS: 'FAILED', Message: e.message };
       }
@@ -594,8 +594,8 @@ export const getBillJson = async (req, res, next) => {
       if (data?.STATUS === 'FAILED' || !data?.payLoadJSON?.bill) {
         try {
           console.log(`[Billing] GETBILLJSON returned FAILED, invoking BILLGENERATE recovery for ${cleanPatientId}`);
-          await upstreamService.post('BILLGENERATE', { patientId: cleanPatientId }, null, req.user?.upstreamSid);
-          data = await upstreamService.get('GETBILLJSON', { patientId: cleanPatientId }, req.user?.upstreamSid);
+          await upstreamService.post('BILLGENERATE', { patientId: cleanPatientId, preview: 'true' }, null, req.user?.upstreamSid);
+          data = await upstreamService.get('GETBILLJSON', { patientId: cleanPatientId, preview: 'true' }, req.user?.upstreamSid);
         } catch (err) {
           console.warn('[Billing] BILLGENERATE recovery failed:', err.message);
         }
@@ -818,9 +818,9 @@ export const streamInvoicePdf = async (req, res, next) => {
       return res.status(404).json({ STATUS: 'FAILED', Message: 'Official bill PDF not found on upstream AWS server' });
     }
 
-    // Bypass any intermediate proxy/CDN caching by appending cache-busting timestamp
+    // Bypass any intermediate proxy/CDN caching by appending cache-busting timestamp and preview=true
     const separator = billUrl.includes('?') ? '&' : '?';
-    const freshBillUrl = `${billUrl}${separator}_t=${Date.now()}`;
+    const freshBillUrl = `${billUrl}${separator}preview=true&_t=${Date.now()}`;
 
     const pdfStream = await axios.get(freshBillUrl, {
       responseType: 'stream',

@@ -144,7 +144,7 @@ const renderPatientStatus = (status) => {
 export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refreshTrigger }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { setActivePatient } = usePatientContext();
+  const { activePatient, setActivePatient, setActivePatientMenuOpen } = usePatientContext();
 
   const urlSearch = searchParams.get('search') || '';
   const todayStr = getLocalDateString();
@@ -651,15 +651,27 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                   const isExpanded = expandedRowId === pid;
                   const details = rowDetails[pid];
 
+                  const isSelected =
+                    (activePatient?.patientId && (activePatient.patientId === p.patientId || activePatient.patientId === pid)) ||
+                    (activePatient?.slNo && activePatient.slNo === p.slNo);
+
                   return (
                     <React.Fragment key={pid}>
                       <tr
-                        onClick={() => handleToggleRow(pid)}
+                        onClick={() => {
+                          setActivePatient(p);
+                          if (setActivePatientMenuOpen) setActivePatientMenuOpen(true);
+                          handleToggleRow(pid);
+                        }}
                         onDoubleClick={(e) => handleOpenPatient(p, e)}
                         className={`transition-colors cursor-pointer select-none ${
-                          isExpanded ? 'bg-slate-50' : 'hover:bg-slate-50/80'
+                          isSelected
+                            ? 'bg-blue-50/80 border-l-4 border-l-blue-600'
+                            : isExpanded
+                            ? 'bg-slate-50'
+                            : 'hover:bg-slate-50/80'
                         }`}
-                        title="Click to expand details • Double-click to open patient profile"
+                        title="Click to select & expand • Double-click to open patient profile"
                       >
                         {/* SN */}
                         <td className="py-2.5 px-3 text-center font-bold text-slate-900 text-xs">

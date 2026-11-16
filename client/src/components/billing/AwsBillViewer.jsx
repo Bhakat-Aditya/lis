@@ -27,9 +27,9 @@ export default function AwsBillViewer({ patientId, onBack, title, refreshKey }) 
     setLoading(true);
     setError('');
     try {
-      // Stream authentic PDF directly from AWS via backend endpoint with cache buster
+      // Stream authentic PDF directly from AWS via backend endpoint with preview=true and cache buster
       const res = await api.get('/billing/pdf', {
-        params: { patientId: cleanPid, _t: Date.now() },
+        params: { patientId: cleanPid, preview: 'true', _t: Date.now() },
         responseType: 'blob',
       });
 
@@ -83,8 +83,9 @@ export default function AwsBillViewer({ patientId, onBack, title, refreshKey }) 
     if (blobUrl) {
       window.open(blobUrl, '_blank');
     } else {
-      const token = localStorage.getItem('token');
-      window.open(`/api/billing/pdf?patientId=${cleanPid}${token ? `&token=${token}` : ''}`, '_blank');
+      const token = localStorage.getItem('lis_auth_token') || localStorage.getItem('token') || '';
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+      window.open(`${API_BASE}/api/billing/pdf?patientId=${cleanPid}${token ? `&token=${encodeURIComponent(token)}` : ''}&preview=true`, '_blank');
     }
   };
 

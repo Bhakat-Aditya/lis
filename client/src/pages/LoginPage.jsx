@@ -36,8 +36,18 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Track page load time to block any automated password-manager instant auto-submits
+  const [mountTime] = useState(() => Date.now());
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Suppress automated password managers from auto-submitting on page load
+    if (Date.now() - mountTime < 1000) {
+      console.warn('[Login] Instant auto-submit suppressed. Manual user click required.');
+      return;
+    }
+
     if (!loginId.trim() || !password) {
       setError('Please provide your operator username and access password.');
       return;
@@ -191,7 +201,7 @@ export default function LoginPage() {
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} autoComplete="off" className="space-y-4">
               {/* Username Input */}
               <div className="space-y-1.5">
                 <label
@@ -213,7 +223,8 @@ export default function LoginPage() {
                       setLoginId(e.target.value);
                       if (error) setError('');
                     }}
-                    autoComplete="username"
+                    autoComplete="off"
+                    data-lpignore="true"
                     autoFocus
                     required
                     className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 text-xs font-semibold transition-all focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-600 focus:bg-white dark:focus:bg-slate-800 shadow-2xs"
@@ -242,7 +253,8 @@ export default function LoginPage() {
                       setPassword(e.target.value);
                       if (error) setError('');
                     }}
-                    autoComplete="current-password"
+                    autoComplete="new-password"
+                    data-lpignore="true"
                     required
                     className="w-full pl-10 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 text-xs font-semibold transition-all focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-600 focus:bg-white dark:focus:bg-slate-800 shadow-2xs"
                   />

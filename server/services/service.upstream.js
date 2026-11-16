@@ -75,6 +75,25 @@ class UpstreamService {
   }
 
   /**
+   * Invalidate dead upstream session in memory and mark inactive in MongoDB
+   */
+  async invalidateUpstreamSession(sid) {
+    if (!sid) return;
+    if (this.masterSid === sid) {
+      this.masterSid = null;
+    }
+    try {
+      const { Session } = await import('../models/model.session.js');
+      await Session.updateMany(
+        { upstreamSid: sid, isActive: true },
+        { $set: { isActive: false, terminatedReason: 'Upstream session timed out (1140)' } }
+      );
+    } catch {
+      // ignore
+    }
+  }
+
+  /**
    * Resolve the active upstream session ID to use from the authenticated user.
    * Never attempts background re-login using saved credentials.
    */
@@ -246,7 +265,7 @@ class UpstreamService {
       // If session timed out or invalid, report session timeout immediately
       if (this.isSessionInvalid(res, res.data)) {
         console.warn(`[Upstream] Session ${activeSid} timed out/invalid on GET ${apiName}.`);
-        this.masterSid = null;
+        this.invalidateUpstreamSession(activeSid);
         return {
           STATUS: 'FAILED',
           StatusCode: '1140',
@@ -295,7 +314,7 @@ class UpstreamService {
 
       if (this.isSessionInvalid(res, res.data)) {
         console.warn(`[Upstream] Session ${activeSid} timed out/invalid on GET APIServlet ${apiName}.`);
-        this.masterSid = null;
+        this.invalidateUpstreamSession(activeSid);
         return {
           STATUS: 'FAILED',
           StatusCode: '1140',
@@ -343,7 +362,7 @@ class UpstreamService {
 
       if (this.isSessionInvalid(res, res.data)) {
         console.warn(`[Upstream] Session ${activeSid} timed out/invalid on POST ${apiName}.`);
-        this.masterSid = null;
+        this.invalidateUpstreamSession(activeSid);
         return {
           STATUS: 'FAILED',
           StatusCode: '1140',
@@ -418,7 +437,7 @@ class UpstreamService {
 
       if (this.isSessionInvalid(res, res.data)) {
         console.warn(`[Upstream] Session ${activeSid} timed out on BillingServlet.`);
-        this.masterSid = null;
+        this.invalidateUpstreamSession(activeSid);
         return {
           STATUS: 'FAILED',
           StatusCode: '1140',
@@ -461,11 +480,11 @@ class UpstreamService {
     const activeSid = await this.resolveActiveSid(sid);
     if (!activeSid) return null;
 
-    // 1. Try native GETBILLJSON (accurate, structured JSON from upstream database)
+    // 1. Try native GETBILLJSON (accurate, structured JSON from upstream database with preview fast-path)
     try {
-      let billData = await this.get('GETBILLJSON', { patientId: cleanId }, activeSid);
+      let billData = await this.get('GETBILLJSON', { patientId: cleanId, preview: 'true' }, activeSid);
       if (!billData?.payLoadJSON?.bill && rawId !== cleanId) {
-        billData = await this.get('GETBILLJSON', { patientId: rawId }, activeSid);
+        billData = await this.get('GETBILLJSON', { patientId: rawId, preview: 'true' }, activeSid);
       }
 
       const b = billData?.payLoadJSON?.bill;
@@ -513,8 +532,8 @@ class UpstreamService {
       console.warn(`[Upstream] GETBILLJSON note for ${cleanId}:`, e.message);
     }
 
-    // 2. Fallback to billing.jsp scraping
-    const url = `${this.baseUrl}/billing.jsp;jsessionid=${activeSid}?patientId=${encodeURIComponent(cleanId)}`;
+    // 2. Fallback to billing.jsp scraping with preview=true fast-path
+    const url = `${this.baseUrl}/billing.jsp;jsessionid=${activeSid}?patientId=${encodeURIComponent(cleanId)}&preview=true`;
 
     try {
       const res = await axios.get(url, {
@@ -649,7 +668,7 @@ class UpstreamService {
 
       // Handle session expiry on GET
       if (getRes.status === 302 && getRes.headers?.location?.includes('login.jsp')) {
-        this.masterSid = null;
+        this.invalidateUpstreamSession(activeSid);
         return { success: false, message: 'Session timed out. Please login again.', isSessionExpired: true };
       }
 

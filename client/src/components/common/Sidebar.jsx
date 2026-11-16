@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/context.auth.jsx';
+import { usePatientContext } from '../../context/context.patient.jsx';
 import {
   Home,
   UserPlus,
@@ -10,7 +11,6 @@ import {
   LogOut,
   ChevronDown,
   ChevronUp,
-  ArrowRight,
   PanelLeftClose,
   PanelLeft,
   FlaskConical,
@@ -19,6 +19,20 @@ import {
   FileText,
   CreditCard,
   Phone,
+  FileEdit,
+  Plus,
+  Printer,
+  MinusCircle,
+  TestTube,
+  Send,
+  Undo2,
+  MessageSquare,
+  Edit,
+  Barcode,
+  ExternalLink,
+  X,
+  User,
+  Activity,
 } from 'lucide-react';
 
 export default function Sidebar({ onOpenNewPatient }) {
@@ -26,7 +40,24 @@ export default function Sidebar({ onOpenNewPatient }) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth < 1280;
+    }
+    return false;
+  });
+
+  const {
+    activePatient,
+    clearActivePatient,
+    openModal,
+    activePatientMenuOpen = true,
+    setActivePatientMenuOpen,
+  } = usePatientContext();
+
+  const [dropdownOpenLocal, setDropdownOpenLocal] = useState(true);
+  const dropdownOpen = setActivePatientMenuOpen ? activePatientMenuOpen : dropdownOpenLocal;
+  const setDropdownOpen = setActivePatientMenuOpen || setDropdownOpenLocal;
 
   const navItemClass = (isActive, activeColorClass = 'bg-blue-50 text-blue-700 font-bold') =>
     `flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
@@ -37,6 +68,59 @@ export default function Sidebar({ onOpenNewPatient }) {
 
   const isPatientRoute =
     location.pathname.startsWith('/patients') || location.pathname.startsWith('/invoice');
+
+  // Only show selected patient dropdown when a particular patient's page is open (e.g. /patients/:id)
+  const isParticularPatientOpen = Boolean(
+    location.pathname.startsWith('/patients/') &&
+      location.pathname.split('/')[2] &&
+      location.pathname.split('/')[2].trim() !== ''
+  );
+
+  // Active patient data extraction
+  const rawPid = String(activePatient?.patientId || activePatient?.slNo || activePatient?.id || '').trim();
+  const cleanPid = rawPid
+    ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
+    : '';
+
+  const fullName = [activePatient?.title, activePatient?.name].filter(Boolean).join(' ') || 'Active Patient';
+  const barcodeText = activePatient?.slNo || activePatient?.barcode || cleanPid || '-';
+
+  const handleAction = (modalName, tabName) => {
+    if (!cleanPid) return;
+    const isCurrentlyOnPatientPage = location.pathname.startsWith(`/patients/${cleanPid}`);
+
+    if (tabName) {
+      navigate(`/patients/${cleanPid}?tab=${tabName}`);
+      return;
+    }
+
+    if (modalName) {
+      if (isCurrentlyOnPatientPage) {
+        openModal(modalName);
+      } else {
+        navigate(`/patients/${cleanPid}?modal=${modalName}`);
+      }
+    }
+  };
+
+  const handleFillResults = () => {
+    if (!cleanPid) return;
+    navigate(`/patients/${cleanPid}?tab=results`);
+  };
+
+  const handlePrintInvoice = () => {
+    if (!cleanPid) return;
+    if (location.pathname.startsWith(`/patients/${cleanPid}`)) {
+      openModal('bill');
+    } else {
+      navigate(`/patients/${cleanPid}?modal=bill`);
+    }
+  };
+
+  const handleOpenAwsPdf = () => {
+    if (!cleanPid) return;
+    window.open(`/api/reports/pdf?patientId=${cleanPid}&addHeader=true`, '_blank');
+  };
 
   return (
     <aside
@@ -136,8 +220,204 @@ export default function Sidebar({ onOpenNewPatient }) {
             title="Patient Directory & Registration Worklist"
           >
             <Users className="w-4 h-4 text-indigo-600 shrink-0" />
-            {!collapsed && <span>Patients Directory</span>}
+            {!collapsed && (
+              <div className="flex items-center justify-between flex-1">
+                <span>Patients Directory</span>
+                {activePatient && isParticularPatientOpen && (
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 animate-pulse" title="Active Patient Selected" />
+                )}
+              </div>
+            )}
           </NavLink>
+
+          {/* Collapsed state active patient icon */}
+          {collapsed && activePatient && isParticularPatientOpen && (
+            <div className="flex justify-center my-1">
+              <button
+                onClick={() => setCollapsed(false)}
+                title={`Active: ${fullName} (Click to open quick actions)`}
+                className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-300 flex items-center justify-center text-blue-700 relative hover:bg-blue-100 transition-all cursor-pointer shadow-2xs"
+              >
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 absolute top-1 right-1 ring-2 ring-white animate-pulse" />
+                <FileEdit className="w-4 h-4 text-blue-700" />
+              </button>
+            </div>
+          )}
+
+          {/* Clean Dropdown Under Patients Directory - only shown when a particular patient panel is open */}
+          {activePatient && !collapsed && isParticularPatientOpen && (
+            <div className="ml-2 pl-2 border-l-2 border-blue-200 my-1">
+              {/* Patient Name Dropdown Header */}
+              <div className="flex items-center justify-between py-1.5 px-2 rounded-lg bg-blue-50/70 hover:bg-blue-100/60 transition-colors">
+                <button
+                  onClick={() => setDropdownOpen(!dropdownOpen)}
+                  className="flex items-center gap-2 min-w-0 flex-1 text-left cursor-pointer"
+                  title="Click to toggle quick actions"
+                >
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 text-blue-600 transition-transform duration-200 shrink-0 ${
+                      dropdownOpen ? '' : '-rotate-90'
+                    }`}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-bold text-slate-900 truncate" title={fullName}>
+                      {fullName}
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-mono truncate">
+                      {barcodeText}
+                    </div>
+                  </div>
+                </button>
+
+                {/* Deselect / Close button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    clearActivePatient();
+                  }}
+                  title="Deselect patient"
+                  className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer shrink-0 ml-1"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* List of Things to be Done (Quick Actions Dropdown List) */}
+              {dropdownOpen && (
+                <div className="mt-1 space-y-0.5 pl-1">
+                  {/* Overview Link */}
+                  <button
+                    onClick={() => handleAction(null, 'profile')}
+                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                  >
+                    <User className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                    <span>Patient Overview</span>
+                  </button>
+
+                  {/* 1. Fill Results Bench (Highlighted primary item) */}
+                  <button
+                    onClick={handleFillResults}
+                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors text-left cursor-pointer"
+                  >
+                    <FileEdit className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                    <span>Fill Results</span>
+                  </button>
+
+                  {/* 2. Order Tests */}
+                  <button
+                    onClick={() => handleAction(null, 'tests')}
+                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-violet-500 shrink-0" />
+                    <span>Order Tests</span>
+                  </button>
+
+                  {/* 3. Add Deposit */}
+                  <button
+                    onClick={() => handleAction('deposit')}
+                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                  >
+                    <CreditCard className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>Add Deposit</span>
+                  </button>
+
+                  {/* 4. Print Invoice */}
+                  <button
+                    onClick={handlePrintInvoice}
+                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-teal-500 shrink-0" />
+                    <span>Print Invoice</span>
+                  </button>
+
+                  {/* 5. Add Discount */}
+                  <button
+                    onClick={() => handleAction('discount')}
+                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                  >
+                    <MinusCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <span>Add Discount</span>
+                  </button>
+
+                  {/* 6. Receive Sample */}
+                  <button
+                    onClick={() => handleAction('receive_sample')}
+                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                  >
+                    <TestTube className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
+                    <span>Receive Sample</span>
+                  </button>
+
+                  {/* 7. Release Report */}
+                  <button
+                    onClick={() => handleAction('release_report')}
+                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                  >
+                    <Send className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                    <span>Release Report</span>
+                  </button>
+
+                  {/* 8. Recall Report */}
+                  <button
+                    onClick={() => handleAction('recall_report')}
+                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                  >
+                    <Undo2 className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                    <span>Recall Report</span>
+                  </button>
+
+                  {/* 9. WhatsApp Hub */}
+                  <button
+                    onClick={() => handleAction('whatsapp')}
+                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>WhatsApp Hub</span>
+                  </button>
+
+                  {/* 10. Edit Patient */}
+                  <button
+                    onClick={() => handleAction('edit')}
+                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                  >
+                    <Edit className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                    <span>Edit Details</span>
+                  </button>
+
+                  {/* 11. Barcode Label */}
+                  <button
+                    onClick={() => handleAction('barcode')}
+                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                  >
+                    <Barcode className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+                    <span>Barcode Label</span>
+                  </button>
+
+                  {/* 12. AWS Report PDF */}
+                  <button
+                    onClick={handleOpenAwsPdf}
+                    className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <FileText className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                      <span>AWS Report PDF</span>
+                    </span>
+                    <ExternalLink className="w-3 h-3 text-slate-400" />
+                  </button>
+
+                  {/* 13. Track 10-Stage Journey */}
+                  <button
+                    onClick={() => handleAction(null, 'journey')}
+                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-indigo-700 bg-indigo-50/70 hover:bg-indigo-100/80 transition-colors text-left cursor-pointer"
+                    title="Track 10-Stage Diagnostic Pipeline"
+                  >
+                    <Activity className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                    <span>Track 10-Stage Journey</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Results Entry & Testing */}
           <NavLink

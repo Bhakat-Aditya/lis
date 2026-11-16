@@ -25,6 +25,7 @@ import {
   AlertCircle,
   RefreshCw,
   ExternalLink,
+  Percent,
 } from 'lucide-react';
 import Modal from '../common/Modal.jsx';
 import { useMaster } from '../../context/context.master.jsx';
@@ -40,6 +41,7 @@ export default function TestSelectionView({
   onPrintInvoice,
   onFillResults,
   onMakePayment,
+  onAddDiscount,
 }) {
   const navigate = useNavigate();
   const {
@@ -203,8 +205,22 @@ export default function TestSelectionView({
   // Combined selected investigations list: existing booked lots + newly added uncommitted lots
   const [selectedTests, setSelectedTests] = useState(existingLots);
 
-  // Sync when patient reports update from backend
+  const currentPid = String(patient?.patientId || patient?.slNo || '').trim();
+  const previousPidRef = useRef(currentPid);
+
+  // Sync when patient reports update from backend or when switching patients
   useEffect(() => {
+    // If the patient changed, strictly reset selectedTests to the new patient's existing lots
+    if (previousPidRef.current !== currentPid) {
+      previousPidRef.current = currentPid;
+      setSelectedTests(existingLots);
+      setSearchTerm('');
+      setDuplicateWarning(null);
+      setSaveSuccess('');
+      setSaveError('');
+      return;
+    }
+
     setSelectedTests((prev) => {
       // Build lookup of all already booked lot keys & names in existingLots
       const existingKeySet = new Set();
@@ -236,9 +252,9 @@ export default function TestSelectionView({
         if (name) existingNameSet.add(name);
       });
 
-      // Keep newly added items that have not yet been booked into existingLots
-      // ALSO: If an item was just saved but has not yet synced into existingLots, PRESERVE IT so it NEVER vanishes!
+      // Keep only newly added items that have not yet been booked into existingLots (must have t.isNew === true)
       const newlyAdded = prev.filter((t) => {
+        if (!t.isNew) return false;
         const type = (t.type || 'TEST').toUpperCase();
         const id = String(t.testId || t.id || '').toUpperCase().trim();
         const name = String(t.name || '').toLowerCase().trim();
@@ -253,9 +269,18 @@ export default function TestSelectionView({
         return true;
       });
 
+      // Avoid creating a new array reference if existing lots and newly added items haven't changed
+      if (
+        newlyAdded.length === 0 &&
+        prev.length === existingLots.length &&
+        prev.every((p, i) => p.id === existingLots[i]?.id && p.amount === existingLots[i]?.amount)
+      ) {
+        return prev;
+      }
+
       return [...existingLots, ...newlyAdded];
     });
-  }, [existingLots]);
+  }, [currentPid, existingLots]);
 
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState('');
@@ -702,14 +727,46 @@ export default function TestSelectionView({
       return;
     }
 
+    // Pre-open the new tab synchronously during user click to guarantee popup blockers do not intercept it
+    let billWindow = null;
+    try {
+      billWindow = window.open('', '_blank');
+      if (billWindow) {
+        billWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <title>Opening Diagnostic Bill - ${cleanPid || pid}</title>
+              <style>
+                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f8fafc; color: #1e293b; text-align: center; }
+                .card { background: white; padding: 32px 48px; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+                .spinner { width: 36px; height: 36px; border: 3px solid #e2e8f0; border-top-color: #059669; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+                @keyframes spin { to { transform: rotate(360deg); } }
+                h2 { margin: 0 0 8px; font-size: 18px; color: #0f172a; }
+                p { margin: 0; font-size: 13px; color: #64748b; }
+              </style>
+            </head>
+            <body>
+              <div class="card">
+                <div class="spinner"></div>
+                <h2>Recording Order & Loading Bill...</h2>
+                <p>Please wait while investigations are synchronized with AWS.</p>
+              </div>
+            </body>
+          </html>
+        `);
+      }
+    } catch (e) {
+      console.warn('Popup tab note:', e);
+    }
+
     setSaving(true);
     setSaveError('');
     setSaveSuccess('');
 
     try {
-      // Send all investigations (both existing lots and newly added lots) so previous tests are never replaced
-      const allValidTests = selectedTests.filter((t) => t.testId);
-      const formattedIds = allValidTests
+      // Send strictly the newly added investigations for this patient order
+      const formattedIds = newTests
         .map((t) => {
           let prefix = t.type || 'TEST';
           if (prefix === 'TEMPLATE') prefix = 'TEMP';
@@ -730,22 +787,33 @@ export default function TestSelectionView({
       });
 
       if (res.data?.STATUS === 'SUCCESS' || res.data?.StatusCode === '0000') {
-        setSaveSuccess(`Added ${newTests.length} investigation lot(s) successfully! Redirecting to Billing...`);
+        // Direct the new tab to open the authentic AWS bill URL (not localhost:3000 SPA duplicate)
+        const authenticBillUrl = res.data?.billUrl || res.data?.upstreamBillUrl;
+        if (billWindow && !billWindow.closed) {
+          if (authenticBillUrl) {
+            billWindow.location.href = authenticBillUrl;
+          } else {
+            const token = localStorage.getItem('lis_auth_token') || '';
+            const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+            billWindow.location.href = `${API_BASE}/api/billing/pdf?patientId=${encodeURIComponent(cleanPid || pid)}${token ? `&token=${encodeURIComponent(token)}` : ''}&preview=true&_t=${Date.now()}`;
+          }
+        }
+
+        setSaveSuccess(`Added ${newTests.length} investigation lot(s) successfully! Official AWS bill opened in a new tab.`);
+        
         // Immediately mark newly added items as booked so they transition without duplicate or delete trash icon
         setSelectedTests((prev) =>
           prev.map((t) => (t.isNew ? { ...t, isNew: false, isRepeat: false } : t))
         );
+
+        // Refresh patient data in the background without switching portal tabs
         if (onRefresh) await onRefresh();
-        // Redirect directly to billing tab as requested
-        if (onPrintInvoice) {
-          onPrintInvoice();
-        } else {
-          navigate(`/patients/${cleanPid || pid}?tab=billing`);
-        }
       } else {
+        if (billWindow && !billWindow.closed) billWindow.close();
         setSaveError(res.data?.Message || 'Failed to order tests');
       }
     } catch (err) {
+      if (billWindow && !billWindow.closed) billWindow.close();
       setSaveError(err.response?.data?.Message || 'Server error while ordering tests');
     } finally {
       setSaving(false);
@@ -793,13 +861,28 @@ export default function TestSelectionView({
             <Plus className="w-4 h-4 text-blue-600" />
             <span className="text-sm">Diagnostic Test Catalog & Investigation Slip</span>
           </div>
-          <button
-            onClick={onMakePayment}
-            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-xs cursor-pointer transition-all"
-          >
-            <Camera className="w-3.5 h-3.5" />
-            <span>Record Payment (Deposit)</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onMakePayment}
+              className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-xs cursor-pointer transition-all"
+              title="Record Payment / Deposit"
+            >
+              <CreditCard className="w-3.5 h-3.5" />
+              <span>Record Payment</span>
+            </button>
+            {onAddDiscount && (
+              <button
+                type="button"
+                onClick={onAddDiscount}
+                className="flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-xs cursor-pointer transition-all"
+                title="Add Discount"
+              >
+                <Percent className="w-3.5 h-3.5" />
+                <span>Add Discount</span>
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="p-4 space-y-4">
@@ -1068,38 +1151,11 @@ export default function TestSelectionView({
 
             <button
               onClick={() => handleAddTest()}
-              className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-xs transition-all cursor-pointer"
+              className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-xs transition-all cursor-pointer shrink-0"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>ADD</span>
             </button>
-            <button
-              onClick={handleClear}
-              className="flex items-center gap-1 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 font-bold text-xs py-2 px-3 rounded-xl transition-colors cursor-pointer"
-            >
-              <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-              <span>CLEAR</span>
-            </button>
-            <div className="flex items-center gap-2 ml-auto">
-              <button
-                type="button"
-                onClick={onMakePayment}
-                className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs py-2 px-3.5 rounded-xl shadow-xs transition-all cursor-pointer"
-                title="Record patient deposit payment"
-              >
-                <DollarSign className="w-3.5 h-3.5" />
-                <span>Record Deposit</span>
-              </button>
-              <button
-                type="button"
-                onClick={onPrintInvoice}
-                className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-800 font-bold text-xs py-2 px-3.5 rounded-xl border border-slate-200 transition-all cursor-pointer shadow-2xs"
-                title="Print investigation bill slip"
-              >
-                <Printer className="w-3.5 h-3.5 text-slate-600" />
-                <span>Print Slip</span>
-              </button>
-            </div>
           </div>
 
           {/* Duplicate Test Warning Banner with Repeat Test Option */}
@@ -1201,7 +1257,7 @@ export default function TestSelectionView({
                     className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-95 text-white font-extrabold text-xs py-2 px-4 rounded-xl shadow-xs transition-all cursor-pointer"
                   >
                     <Save className="w-4 h-4" />
-                    <span>{saving ? 'Saving to AWS...' : 'Save & View Billing →'}</span>
+                    <span>{saving ? 'Saving to AWS & Opening Bill...' : 'Save Tests'}</span>
                   </button>
                 </div>
               </div>
@@ -1469,9 +1525,9 @@ export default function TestSelectionView({
                   <Save className="w-4 h-4" />
                   <span>
                     {saving
-                      ? 'Saving to AWS...'
+                      ? 'Saving to AWS & Opening Bill...'
                       : pendingLots.length > 0
-                      ? `Save & View Billing (${pendingLots.length} New) →`
+                      ? `Save Tests (${pendingLots.length} New)`
                       : 'Select Tests Above to Save'}
                   </span>
                 </button>

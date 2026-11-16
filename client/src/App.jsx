@@ -42,9 +42,9 @@ const ProtectedLayout = () => {
   }
 
   return (
-    <div className="h-screen flex bg-slate-50 text-slate-900 antialiased selection:bg-indigo-100 selection:text-indigo-900 overflow-hidden">
+    <div className="h-screen w-screen max-w-full flex bg-slate-50 text-slate-900 antialiased selection:bg-indigo-100 selection:text-indigo-900 overflow-hidden">
       <Sidebar onOpenNewPatient={() => setIsRegisterOpen(true)} />
-      <main className="flex-1 p-3 md:p-5 overflow-y-auto max-w-7xl mx-auto w-full min-h-0">
+      <main className="flex-1 p-3 md:p-5 overflow-y-auto overflow-x-hidden max-w-7xl mx-auto w-full min-w-0">
         <Outlet context={{ openNewPatient: () => setIsRegisterOpen(true) }} />
       </main>
 
