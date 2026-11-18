@@ -280,10 +280,10 @@ export default function Sidebar({ onOpenNewPatient }) {
                 </button>
               </div>
 
-              {/* List of Things to be Done (Quick Actions Dropdown List) */}
+              {/* List of Things to be Done (Chronological Diagnostic Lifecycle) */}
               {dropdownOpen && (
                 <div className="mt-1 space-y-0.5 pl-1">
-                  {/* Overview Link */}
+                  {/* 1. Patient Overview */}
                   <button
                     onClick={() => handleAction(null, 'profile')}
                     className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
@@ -292,16 +292,16 @@ export default function Sidebar({ onOpenNewPatient }) {
                     <span>Patient Overview</span>
                   </button>
 
-                  {/* 1. Fill Results Bench (Highlighted primary item) */}
+                  {/* 2. Edit Details */}
                   <button
-                    onClick={handleFillResults}
-                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors text-left cursor-pointer"
+                    onClick={() => handleAction('edit')}
+                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
                   >
-                    <FileEdit className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                    <span>Fill Results</span>
+                    <Edit className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                    <span>Edit Details</span>
                   </button>
 
-                  {/* 2. Order Tests */}
+                  {/* 3. Order Tests */}
                   <button
                     onClick={() => handleAction(null, 'tests')}
                     className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
@@ -310,7 +310,25 @@ export default function Sidebar({ onOpenNewPatient }) {
                     <span>Order Tests</span>
                   </button>
 
-                  {/* 3. Add Deposit */}
+                  {/* 4. Barcode Label */}
+                  <button
+                    onClick={() => handleAction('barcode')}
+                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                  >
+                    <Barcode className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+                    <span>Barcode Label</span>
+                  </button>
+
+                  {/* 5. Receive Sample */}
+                  <button
+                    onClick={() => handleAction('receive_sample')}
+                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                  >
+                    <TestTube className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
+                    <span>Receive Sample</span>
+                  </button>
+
+                  {/* 6. Add Deposit */}
                   <button
                     onClick={() => handleAction('deposit')}
                     className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
@@ -319,7 +337,16 @@ export default function Sidebar({ onOpenNewPatient }) {
                     <span>Add Deposit</span>
                   </button>
 
-                  {/* 4. Print Invoice */}
+                  {/* 7. Add Discount */}
+                  <button
+                    onClick={() => handleAction('discount')}
+                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                  >
+                    <MinusCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <span>Add Discount</span>
+                  </button>
+
+                  {/* 8. Print Invoice */}
                   <button
                     onClick={handlePrintInvoice}
                     className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
@@ -332,73 +359,20 @@ export default function Sidebar({ onOpenNewPatient }) {
                     <ExternalLink className="w-3 h-3 text-slate-400" />
                   </button>
 
-                  {/* 5. Add Discount */}
+                  {/* 9. Fill Results Bench */}
                   <button
-                    onClick={() => handleAction('discount')}
-                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                    onClick={handleFillResults}
+                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-bold text-blue-700 bg-blue-50/80 hover:bg-blue-100 transition-colors text-left cursor-pointer"
                   >
-                    <MinusCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                    <span>Add Discount</span>
+                    <FileEdit className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                    <span>Fill Results</span>
                   </button>
 
-                  {/* 6. Receive Sample */}
-                  <button
-                    onClick={() => handleAction('receive_sample')}
-                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
-                  >
-                    <TestTube className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
-                    <span>Receive Sample</span>
-                  </button>
-
-                  {/* 7. Release Report */}
-                  <button
-                    onClick={() => handleAction('release_report')}
-                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
-                  >
-                    <Send className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                    <span>Release Report</span>
-                  </button>
-
-                  {/* 8. Recall Report */}
-                  <button
-                    onClick={() => handleAction('recall_report')}
-                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
-                  >
-                    <Undo2 className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                    <span>Recall Report</span>
-                  </button>
-
-                  {/* 9. WhatsApp Hub */}
-                  <button
-                    onClick={() => handleAction('whatsapp')}
-                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
-                  >
-                    <MessageSquare className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                    <span>WhatsApp Hub</span>
-                  </button>
-
-                  {/* 10. Edit Patient */}
-                  <button
-                    onClick={() => handleAction('edit')}
-                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
-                  >
-                    <Edit className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                    <span>Edit Details</span>
-                  </button>
-
-                  {/* 11. Barcode Label */}
-                  <button
-                    onClick={() => handleAction('barcode')}
-                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
-                  >
-                    <Barcode className="w-3.5 h-3.5 text-purple-500 shrink-0" />
-                    <span>Barcode Label</span>
-                  </button>
-
-                  {/* 12. AWS Report PDF */}
+                  {/* 10. AWS Report PDF */}
                   <button
                     onClick={handleOpenAwsPdf}
                     className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                    title="Open official AWS Report PDF in a new tab"
                   >
                     <span className="flex items-center gap-2.5">
                       <FileText className="w-3.5 h-3.5 text-rose-500 shrink-0" />
@@ -407,7 +381,34 @@ export default function Sidebar({ onOpenNewPatient }) {
                     <ExternalLink className="w-3 h-3 text-slate-400" />
                   </button>
 
-                  {/* 13. Track 10-Stage Journey */}
+                  {/* 11. Release Report */}
+                  <button
+                    onClick={() => handleAction('release_report')}
+                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                  >
+                    <Send className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                    <span>Release Report</span>
+                  </button>
+
+                  {/* 12. Recall Report */}
+                  <button
+                    onClick={() => handleAction('recall_report')}
+                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                  >
+                    <Undo2 className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                    <span>Recall Report</span>
+                  </button>
+
+                  {/* 13. WhatsApp Hub */}
+                  <button
+                    onClick={() => handleAction('whatsapp')}
+                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>WhatsApp Hub</span>
+                  </button>
+
+                  {/* 14. Track 10-Stage Journey */}
                   <button
                     onClick={() => handleAction(null, 'journey')}
                     className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-indigo-700 bg-indigo-50/70 hover:bg-indigo-100/80 transition-colors text-left cursor-pointer"
