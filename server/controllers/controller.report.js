@@ -55,6 +55,53 @@ export const resolveReadableUnit = (raw, customMap = {}) => {
   return customMap[lower] || customMap[noU] || STATIC_UNIT_MAP[lower] || STATIC_UNIT_MAP[noU] || clean;
 };
 
+export const STATIC_DEPT_MAP = {
+  '1': 'Haematology',
+  'd1': 'Haematology',
+  'hema': 'Haematology',
+  '2': 'Biochemistry',
+  'd2': 'Biochemistry',
+  'bio': 'Biochemistry',
+  '3': 'Clinical Pathology',
+  'd3': 'Clinical Pathology',
+  'cpath': 'Clinical Pathology',
+  '4': 'Serology & Immunology',
+  'd4': 'Serology & Immunology',
+  'sero': 'Serology & Immunology',
+  '5': 'Microbiology',
+  'd5': 'Microbiology',
+  'micro': 'Microbiology',
+  '6': 'Histopathology',
+  'd6': 'Histopathology',
+  'histo': 'Histopathology',
+  '7': 'Cytology',
+  'd7': 'Cytology',
+  'cyto': 'Cytology',
+  '8': 'Coagulation',
+  'd8': 'Coagulation',
+  'coag': 'Coagulation',
+  '9': 'Endocrinology & Hormones',
+  'd9': 'Endocrinology & Hormones',
+  'endo': 'Endocrinology & Hormones',
+  '10': 'Molecular Biology',
+  'd10': 'Molecular Biology',
+  'mol': 'Molecular Biology',
+};
+
+export const resolveReadableDept = (raw, customMap = {}) => {
+  if (!raw && raw !== 0) return '';
+  const clean = String(raw).trim();
+  if (!clean || clean === '-') return clean;
+  const lower = clean.toLowerCase();
+  const noD = lower.replace(/^d/i, '').trim();
+  if (customMap[lower]) return customMap[lower];
+  if (customMap[noD]) return customMap[noD];
+  if (STATIC_DEPT_MAP[lower]) return STATIC_DEPT_MAP[lower];
+  if (STATIC_DEPT_MAP[noD]) return STATIC_DEPT_MAP[noD];
+  if (!/^d\d+$/i.test(clean) && !/^\d+$/.test(clean)) return clean;
+  return clean;
+};
+
 export const invalidateReportCache = (patientId) => {
   if (!patientId) {
     reportCache.clear();
@@ -217,6 +264,26 @@ export const getPatientReport = async (req, res, next) => {
       }
     });
 
+    // Retrieve master departments to resolve human-readable department names (e.g. D1 -> Haematology)
+    let masterDepartments = [];
+    try {
+      const cachedDepts = await cacheService.getList(CACHE_KEYS.DEPT_LIST, false, req.user?.upstreamSid);
+      masterDepartments = cachedDepts?.data || [];
+    } catch (e) {
+      // Ignore cache lookup failure
+    }
+
+    const deptMap = {};
+    (masterDepartments || []).forEach((d) => {
+      const id = String(d['Dept Id'] || d.id || d.deptId || '').trim().toLowerCase();
+      const noD = id.replace(/^d/i, '').trim();
+      const name = String(d.Name || d.name || '').trim();
+      if (id && name) {
+        deptMap[id] = name;
+        if (noD) deptMap[noD] = name;
+      }
+    });
+
     const toBoolFlag = (val, def) => {
       if (val === undefined || val === null || val === '') return def;
       if (typeof val === 'boolean') return val;
@@ -252,12 +319,17 @@ export const getPatientReport = async (req, res, next) => {
       const rawUnit = String(r.unit || '').trim();
       const resolvedUnitName = resolveReadableUnit(rawUnit, unitMap);
 
+      const rawDept = String(r.deptName || r.deptId || '').trim();
+      const resolvedDeptName = resolveReadableDept(rawDept, deptMap);
+
       return {
         ...r,
         unit: resolvedUnitName, // Replace unit with the readable unit name across the entire website
         unitId: rawUnit, // Retain underlying unit ID for API sync
         unitCode: rawUnit,
         unitName: resolvedUnitName,
+        deptName: resolvedDeptName || r.deptName || 'Haematology',
+        deptId: rawDept || 'D1',
         ...(statusOverride ? { status: statusOverride, isDeleted: isDel } : {}),
         possibleCalculate: r.possibleCalculate !== undefined
           ? toBoolFlag(r.possibleCalculate, false)
@@ -394,11 +466,17 @@ export const getPatientReport = async (req, res, next) => {
           });
         }
       }
+      const rawTmplDept = String(t.deptName || t.department || '').trim();
+      const resolvedTmplDept = resolveReadableDept(rawTmplDept, deptMap);
+
       return {
         ...t,
         status: statusOverride || t.status || (isDel ? 'DELETED' : 'SAVED'),
         isDeleted: isDel,
         resultJsonParsed: parsed,
+        deptName: resolvedTmplDept || t.deptName || t.department || 'DEPT HAEMATOLOGY TESTS - Template',
+        department: resolvedTmplDept || t.department || 'DEPT HAEMATOLOGY TESTS - Template',
+        deptId: rawTmplDept || 'D1',
         possibleDownload: t.possibleDownload !== undefined
           ? toBoolFlag(t.possibleDownload, true)
           : true,
@@ -817,7 +895,7 @@ export const updateReport = async (req, res, next) => {
 
     const params = {
       profileName: profileName || '',
-      deptName: deptName || 'D1',
+      deptName: req.body.deptId || deptName || 'D1',
       reportId,
       patientId: cleanPatientId,
       sampleId: sampleId || '',

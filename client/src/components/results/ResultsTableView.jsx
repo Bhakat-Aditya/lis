@@ -25,6 +25,7 @@ import {
   getDefaultHealthyValue,
   getTestOperationPermissions,
   formatUnitName,
+  getDepartmentDisplayName,
 } from '../../utils/labTestUtils.js';
 import { useMaster } from '../../context/context.master.jsx';
 
@@ -50,7 +51,7 @@ export default function ResultsTableView({
   onDownloadResult,
   onOpenEditReport,
 }) {
-  const { tests: contextMasterTests = [], units: masterUnits = [] } = useMaster();
+  const { tests: contextMasterTests = [], units: masterUnits = [], departments: masterDepartments = [] } = useMaster();
   const activeMasterTests = masterTests || contextMasterTests || [];
   const [focusedIndex, setFocusedIndex] = useState(null);
   const inputRefs = useRef([]);
@@ -130,14 +131,14 @@ export default function ResultsTableView({
       <div className="overflow-x-auto max-h-[calc(100vh-250px)]">
         <table className="w-full table-fixed text-left border-collapse text-xs">
           <colgroup>
-            <col style={{ width: '38px' }} />
-            <col style={{ width: '28%' }} />
-            <col style={{ width: '80px' }} />
+            <col style={{ width: '34px' }} />
+            <col style={{ width: '27%' }} />
+            <col style={{ width: '75px' }} />
+            <col style={{ width: '21%' }} />
+            <col style={{ width: '55px' }} />
+            <col style={{ width: '85px' }} />
             <col style={{ width: '22%' }} />
-            <col style={{ width: '65px' }} />
-            <col style={{ width: '90px' }} />
-            <col style={{ width: '25%' }} />
-            <col style={{ width: '72px' }} />
+            <col style={{ width: '116px' }} />
           </colgroup>
           <thead className="sticky top-0 bg-slate-100/95 backdrop-blur-xs z-20 border-b border-slate-200 select-none shadow-2xs">
             <tr className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider">
@@ -254,7 +255,7 @@ export default function ResultsTableView({
                           </button>
                         </div>
                         <div className="text-[9.5px] text-slate-400 truncate flex items-center gap-1 leading-tight mt-0.5">
-                          <span className="truncate">{report.deptName || tube.department}</span>
+                          <span className="truncate">{getDepartmentDisplayName(report.deptName, tube.department, masterDepartments)}</span>
                           <span className="shrink-0">•</span>
                           <span className="shrink-0">{tube.tubeName}</span>
                         </div>
@@ -433,15 +434,15 @@ export default function ResultsTableView({
                   </td>
 
                   {/* Actions */}
-                  <td className="py-1 px-2 text-right overflow-hidden">
-                    <div className="flex items-center justify-end gap-1">
+                  <td className="py-1 px-1.5 text-right">
+                    <div className="flex items-center justify-end gap-1 shrink-0 whitespace-nowrap">
                       {isDeleted ? (
                         <button
                           type="button"
                           onClick={() => onRestoreReport && onRestoreReport(report)}
                           disabled={isDeleting}
                           title="Restore deleted test parameter"
-                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer disabled:opacity-50 shrink-0"
                         >
                           {isDeleting ? (
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -456,7 +457,7 @@ export default function ResultsTableView({
                             type="button"
                             onClick={() => onOpenEditReport && onOpenEditReport(report)}
                             title="Edit Test Details (Name, Rate, Specimen, Method, Range, Unit, Comment)"
-                            className="p-1 rounded-lg border font-bold text-xs bg-white hover:bg-blue-50 text-slate-600 hover:text-blue-600 border-slate-200 hover:border-blue-300 transition-all cursor-pointer shadow-2xs"
+                            className="p-1 rounded-lg border font-bold text-xs bg-white hover:bg-blue-50 text-slate-600 hover:text-blue-600 border-slate-200 hover:border-blue-300 transition-all cursor-pointer shadow-2xs shrink-0"
                           >
                             <Edit className="w-3.5 h-3.5" />
                           </button>
@@ -468,7 +469,7 @@ export default function ResultsTableView({
                               onClick={() => onUploadOrder && onUploadOrder(report)}
                               disabled={uploadingId === report.reportId || isSaving || isDeleting}
                               title="Upload order to analyzer equipment (UPLOADORDER)"
-                              className="p-1 rounded-lg border font-bold text-xs bg-white hover:bg-sky-50 text-sky-600 hover:text-sky-700 border-slate-200 hover:border-sky-300 transition-all cursor-pointer shadow-2xs disabled:opacity-50"
+                              className="p-1 rounded-lg border font-bold text-xs bg-white hover:bg-sky-50 text-sky-600 hover:text-sky-700 border-slate-200 hover:border-sky-300 transition-all cursor-pointer shadow-2xs disabled:opacity-50 shrink-0"
                             >
                               {uploadingId === report.reportId ? (
                                 <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-600" />
@@ -485,7 +486,7 @@ export default function ResultsTableView({
                               onClick={() => onCalculate(report.reportId)}
                               disabled={calculatingId === report.reportId || isSaving}
                               title="Evaluate automated formula calculation"
-                              className="p-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 hover:text-indigo-600 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                              className="p-1 bg-white hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 text-slate-600 hover:text-indigo-600 rounded-lg transition-colors cursor-pointer disabled:opacity-50 shrink-0"
                             >
                               {calculatingId === report.reportId ? (
                                 <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
@@ -500,7 +501,7 @@ export default function ResultsTableView({
                             onClick={() => onDeleteReport && onDeleteReport(report)}
                             disabled={isDeleting}
                             title="Delete test parameter"
-                            className="p-1 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-300 text-slate-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                            className="p-1 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-300 text-slate-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer disabled:opacity-50 shrink-0"
                           >
                             {isDeleting ? (
                               <Loader2 className="w-3.5 h-3.5 animate-spin" />

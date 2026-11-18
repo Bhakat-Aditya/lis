@@ -28,6 +28,7 @@ import {
   getDefaultHealthyValue,
   getTestOperationPermissions,
   formatUnitName,
+  getDepartmentDisplayName,
 } from '../../utils/labTestUtils.js';
 import { useMaster } from '../../context/context.master.jsx';
 
@@ -53,7 +54,7 @@ export default function ResultsCardView({
   onDownloadResult,
   onOpenEditReport,
 }) {
-  const { tests: contextMasterTests = [], units: masterUnits = [] } = useMaster();
+  const { tests: contextMasterTests = [], units: masterUnits = [], departments: masterDepartments = [] } = useMaster();
   const activeMasterTests = masterTests || contextMasterTests || [];
 
 
@@ -118,7 +119,7 @@ export default function ResultsCardView({
             {/* Left Vertical Ribbon (e.g. IMMUPA / BIOCH) */}
             <div className="w-7 sm:w-8 bg-[#1a388a] text-white flex flex-col items-center justify-center shrink-0 select-none py-2 px-1">
               <span className="text-[10px] font-black uppercase tracking-widest [writing-mode:vertical-rl] rotate-180">
-                {report.deptName || tube.department || 'LAB'}
+                {getDepartmentDisplayName(report.deptName, tube.department, masterDepartments) || 'LAB'}
               </span>
             </div>
 

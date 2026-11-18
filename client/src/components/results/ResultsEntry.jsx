@@ -52,6 +52,7 @@ import {
   getSpecimenTubeInfo,
   getTestOperationPermissions,
   formatUnitName,
+  getDepartmentDisplayName,
 } from '../../utils/labTestUtils.js';
 import { useMaster } from '../../context/context.master.jsx';
 
@@ -69,7 +70,7 @@ export default function ResultsEntry({
   templates = [],
   onRefresh,
 }) {
-  const { tests: masterTests = [], templates: masterTemplateCatalog = [] } = useMaster();
+  const { tests: masterTests = [], templates: masterTemplateCatalog = [], departments: masterDepartments = [] } = useMaster();
   const [showTemplatesSection, setShowTemplatesSection] = useState(true);
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [deletedTemplateIds, setDeletedTemplateIds] = useState(() => new Set());
@@ -360,8 +361,9 @@ export default function ResultsEntry({
         const term = searchTerm.toLowerCase().trim();
         const testName = String(r.testName || '').toLowerCase();
         const dept = String(r.deptName || '').toLowerCase();
+        const resolvedDept = getDepartmentDisplayName(r.deptName, '', masterDepartments).toLowerCase();
         const samp = String(r.sampleType || '').toLowerCase();
-        if (!testName.includes(term) && !dept.includes(term) && !samp.includes(term)) {
+        if (!testName.includes(term) && !dept.includes(term) && !resolvedDept.includes(term) && !samp.includes(term)) {
           return false;
         }
         return true;

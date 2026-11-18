@@ -1339,3 +1339,90 @@ export function formatUnitName(rawUnit, masterUnits = []) {
 
   return clean;
 }
+
+/**
+ * Canonical high-speed department ID to clean human-readable name map
+ */
+const STATIC_DEPT_MAP = {
+  '1': 'Haematology',
+  'd1': 'Haematology',
+  'hema': 'Haematology',
+  '2': 'Biochemistry',
+  'd2': 'Biochemistry',
+  'bio': 'Biochemistry',
+  '3': 'Clinical Pathology',
+  'd3': 'Clinical Pathology',
+  'cpath': 'Clinical Pathology',
+  '4': 'Serology & Immunology',
+  'd4': 'Serology & Immunology',
+  'sero': 'Serology & Immunology',
+  '5': 'Microbiology',
+  'd5': 'Microbiology',
+  'micro': 'Microbiology',
+  '6': 'Histopathology',
+  'd6': 'Histopathology',
+  'histo': 'Histopathology',
+  '7': 'Cytology',
+  'd7': 'Cytology',
+  'cyto': 'Cytology',
+  '8': 'Coagulation',
+  'd8': 'Coagulation',
+  'coag': 'Coagulation',
+  '9': 'Endocrinology & Hormones',
+  'd9': 'Endocrinology & Hormones',
+  'endo': 'Endocrinology & Hormones',
+  '10': 'Molecular Biology',
+  'd10': 'Molecular Biology',
+  'mol': 'Molecular Biology',
+};
+
+/**
+ * Resolves a raw department identifier (e.g. 'D1', '1', 'D2') to a clean, human-readable Department Name.
+ */
+export function getDepartmentDisplayName(rawDept, tubeDept = '', masterDepartments = []) {
+  if (!rawDept && rawDept !== 0) {
+    return tubeDept || 'Haematology';
+  }
+  const clean = String(rawDept).trim();
+  if (!clean || clean === '-') {
+    return tubeDept || 'Haematology';
+  }
+
+  // 1. Dynamic lookup against active masterDepartments catalog if provided
+  if (Array.isArray(masterDepartments) && masterDepartments.length > 0) {
+    const cleanLower = clean.toLowerCase();
+    const cleanNoD = cleanLower.replace(/^d/i, '').trim();
+    const found = masterDepartments.find((d) => {
+      const dId = String(d['Dept Id'] || d.id || d.deptId || '').trim().toLowerCase();
+      const dNoD = dId.replace(/^d/i, '').trim();
+      const dName = String(d.Name || d.name || '').trim().toLowerCase();
+      return (
+        dId === cleanLower ||
+        (cleanNoD && dNoD && dNoD === cleanNoD) ||
+        dName === cleanLower
+      );
+    });
+    if (found && (found.Name || found.name)) {
+      const foundName = String(found.Name || found.name).trim();
+      if (foundName) return foundName;
+    }
+  }
+
+  // 2. High-speed lookup against static department catalog
+  const lower = clean.toLowerCase();
+  if (STATIC_DEPT_MAP[lower]) {
+    return STATIC_DEPT_MAP[lower];
+  }
+  const noD = lower.replace(/^d/i, '').trim();
+  if (STATIC_DEPT_MAP[noD]) {
+    return STATIC_DEPT_MAP[noD];
+  }
+
+  // 3. If raw is already a descriptive name (e.g. "Haematology", "Biochemistry", not "D1", "D2", "1", "2")
+  if (!/^d\d+$/i.test(clean) && !/^\d+$/.test(clean)) {
+    return clean;
+  }
+
+  // 4. Fallback to tube department or default
+  return tubeDept || 'Haematology';
+}

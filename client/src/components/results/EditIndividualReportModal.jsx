@@ -3,7 +3,7 @@ import Modal from '../common/Modal.jsx';
 import api from '../../services/api.js';
 import { useMaster } from '../../context/context.master.jsx';
 import { Save, X, Loader2, FlaskConical, AlertCircle, CheckCircle } from 'lucide-react';
-import { formatUnitName } from '../../utils/labTestUtils.js';
+import { formatUnitName, getDepartmentDisplayName } from '../../utils/labTestUtils.js';
 
 // Standard specimen types common in clinical diagnostics
 const DEFAULT_SAMPLE_TYPES = [
@@ -37,7 +37,7 @@ export default function EditIndividualReportModal({
   patient,
   onSaveSuccess,
 }) {
-  const { methods: masterMethods = [], units: masterUnits = [], samples: masterSamples = [] } = useMaster();
+  const { methods: masterMethods = [], units: masterUnits = [], samples: masterSamples = [], departments: masterDepartments = [] } = useMaster();
 
   const availableSampleTypes = Array.from(
     new Set([
@@ -206,7 +206,7 @@ export default function EditIndividualReportModal({
         unit: finalUnitId,
         comment: formData.comment.trim(),
         profileName: report.profileName || '',
-        deptName: report.deptName || 'D1',
+        deptName: report.deptId || report.deptName || 'D1',
       };
 
       const res = await api.post('/reports/update', payload);
@@ -247,7 +247,7 @@ export default function EditIndividualReportModal({
                 {report.deptName && (
                   <>
                     <span>•</span>
-                    <span className="font-semibold text-indigo-600">Dept: {report.deptName}</span>
+                    <span className="font-semibold text-indigo-600">Dept: {getDepartmentDisplayName(report.deptName, '', masterDepartments)}</span>
                   </>
                 )}
               </div>
