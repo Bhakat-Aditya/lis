@@ -10,8 +10,8 @@ export const getApiBaseUrl = () => {
   if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
     return 'http://localhost:5000';
   }
-  // Default fallback
-  return 'http://localhost:5000';
+  // Production fallback: live backend server on Render
+  return 'https://lis-middleman-server.onrender.com';
 };
 
 export const API_BASE_URL = getApiBaseUrl();
@@ -63,30 +63,224 @@ export const getBillingPdfUrl = (patientId, { download = false, preview = false 
 };
 
 /**
- * Opens the official AWS report PDF in a new tab directly on the backend server.
+ * Opens the official AWS report PDF in a new tab without routing through SPA.
+ * Uses binary blob streaming with synchronous placeholder tab to avoid mobile popup blockers.
  */
-export const openReportPdf = (patientId, options = {}) => {
+export const openReportPdf = async (patientId, options = {}) => {
   if (options?.targetUrl) {
     window.open(options.targetUrl, '_blank');
     return;
   }
-  const url = getReportPdfUrl(patientId, options);
-  if (url) {
-    window.open(url, '_blank');
+
+  const rawPid = String(patientId || '').trim();
+  const cleanPid = rawPid
+    ? (rawPid.toUpperCase().startsWith('P') ? `P${rawPid.replace(/^P+/i, '')}` : `P${rawPid}`)
+    : '';
+  if (!cleanPid) return;
+
+  const directUrl = getReportPdfUrl(cleanPid, options);
+
+  // Synchronously open placeholder tab to prevent mobile popup blockers
+  let targetWin = null;
+  try {
+    targetWin = window.open('about:blank', '_blank');
+    if (targetWin) {
+      targetWin.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Loading Diagnostic Report PDF...</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                background-color: #0f172a;
+                color: #f8fafc;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                min-height: 100vh;
+                margin: 0;
+              }
+              .box {
+                background: #1e293b;
+                padding: 32px 36px;
+                border-radius: 16px;
+                text-align: center;
+                max-width: 400px;
+                width: 90%;
+                border: 1px solid #334155;
+                box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+              }
+              .spinner {
+                width: 44px;
+                height: 44px;
+                border: 4px solid #334155;
+                border-top: 4px solid #38bdf8;
+                border-radius: 50%;
+                animation: spin 0.8s linear infinite;
+                margin: 0 auto 16px;
+              }
+              @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+              h3 { margin: 0 0 8px; font-size: 16px; font-weight: 700; color: #f8fafc; }
+              p { margin: 0; font-size: 12px; color: #94a3b8; }
+            </style>
+          </head>
+          <body>
+            <div class="box">
+              <div class="spinner"></div>
+              <h3>Opening AWS Report PDF</h3>
+              <p>Fetching official diagnostic document...</p>
+            </div>
+          </body>
+        </html>
+      `);
+    }
+  } catch {}
+
+  try {
+    const res = await api.get('/reports/pdf', {
+      params: {
+        patientId: cleanPid,
+        addHeader: String(Boolean(options?.addHeader ?? true)),
+        download: options?.download ? 'true' : undefined,
+        _t: Date.now(),
+      },
+      responseType: 'blob',
+      timeout: 25000,
+    });
+
+    const contentType = res.headers?.['content-type'] || res.data?.type || '';
+    if (contentType.includes('html') || res.data?.type === 'text/html') {
+      throw new Error('Received HTML document instead of PDF stream.');
+    }
+
+    const blob = new Blob([res.data], { type: 'application/pdf' });
+    const blobUrl = URL.createObjectURL(blob);
+
+    if (targetWin && !targetWin.closed) {
+      targetWin.location.replace(blobUrl);
+    } else {
+      window.open(blobUrl, '_blank');
+    }
+  } catch (err) {
+    console.warn('[openReportPdf] Blob fetch note, navigating directly:', err.message);
+    if (targetWin && !targetWin.closed) {
+      targetWin.location.replace(directUrl);
+    } else {
+      window.open(directUrl, '_blank');
+    }
   }
 };
 
 /**
- * Opens the official AWS billing invoice PDF in a new tab directly on the backend server.
+ * Opens the official AWS billing invoice PDF in a new tab without routing through SPA.
+ * Uses binary blob streaming with synchronous placeholder tab to avoid mobile popup blockers.
  */
-export const openBillingPdf = (patientId, options = {}) => {
+export const openBillingPdf = async (patientId, options = {}) => {
   if (options?.targetUrl) {
     window.open(options.targetUrl, '_blank');
     return;
   }
-  const url = getBillingPdfUrl(patientId, options);
-  if (url) {
-    window.open(url, '_blank');
+
+  const rawPid = String(patientId || '').trim();
+  const cleanPid = rawPid
+    ? (rawPid.toUpperCase().startsWith('P') ? `P${rawPid.replace(/^P+/i, '')}` : `P${rawPid}`)
+    : '';
+  if (!cleanPid) return;
+
+  const directUrl = getBillingPdfUrl(cleanPid, options);
+
+  // Synchronously open placeholder tab to prevent mobile popup blockers
+  let targetWin = null;
+  try {
+    targetWin = window.open('about:blank', '_blank');
+    if (targetWin) {
+      targetWin.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Loading Invoice PDF...</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                background-color: #0f172a;
+                color: #f8fafc;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                min-height: 100vh;
+                margin: 0;
+              }
+              .box {
+                background: #1e293b;
+                padding: 32px 36px;
+                border-radius: 16px;
+                text-align: center;
+                max-width: 400px;
+                width: 90%;
+                border: 1px solid #334155;
+                box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+              }
+              .spinner {
+                width: 44px;
+                height: 44px;
+                border: 4px solid #334155;
+                border-top: 4px solid #f59e0b;
+                border-radius: 50%;
+                animation: spin 0.8s linear infinite;
+                margin: 0 auto 16px;
+              }
+              @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+              h3 { margin: 0 0 8px; font-size: 16px; font-weight: 700; color: #f8fafc; }
+              p { margin: 0; font-size: 12px; color: #94a3b8; }
+            </style>
+          </head>
+          <body>
+            <div class="box">
+              <div class="spinner"></div>
+              <h3>Opening Invoice PDF</h3>
+              <p>Fetching official clinic bill...</p>
+            </div>
+          </body>
+        </html>
+      `);
+    }
+  } catch {}
+
+  try {
+    const res = await api.get('/billing/pdf', {
+      params: {
+        patientId: cleanPid,
+        preview: options?.preview ? 'true' : undefined,
+        download: options?.download ? 'true' : undefined,
+        _t: Date.now(),
+      },
+      responseType: 'blob',
+      timeout: 25000,
+    });
+
+    const contentType = res.headers?.['content-type'] || res.data?.type || '';
+    if (contentType.includes('html') || res.data?.type === 'text/html') {
+      throw new Error('Received HTML document instead of PDF stream.');
+    }
+
+    const blob = new Blob([res.data], { type: 'application/pdf' });
+    const blobUrl = URL.createObjectURL(blob);
+
+    if (targetWin && !targetWin.closed) {
+      targetWin.location.replace(blobUrl);
+    } else {
+      window.open(blobUrl, '_blank');
+    }
+  } catch (err) {
+    console.warn('[openBillingPdf] Blob fetch note, navigating directly:', err.message);
+    if (targetWin && !targetWin.closed) {
+      targetWin.location.replace(directUrl);
+    } else {
+      window.open(directUrl, '_blank');
+    }
   }
 };
 

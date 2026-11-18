@@ -1,6 +1,14 @@
 {
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "https://lis-middleman-server.onrender.com/api/:path*"
+    },
+    {
+      "source": "/betterstack-api/:path*",
+      "destination": "https://incidents.betterstack.com/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
