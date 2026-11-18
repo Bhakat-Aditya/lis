@@ -257,22 +257,22 @@ export default function AddTestsModal({ isOpen, onClose, patient, reports = [], 
                       selected ? 'bg-indigo-50/70' : 'hover:bg-slate-50'
                     }`}
                   >
-                    <div className="flex items-center gap-2.5">
-                      <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-3">
+                      <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
                         selected ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300'
                       }`}>
                         {selected && <Check className="w-3 h-3" />}
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-slate-800">{name}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-semibold text-slate-800 text-xs truncate block" title={name}>{name}</span>
                           {isBooked && (
-                            <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold border border-slate-200">
+                            <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold border border-slate-200 shrink-0">
                               Booked
                             </span>
                           )}
                         </div>
-                        <span className="text-[10px] text-slate-400">({tId}) | {t['Sample Type'] || t.sampleType || 'Serum'}</span>
+                        <span className="text-[10px] text-slate-400 truncate block">({tId}) | {t['Sample Type'] || t.sampleType || 'Serum'}</span>
                       </div>
                     </div>
                     <span className="font-bold text-slate-700">₹{rate}</span>
@@ -300,22 +300,22 @@ export default function AddTestsModal({ isOpen, onClose, patient, reports = [], 
                       selected ? 'bg-indigo-50/70' : 'hover:bg-slate-50'
                     }`}
                   >
-                    <div className="flex items-center gap-2.5">
-                      <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-3">
+                      <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
                         selected ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300'
                       }`}>
                         {selected && <Check className="w-3 h-3" />}
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-slate-800">{name}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-semibold text-slate-800 text-xs truncate block" title={name}>{name}</span>
                           {isBooked && (
-                            <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold border border-slate-200">
+                            <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold border border-slate-200 shrink-0">
                               Booked
                             </span>
                           )}
                         </div>
-                        <span className="text-[10px] text-slate-400">Profile ({pId})</span>
+                        <span className="text-[10px] text-slate-400 truncate block">Profile ({pId})</span>
                       </div>
                     </div>
                     <span className="font-bold text-slate-700">₹{rate}</span>
@@ -343,22 +343,22 @@ export default function AddTestsModal({ isOpen, onClose, patient, reports = [], 
                       selected ? 'bg-indigo-50/70' : 'hover:bg-slate-50'
                     }`}
                   >
-                    <div className="flex items-center gap-2.5">
-                      <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-3">
+                      <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
                         selected ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300'
                       }`}>
                         {selected && <Check className="w-3 h-3" />}
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-slate-800">{name}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-semibold text-slate-800 text-xs truncate block" title={name}>{name}</span>
                           {isBooked && (
-                            <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold border border-slate-200">
+                            <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold border border-slate-200 shrink-0">
                               Booked
                             </span>
                           )}
                         </div>
-                        <span className="text-[10px] text-slate-400">Package ({kId})</span>
+                        <span className="text-[10px] text-slate-400 truncate block">Package ({kId})</span>
                       </div>
                     </div>
                     <span className="font-bold text-slate-700">₹{rate}</span>
@@ -386,22 +386,22 @@ export default function AddTestsModal({ isOpen, onClose, patient, reports = [], 
                       selected ? 'bg-indigo-50/70' : 'hover:bg-slate-50'
                     }`}
                   >
-                    <div className="flex items-center gap-2.5">
-                      <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1 mr-3">
+                      <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
                         selected ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300'
                       }`}>
                         {selected && <Check className="w-3 h-3" />}
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-slate-800">{name}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-semibold text-slate-800 text-xs truncate block" title={name}>{name}</span>
                           {isBooked && (
-                            <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold border border-slate-200">
+                            <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold border border-slate-200 shrink-0">
                               Booked
                             </span>
                           )}
                         </div>
-                        <span className="text-[10px] text-slate-400">Template ({tmplId})</span>
+                        <span className="text-[10px] text-slate-400 truncate block">Template ({tmplId})</span>
                       </div>
                     </div>
                     <span className="font-bold text-slate-700">₹{rate}</span>

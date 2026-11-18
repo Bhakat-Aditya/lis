@@ -130,11 +130,14 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
     return name.includes(q) || deg.includes(q) || id.includes(q);
   });
 
-  // Helper to format doctor name with degree
+  // Helper to format doctor name with degree (e.g., "Dr. Name, (Degree)")
   const formatDoctorWithDegree = (doc) => {
     if (!doc || !doc.Name || doc.Name === 'Self') return 'Self';
+    const cleanName = (doc.Name || '').trim().replace(/,+$/, '').trim();
     const deg = (doc.Deg || '').trim();
-    return deg ? `${doc.Name} (${deg})` : doc.Name;
+    if (!deg) return cleanName;
+    const formattedDeg = deg.startsWith('(') && deg.endsWith(')') ? deg : `(${deg})`;
+    return `${cleanName}, ${formattedDeg}`;
   };
 
   // When user directly modifies Refer Doctor field
@@ -583,7 +586,7 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
                 <input
                   type="text"
                   name="referedDr"
-                  placeholder="Doctor Name (Degree) - Required"
+                  placeholder="Doctor Name, (Degree) - Required"
                   value={formData.referedDr}
                   onChange={handleReferedDrChange}
                   required
@@ -663,9 +666,6 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
                               </span>
                             )}
                           </div>
-                          <span className="text-[10px] text-slate-400 font-mono shrink-0 ml-2">
-                            {doc['Doct Id']}
-                          </span>
                         </div>
                       ))
                     ) : (
@@ -675,17 +675,6 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
                     )}
                   </div>
                 )}
-              </div>
-
-              {/* Selected doctor confirmation badge */}
-              <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
-                <span>
-                  Selected Doctor ID:{' '}
-                  <strong className="text-blue-600 font-mono">
-                    {formData.referDr ? `#${formData.referDr}` : 'None (Blank)'}
-                  </strong>
-                  {matchedDoctor?.Name && formData.referDr ? ` (${matchedDoctor.Name})` : ''}
-                </span>
               </div>
             </div>
 
@@ -768,27 +757,6 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
                   </div>
                 )}
               </div>
-
-              {/* Selected agent confirmation badge */}
-              {(() => {
-                const selectedAgent = references.find(
-                  (r) => String(r.id ?? r['Doct Id'] ?? r['Refer Id']) === String(formData.refagent)
-                );
-                return (
-                  <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
-                    <span>
-                      Selected Master ID:{' '}
-                      <strong className="text-indigo-600 font-mono">
-                        {formData.refagent ? `#${formData.refagent}` : 'None (Blank)'}
-                      </strong>
-                      {selectedAgent?.Name ? ` (${selectedAgent.Name})` : ''}
-                    </span>
-                    {selectedAgent?.Rate && (
-                      <span className="text-slate-500 font-mono">Comm: {selectedAgent.Rate}</span>
-                    )}
-                  </div>
-                );
-              })()}
             </div>
 
             {/* 12. Collection Center (Master Catalog Branches) */}
@@ -803,20 +771,17 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
                 className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-600 shadow-2xs cursor-pointer"
               >
                 {!branches.some((b) => String(b.branchId ?? b['Branch Id'] ?? b.id) === '0') && (
-                  <option value="0">Main Lab (Central) (Branch #0)</option>
+                  <option value="0">Main Lab (Central)</option>
                 )}
                 {branches.map((b) => {
                   const bId = String(b.branchId ?? b['Branch Id'] ?? b.id ?? '');
                   return (
                     <option key={bId} value={bId}>
-                      {b.name || b.Name || `Branch ${bId}`} (Branch #{bId})
+                      {b.name || b.Name || `Branch ${bId}`}
                     </option>
                   );
                 })}
               </select>
-              <span className="text-[10px] text-slate-400 block mt-1">
-                Selected Branch ID sent: <strong className="text-blue-600 font-mono">#{formData.branch}</strong>
-              </span>
             </div>
           </div>
 

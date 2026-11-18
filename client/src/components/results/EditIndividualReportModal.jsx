@@ -8,20 +8,25 @@ import { formatUnitName } from '../../utils/labTestUtils.js';
 // Standard specimen types common in clinical diagnostics
 const DEFAULT_SAMPLE_TYPES = [
   'Serum',
+  'Sodium Fluoride',
+  'Fluoride Plasma',
   'EDTA Whole Blood',
   'Whole Blood EDTA',
-  'Plasma',
   'Whole Blood',
-  'Urine',
-  'Fluoride Plasma',
+  'Citrated Plasma',
   'Citrate Plasma',
+  'Plasma',
+  'Urine',
+  'Stool',
+  'Semen',
   'CSF',
   'Sputum',
-  'Stool',
   'Swab',
   'Peritoneal Fluid',
   'Pleural Fluid',
   'Synovial Fluid',
+  'Histopathology',
+  'Tissue / Biopsy',
   'Other',
 ];
 
@@ -34,9 +39,13 @@ export default function EditIndividualReportModal({
 }) {
   const { methods: masterMethods = [], units: masterUnits = [], samples: masterSamples = [] } = useMaster();
 
-  const availableSampleTypes = (masterSamples && masterSamples.length > 0)
-    ? Array.from(new Set([...masterSamples.map((s) => s.Name || s.name).filter(Boolean), ...DEFAULT_SAMPLE_TYPES]))
-    : DEFAULT_SAMPLE_TYPES;
+  const availableSampleTypes = Array.from(
+    new Set([
+      ...(report?.sampleType ? [report.sampleType] : []),
+      ...(masterSamples || []).map((s) => s.Name || s.name).filter(Boolean),
+      ...DEFAULT_SAMPLE_TYPES,
+    ])
+  ).filter(Boolean);
 
   // Helper function to resolve master Method ID from ID or Name
   const resolveMethodId = useCallback(

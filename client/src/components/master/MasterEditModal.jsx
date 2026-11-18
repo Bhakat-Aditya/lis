@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Modal from '../common/Modal.jsx';
 import { useMaster } from '../../context/context.master.jsx';
 import InterpretationRichEditor from './InterpretationRichEditor.jsx';
@@ -23,15 +23,25 @@ import {
 
 const SAMPLE_TYPE_OPTIONS = [
   'Serum',
+  'Sodium Fluoride',
+  'Fluoride Plasma',
   'EDTA Whole Blood',
-  'Plasma (Fluoride)',
-  'Plasma (Citrate)',
+  'Whole Blood EDTA',
   'Whole Blood',
+  'Citrated Plasma',
+  'Plasma (Citrate)',
   'Urine',
   'Stool',
+  'Semen',
+  'CSF',
+  'Body Fluid',
+  'Synovial Fluid',
+  'Ascitic Fluid',
+  'Pleural Fluid',
   'Sputum',
-  'Swab',
-  'CSF / Body Fluid',
+  'Swab / Pus',
+  'Histopathology',
+  'Tissue / Biopsy',
   'Other',
 ];
 
@@ -303,6 +313,36 @@ export default function MasterEditModal({
   const [testSearch, setTestSearch] = useState('');
   const [profileSearch, setProfileSearch] = useState('');
 
+  // Comprehensive sample types dynamically aggregated from Master Sample List and Master Test List
+  const availableSampleTypes = useMemo(() => {
+    const list = new Set();
+    // 1. Current value from form data or test item
+    if (formData?.TEST_SAMPLE && formData.TEST_SAMPLE !== '-') list.add(formData.TEST_SAMPLE);
+    if (item?.['Sample Type'] && item['Sample Type'] !== '-') list.add(item['Sample Type']);
+    if (item?.sampleType && item.sampleType !== '-') list.add(item.sampleType);
+
+    // 2. Master sample catalog from upstream API (samples)
+    if (Array.isArray(samples)) {
+      samples.forEach((s) => {
+        const name = (s.Name || s.name || '').trim();
+        if (name && name !== '-') list.add(name);
+      });
+    }
+
+    // 3. Master test list sample types (tests)
+    if (Array.isArray(tests)) {
+      tests.forEach((t) => {
+        const st = (t['Sample Type'] || t.sampleType || '').trim();
+        if (st && st !== '-') list.add(st);
+      });
+    }
+
+    // 4. Clinical standard options
+    SAMPLE_TYPE_OPTIONS.forEach((opt) => list.add(opt));
+
+    return Array.from(list).filter(Boolean);
+  }, [formData?.TEST_SAMPLE, item, samples, tests]);
+
   // Initialize form state when item or category changes
   useEffect(() => {
     if (!isOpen) {
@@ -374,12 +414,14 @@ export default function MasterEditModal({
       const rf5 = parseRangeString(item?.RF5, item?.rg5l, item?.rg5h);
       const rf6 = parseRangeString(item?.RF6, item?.rg6l, item?.rg6h);
 
+      const existingSample = item?.['Sample Type'] || item?.sampleType || item?.TEST_SAMPLE || item?.Sample || '';
+
       setFormData({
         TEST_ID: getExistingOrNextId(['Test Id', 'testId', 'id'], 'TEST_LIST', tests),
         TEST_NAME: item?.Name || item?.name || '',
         TEST_SHORT_NAME: item?.['Short Name'] || item?.shortName || '',
         TEST_DEPTID: item?.['Dept Id'] || item?.deptId || departments[0]?.['Dept Id'] || 'D1',
-        TEST_SAMPLE: item?.['Sample Type'] || item?.sampleType || 'Serum',
+        TEST_SAMPLE: existingSample || 'Serum',
         TEST_METHOD_ID: item?.['Method Id'] || item?.methodId || methods[0]?.['Method Id'] || 'M1',
         TEST_UNIT_ID: item?.['Unit Id'] || item?.unitId || units[0]?.['Unit Id'] || 'U1',
         TEST_STATUS: item?.Status || item?.status || 'Active',
@@ -469,6 +511,12 @@ export default function MasterEditModal({
         name: item?.Name || item?.name || '',
         status: item?.Status || item?.status || 'Active',
       });
+    } else if (category === 'methods') {
+      setFormData({
+        id: getExistingOrNextId(['Method Id', 'methodId', 'id'], 'METHOD_LIST', methods),
+        name: item?.Name || item?.name || '',
+        status: item?.Status || item?.status || 'Active',
+      });
     } else if (category === 'branches') {
       setFormData({
         id: getExistingOrNextId(['Branch Id', 'branchId', 'id'], 'BRANCH_LIST', branches),
@@ -528,7 +576,7 @@ export default function MasterEditModal({
         status: item?.Status || item?.status || 'Active',
       });
     }
-  }, [isOpen, category, item, departments, units, methods]);
+  }, [isOpen, category, item, departments, units, methods, samples, tests]);
 
   const handleChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -578,6 +626,8 @@ export default function MasterEditModal({
         return isEditing ? `Edit Referring Agent (${formData.name || formData.id || ''})` : 'Add New Referring Agent';
       case 'departments':
         return isEditing ? `Edit Lab Department (${formData.id || ''})` : 'Add New Department';
+      case 'methods':
+        return isEditing ? `Edit Methodology (${formData.id || ''})` : 'Add New Methodology';
       case 'units':
         return isEditing ? `Edit Measurement Unit (${formData.id || ''})` : 'Add New Unit';
       case 'branches':
@@ -610,6 +660,7 @@ export default function MasterEditModal({
         doctors: 'doctor',
         references: 'reference',
         departments: 'department',
+        methods: 'method',
         units: 'unit',
         branches: 'branch',
         users: 'user',
@@ -738,14 +789,11 @@ export default function MasterEditModal({
                   Sample Type
                 </label>
                 <select
-                  value={formData.TEST_SAMPLE || 'Serum'}
+                  value={formData.TEST_SAMPLE || item?.['Sample Type'] || item?.sampleType || 'Serum'}
                   onChange={(e) => handleChange('TEST_SAMPLE', e.target.value)}
-                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg"
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-semibold text-slate-800"
                 >
-                  {(samples && samples.length > 0
-                    ? Array.from(new Set([...samples.map((s) => s.Name || s.name).filter(Boolean), ...SAMPLE_TYPE_OPTIONS]))
-                    : SAMPLE_TYPE_OPTIONS
-                  ).map((s) => (
+                  {availableSampleTypes.map((s) => (
                     <option key={s} value={s}>
                       {s}
                     </option>
@@ -1747,6 +1795,58 @@ export default function MasterEditModal({
                   value={formData.name || ''}
                   onChange={(e) => handleChange('name', e.target.value)}
                   placeholder="e.g. mg%, g/dL, cells/cu.mm, %"
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-bold"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                Status
+              </label>
+              <select
+                value={formData.status || 'Active'}
+                onChange={(e) => handleChange('status', e.target.value)}
+                className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-bold"
+              >
+                <option value="Active">Active</option>
+                <option value="Deactive">Deactive</option>
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* 6B. METHODS FORM */}
+        {category === 'methods' && (
+          <div className="space-y-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Method ID {isEditing ? '(Locked)' : '*'}
+                </label>
+                <input
+                  type="text"
+                  required
+                  disabled={isEditing}
+                  value={formData.id || ''}
+                  onChange={(e) => handleChange('id', e.target.value)}
+                  placeholder="e.g. 15"
+                  className={`w-full px-3 py-1.5 text-xs border rounded-lg font-mono ${
+                    isEditing ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-white border-slate-300'
+                  }`}
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Methodology / Technique Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.name || ''}
+                  onChange={(e) => handleChange('name', e.target.value)}
+                  placeholder="e.g. Hexokinase, GOD-POD Enzymatic, CLIA..."
                   className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-bold"
                 />
               </div>

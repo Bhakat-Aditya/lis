@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMaster } from '../../context/context.master.jsx';
 import MasterEditModal from './MasterEditModal.jsx';
@@ -24,8 +24,58 @@ import {
   TestTube,
   BookOpen,
   ExternalLink,
+  SlidersHorizontal,
+  ShieldCheck,
 } from 'lucide-react';
 import { openUpstreamTemplateEditor } from '../../utils/templateSequence.js';
+
+const MASTER_GROUPS = [
+  {
+    id: 'test_catalog',
+    label: 'Test Catalog',
+    description: 'Tests, Profiles, Packages, Templates',
+    icon: FlaskConical,
+    tabs: [
+      { id: 'tests', label: 'Tests', icon: FlaskConical, singular: 'Test' },
+      { id: 'profiles', label: 'Profiles', icon: Layers, singular: 'Profile' },
+      { id: 'packages', label: 'Packages', icon: FileSpreadsheet, singular: 'Package' },
+      { id: 'templates', label: 'Templates', icon: FileText, singular: 'Template' },
+    ],
+  },
+  {
+    id: 'report_setup',
+    label: 'Report Setup',
+    description: 'Departments, Method, Sample Types, Units, Interpretations',
+    icon: SlidersHorizontal,
+    tabs: [
+      { id: 'departments', label: 'Departments', icon: Building, singular: 'Department' },
+      { id: 'methods', label: 'Method', icon: Ruler, singular: 'Method' },
+      { id: 'samples', label: 'Sample Types', icon: TestTube, singular: 'Sample Type' },
+      { id: 'units', label: 'Units', icon: Ruler, singular: 'Unit' },
+      { id: 'interpretations', label: 'Interpretations', icon: BookOpen, singular: 'Interpretation' },
+    ],
+  },
+  {
+    id: 'partnership',
+    label: 'Partnership',
+    description: 'Doctors, Referring Agents',
+    icon: Stethoscope,
+    tabs: [
+      { id: 'doctors', label: 'Doctors', icon: Stethoscope, singular: 'Doctor' },
+      { id: 'references', label: 'Referring Agents', icon: Users, singular: 'Referring Agent' },
+    ],
+  },
+  {
+    id: 'administration',
+    label: 'Administration',
+    description: 'Branches, Users & Roles',
+    icon: ShieldCheck,
+    tabs: [
+      { id: 'branches', label: 'Branches', icon: MapPin, singular: 'Branch' },
+      { id: 'users', label: 'Users & Roles', icon: Users, singular: 'User & Role' },
+    ],
+  },
+];
 
 export default function MasterDataManager() {
   const {
@@ -60,6 +110,7 @@ export default function MasterDataManager() {
   // Keep search params in sync when switching tabs
   const handleTabSelect = (tabId) => {
     setActiveTab(tabId);
+    setSearchTerm('');
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
@@ -68,6 +119,39 @@ export default function MasterDataManager() {
       },
       { replace: true }
     );
+  };
+
+  // Sync activeTab state if URL query param changes
+  useEffect(() => {
+    const tabFromUrl = searchParams.get('tab');
+    if (tabFromUrl && tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [searchParams]);
+
+  const activeGroup = useMemo(() => {
+    return (
+      MASTER_GROUPS.find((group) => group.tabs.some((t) => t.id === activeTab)) ||
+      MASTER_GROUPS[0]
+    );
+  }, [activeTab]);
+
+  const activeTabMeta = useMemo(() => {
+    for (const g of MASTER_GROUPS) {
+      const found = g.tabs.find((t) => t.id === activeTab);
+      if (found) return found;
+    }
+    return { id: activeTab, label: activeTab, singular: 'Item' };
+  }, [activeTab]);
+
+  const handleGroupSelect = (groupId) => {
+    const targetGroup = MASTER_GROUPS.find((g) => g.id === groupId);
+    if (!targetGroup) return;
+    const isCurrentTabInGroup = targetGroup.tabs.some((t) => t.id === activeTab);
+    if (!isCurrentTabInGroup) {
+      const defaultTab = targetGroup.tabs[0].id;
+      handleTabSelect(defaultTab);
+    }
   };
 
   // Edit / Add modal state
@@ -304,20 +388,38 @@ export default function MasterDataManager() {
     setRefreshing(false);
   };
 
-  const tabs = [
-    { id: 'tests', label: 'Tests', count: tests.length, icon: FlaskConical },
-    { id: 'departments', label: 'Departments', count: departments.length, icon: Building },
-    { id: 'templates', label: 'Templates', count: templates.length, icon: FileText },
-    { id: 'interpretations', label: 'Interpretations', count: interpretations.length, icon: BookOpen },
-    { id: 'samples', label: 'Sample Types', count: samples.length, icon: TestTube },
-    { id: 'profiles', label: 'Profiles', count: profiles.length, icon: Layers },
-    { id: 'packages', label: 'Packages', count: packages.length, icon: FileSpreadsheet },
-    { id: 'doctors', label: 'Doctors', count: doctors.length, icon: Stethoscope },
-    { id: 'references', label: 'Referring Agents', count: references.length, icon: Users },
-    { id: 'units', label: 'Units', count: units.length, icon: Ruler },
-    { id: 'branches', label: 'Branches', count: branches.length, icon: MapPin },
-    { id: 'users', label: 'Users & Roles', count: users.length, icon: Users },
-  ];
+  const tabCountMap = useMemo(
+    () => ({
+      tests: (tests || []).length,
+      profiles: (profiles || []).length,
+      packages: (packages || []).length,
+      templates: (templates || []).length,
+      departments: (departments || []).length,
+      methods: (methods || []).length,
+      samples: (samples || []).length,
+      units: (units || []).length,
+      interpretations: (interpretations || []).length,
+      doctors: (doctors || []).length,
+      references: (references || []).length,
+      branches: (branches || []).length,
+      users: (users || []).length,
+    }),
+    [
+      tests,
+      profiles,
+      packages,
+      templates,
+      departments,
+      methods,
+      samples,
+      units,
+      interpretations,
+      doctors,
+      references,
+      branches,
+      users,
+    ]
+  );
 
   return (
     <div className="space-y-4">
@@ -358,45 +460,103 @@ export default function MasterDataManager() {
         </div>
       )}
 
-      {/* Tabs & Search Container */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
-        {/* Top Header: Responsive Wrap without any horizontal scrollbars */}
-        <div className="border-b border-slate-200 bg-slate-50 p-2.5 flex flex-wrap items-center justify-between gap-2.5">
-          {/* Tab buttons: Clean flex-wrap so all 8 titles are always visible */}
-          <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">
-            {tabs.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => {
-                  handleTabSelect(t.id);
-                  setSearchTerm('');
-                }}
-                className={`flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                  activeTab === t.id
-                    ? 'bg-white text-indigo-600 shadow-xs border border-slate-300 ring-1 ring-indigo-500/20 font-bold'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-transparent'
-                }`}
-              >
-                <t.icon className={`w-3.5 h-3.5 ${activeTab === t.id ? 'text-indigo-600' : 'text-slate-400'}`} />
-                <span>{t.label}</span>
-                <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
-                    activeTab === t.id ? 'bg-indigo-50 text-indigo-700 font-bold' : 'bg-slate-200/70 text-slate-600'
+      {/* 1. Executive 4-Group Structure Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+        {MASTER_GROUPS.map((group) => {
+          const isGroupActive = activeGroup.id === group.id;
+          const groupTotal = group.tabs.reduce((sum, t) => sum + (tabCountMap[t.id] || 0), 0);
+          const GroupIcon = group.icon;
+
+          return (
+            <button
+              key={group.id}
+              type="button"
+              onClick={() => handleGroupSelect(group.id)}
+              className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                isGroupActive
+                  ? 'bg-indigo-50/70 border-indigo-500 shadow-xs ring-2 ring-indigo-500/20'
+                  : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/80 shadow-xs'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                    isGroupActive ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600'
                   }`}
                 >
-                  {t.count}
+                  <GroupIcon className="w-3.5 h-3.5" />
+                </div>
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full font-mono shrink-0 ${
+                    isGroupActive ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-700'
+                  }`}
+                >
+                  {groupTotal}
                 </span>
-              </button>
-            ))}
+              </div>
+              <div className="min-w-0">
+                <h3
+                  className={`text-xs font-bold truncate ${
+                    isGroupActive ? 'text-indigo-950 font-black' : 'text-slate-800'
+                  }`}
+                >
+                  {group.label}
+                </h3>
+                <p className="text-[10px] text-slate-500 truncate mt-0.5" title={group.description}>
+                  {group.tabs.map((t) => t.label).join(' • ')}
+                </p>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 2. Active Group Tabs & Content Container */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+        {/* Level 2 Sub-Tabs & Action Bar */}
+        <div className="border-b border-slate-200 bg-slate-50 p-2.5 flex flex-wrap md:flex-nowrap items-center justify-between gap-2.5">
+          {/* Active Group's Sub-tabs */}
+          <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap min-w-0">
+            {activeGroup.tabs.map((t) => {
+              const TabIcon = t.icon;
+              const isTabActive = activeTab === t.id;
+              const count = tabCountMap[t.id] ?? 0;
+
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => {
+                    handleTabSelect(t.id);
+                    setSearchTerm('');
+                  }}
+                  className={`flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                    isTabActive
+                      ? 'bg-white text-indigo-600 shadow-xs border border-slate-300 ring-1 ring-indigo-500/20 font-bold'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-transparent'
+                  }`}
+                >
+                  <TabIcon className={`w-3.5 h-3.5 ${isTabActive ? 'text-indigo-600' : 'text-slate-400'}`} />
+                  <span>{t.label}</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
+                      isTabActive ? 'bg-indigo-50 text-indigo-700 font-bold' : 'bg-slate-200/70 text-slate-600'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
           {/* Search box & Add New Button */}
-          <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+          <div className="flex items-center gap-2 w-full md:w-auto shrink-0 justify-end">
             <div className="relative w-full sm:w-60 shrink-0">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder={`Search ${activeTab}...`}
+                placeholder={`Search ${activeTabMeta.label.toLowerCase()}...`}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-8 pr-7 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
@@ -418,33 +578,42 @@ export default function MasterDataManager() {
                 type="button"
                 onClick={handleAddItem}
                 className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs py-1.5 px-3 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap shrink-0"
-                title={`Add new ${activeTab.replace(/s$/, '')} to Master Catalog`}
+                title={`Add new ${activeTabMeta.singular} to Master Catalog`}
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>Add {tabs.find((t) => t.id === activeTab)?.label.replace(/s$/, '') || 'Item'}</span>
+                <span>Add {activeTabMeta.singular}</span>
               </button>
             )}
           </div>
         </div>
 
-        {/* Tab Content Tables */}
-        <div className="overflow-x-auto">
+        {/* Tab Content Tables: Strictly Fixed Horizontal Layout (Zero Horizontal Scrollbar) */}
+        <div className="w-full overflow-hidden">
           {/* 1. TESTS TAB */}
-
-
           {activeTab === 'tests' && (
-            <table className="w-full text-left text-xs">
+            <table className="w-full table-fixed text-left text-xs border-collapse">
+              <colgroup>
+                <col className="w-[7%]" />
+                <col className="w-[28%]" />
+                <col className="w-[10%]" />
+                <col className="w-[14%]" />
+                <col className="w-[9%]" />
+                <col className="w-[11%]" />
+                <col className="w-[8%]" />
+                <col className="w-[6%]" />
+                <col className="w-[7%]" />
+              </colgroup>
               <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
                 <tr>
-                  <th className="py-2.5 px-4 w-16">ID</th>
-                  <th className="py-2.5 px-4">Test Name</th>
-                  <th className="py-2.5 px-4">Short Name</th>
-                  <th className="py-2.5 px-4">Department</th>
-                  <th className="py-2.5 px-4">Unit</th>
-                  <th className="py-2.5 px-4">Sample Type</th>
-                  <th className="py-2.5 px-4">Rate (₹)</th>
-                  <th className="py-2.5 px-4">Status</th>
-                  <th className="py-2.5 px-4 text-right">Action</th>
+                  <th className="py-2.5 px-3 truncate">ID</th>
+                  <th className="py-2.5 px-3 truncate">Test Name</th>
+                  <th className="py-2.5 px-3 truncate">Short Name</th>
+                  <th className="py-2.5 px-3 truncate">Department</th>
+                  <th className="py-2.5 px-3 truncate">Unit</th>
+                  <th className="py-2.5 px-3 truncate">Sample Type</th>
+                  <th className="py-2.5 px-3 truncate">Rate (₹)</th>
+                  <th className="py-2.5 px-3 truncate">Status</th>
+                  <th className="py-2.5 px-3 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -457,44 +626,63 @@ export default function MasterDataManager() {
                     const shortName = String(t['Short Name'] || '').toLowerCase();
                     const dept = String(t['Dept Id'] || '').toLowerCase();
                     const deptName = String(deptMap.get(String(t['Dept Id'])) || '').toLowerCase();
-                    return name.includes(q) || id.includes(q) || shortName.includes(q) || dept.includes(q) || deptName.includes(q);
+                    const sampleType = String(t['Sample Type'] || t.sampleType || '').toLowerCase();
+                    return name.includes(q) || id.includes(q) || shortName.includes(q) || dept.includes(q) || deptName.includes(q) || sampleType.includes(q);
                   })
                   .map((t) => {
                     const resolvedDept = deptMap.get(String(t['Dept Id'])) || t['Dept Id'] || '-';
                     const resolvedUnit = unitMap.get(String(t['Unit Id'])) || formatUnitName(t['Unit Id']) || '-';
                     return (
                       <tr key={t['Test Id']} className="hover:bg-slate-50">
-                        <td className="py-2 px-4 font-mono font-bold text-indigo-600">{t['Test Id']}</td>
-                        <td className="py-2 px-4 font-semibold text-slate-800">{t.Name}</td>
-                        <td className="py-2 px-4 text-slate-500 font-medium">{t['Short Name'] || '-'}</td>
-                        <td className="py-2 px-4 text-slate-600">
-                          <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[11px] text-slate-700 font-medium">
+                        <td className="py-2 px-3 font-mono font-bold text-indigo-600 truncate" title={t['Test Id']}>
+                          {t['Test Id']}
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className="font-semibold text-slate-800 text-[11px] leading-tight truncate block" title={t.Name}>
+                            {t.Name}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className="text-slate-500 font-medium text-[11px] truncate block" title={t['Short Name'] || '-'}>
+                            {t['Short Name'] || '-'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[11px] text-slate-700 font-medium truncate block" title={resolvedDept}>
                             {resolvedDept}
                           </span>
                         </td>
-                        <td className="py-2 px-4 font-medium text-slate-600">{resolvedUnit}</td>
-                        <td className="py-2 px-4 text-slate-600">{t['Sample Type'] || 'Serum'}</td>
-                        <td className="py-2 px-4 whitespace-nowrap">
-                          <div className="font-bold text-slate-900 text-xs font-mono">
+                        <td className="py-2 px-3">
+                          <span className="font-medium text-slate-600 text-[11px] truncate block" title={resolvedUnit}>
+                            {resolvedUnit}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className="text-slate-600 text-[11px] truncate block" title={t['Sample Type'] || 'Serum'}>
+                            {t['Sample Type'] || 'Serum'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3">
+                          <div className="font-bold text-slate-900 text-xs font-mono truncate">
                             ₹{t.Rate || t.rate || '100'}
                           </div>
                           {(t.Rate1 || t.rate1 || t.Rate2 || t.rate2) ? (
-                            <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center gap-1.5">
-                              {Boolean(t.Rate1 || t.rate1) && <span>R1: ₹{t.Rate1 || t.rate1}</span>}
-                              {Boolean(t.Rate2 || t.rate2) && <span>R2: ₹{t.Rate2 || t.rate2}</span>}
+                            <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center gap-1 truncate">
+                              {Boolean(t.Rate1 || t.rate1) && <span>R1:₹{t.Rate1 || t.rate1}</span>}
+                              {Boolean(t.Rate2 || t.rate2) && <span>R2:₹{t.Rate2 || t.rate2}</span>}
                             </div>
                           ) : null}
                         </td>
-                        <td className="py-2 px-4">
-                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                        <td className="py-2 px-3">
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded truncate inline-block">
                             {t.Status || 'Active'}
                           </span>
                         </td>
-                        <td className="py-2 px-4 text-right">
+                        <td className="py-2 px-3 text-right">
                           <button
                             type="button"
                             onClick={() => handleEditItem(t)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer shrink-0"
                           >
                             <Edit3 className="w-3 h-3" />
                             <span>Edit</span>
@@ -507,18 +695,26 @@ export default function MasterDataManager() {
             </table>
           )}
 
-
           {activeTab === 'templates' && (
-            <table className="w-full text-left text-xs border-collapse">
+            <table className="w-full table-fixed text-left text-xs border-collapse">
+              <colgroup>
+                <col className="w-[10%]" />
+                <col className="w-[30%]" />
+                <col className="w-[10%]" />
+                <col className="w-[16%]" />
+                <col className="w-[9%]" />
+                <col className="w-[7%]" />
+                <col className="w-[18%]" />
+              </colgroup>
               <thead className="bg-slate-100/90 text-slate-700 font-bold border-b border-slate-200 text-[11px] uppercase tracking-wider">
                 <tr>
-                  <th className="py-3 px-4 w-28">Report ID</th>
-                  <th className="py-3 px-4 min-w-[200px]">Template Report Name</th>
-                  <th className="py-3 px-4 min-w-[140px]">Rate (₹)</th>
-                  <th className="py-3 px-4 min-w-[180px]">Signatures Assigned</th>
-                  <th className="py-3 px-4 w-28 whitespace-nowrap">Sync Date</th>
-                  <th className="py-3 px-4 w-24 text-center">Status</th>
-                  <th className="py-3 px-4 text-right min-w-[210px]">Actions</th>
+                  <th className="py-3 px-3 truncate">Report ID</th>
+                  <th className="py-3 px-3 truncate">Template Report Name</th>
+                  <th className="py-3 px-3 truncate">Rate (₹)</th>
+                  <th className="py-3 px-3 truncate">Signatures Assigned</th>
+                  <th className="py-3 px-3 truncate">Sync Date</th>
+                  <th className="py-3 px-3 text-center truncate">Status</th>
+                  <th className="py-3 px-3 text-right truncate">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
@@ -540,48 +736,48 @@ export default function MasterDataManager() {
                     .map((tmpl, idx) => (
                       <tr key={tmpl.templatesId || tmpl.reportId || idx} className="hover:bg-slate-50/80 transition-colors">
                         {/* 1. Report ID */}
-                        <td className="py-3 px-4 font-mono font-bold text-purple-700 whitespace-nowrap">
-                          <span className="bg-purple-50 border border-purple-200/80 px-2 py-0.5 rounded text-[11px]">
+                        <td className="py-3 px-3 font-mono font-bold text-purple-700 truncate" title={tmpl.reportId || (tmpl.templatesId ? `P14R${String(tmpl.templatesId).replace(/^T/i, '')}` : `P14R${idx + 1}`)}>
+                          <span className="bg-purple-50 border border-purple-200/80 px-1.5 py-0.5 rounded text-[11px] truncate block">
                             {tmpl.reportId || (tmpl.templatesId ? `P14R${String(tmpl.templatesId).replace(/^T/i, '')}` : `P14R${idx + 1}`)}
                           </span>
                         </td>
 
                         {/* 2. Template Name */}
-                        <td className="py-3 px-4">
-                          <div className="font-bold text-slate-900 text-xs">
+                        <td className="py-3 px-3">
+                          <div className="font-bold text-slate-900 text-xs truncate" title={tmpl.TEMPLATE_NAME || tmpl.name}>
                             {tmpl.TEMPLATE_NAME || tmpl.name}
                           </div>
-                          <div className="text-[10px] text-slate-400 font-medium mt-0.5">
+                          <div className="text-[10px] text-slate-400 font-medium mt-0.5 truncate">
                             Full-page clinical template report
                           </div>
                         </td>
 
                         {/* 3. Rates: Standard Rate + Special Rate 1 & 2 */}
-                        <td className="py-3 px-4 whitespace-nowrap">
-                          <div className="font-bold text-slate-900 text-xs font-mono">
+                        <td className="py-3 px-3">
+                          <div className="font-bold text-slate-900 text-xs font-mono truncate">
                             ₹{tmpl.price ?? tmpl.Rate ?? tmpl.rate ?? '0'}
                           </div>
                           {(tmpl.price1 || tmpl.Rate1 || tmpl.price2 || tmpl.Rate2) ? (
-                            <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center gap-1.5">
-                              {Boolean(tmpl.price1 || tmpl.Rate1) && <span>R1: ₹{tmpl.price1 || tmpl.Rate1}</span>}
-                              {Boolean(tmpl.price2 || tmpl.Rate2) && <span>R2: ₹{tmpl.price2 || tmpl.Rate2}</span>}
+                            <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center gap-1 truncate">
+                              {Boolean(tmpl.price1 || tmpl.Rate1) && <span>R1:₹{tmpl.price1 || tmpl.Rate1}</span>}
+                              {Boolean(tmpl.price2 || tmpl.Rate2) && <span>R2:₹{tmpl.price2 || tmpl.Rate2}</span>}
                             </div>
                           ) : null}
                         </td>
 
                         {/* 4. Signatures Assigned */}
-                        <td className="py-3 px-4">
+                        <td className="py-3 px-3 truncate">
                           {renderSignatureBadges(tmpl.sign)}
                         </td>
 
                         {/* 5. Sync Date */}
-                        <td className="py-3 px-4 font-mono text-slate-500 text-[11px] whitespace-nowrap">
+                        <td className="py-3 px-3 font-mono text-slate-500 text-[11px] truncate">
                           {tmpl.templatesDate || '2026-11-01'}
                         </td>
 
                         {/* 6. Status */}
-                        <td className="py-3 px-4 text-center whitespace-nowrap">
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                        <td className="py-3 px-3 text-center">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border truncate inline-block ${
                             String(tmpl.status || '').toUpperCase() === 'SAVED'
                               ? 'bg-blue-50 text-blue-700 border-blue-200'
                               : 'bg-emerald-50 text-emerald-700 border-emerald-200'
@@ -591,27 +787,27 @@ export default function MasterDataManager() {
                         </td>
 
                         {/* 7. Actions */}
-                        <td className="py-3 px-4 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                        <td className="py-3 px-3 text-right">
+                          <div className="flex items-center justify-end gap-1 shrink-0">
                             {/* Primary: Modern Rich Template Editor */}
                             <button
                               type="button"
                               onClick={() => handleEditPrefillData(tmpl)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 active:scale-95 rounded-lg shadow-2xs transition-all cursor-pointer"
+                              className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-white bg-purple-600 hover:bg-purple-700 active:scale-95 rounded-lg shadow-2xs transition-all cursor-pointer whitespace-nowrap"
                               title="Open rich clinical template editor to edit report findings and format"
                             >
-                              <FileText className="w-3.5 h-3.5" />
-                              <span>Edit Template</span>
+                              <FileText className="w-3 h-3" />
+                              <span>Edit</span>
                             </button>
 
                             {/* Secondary: Basic Information & Signatures */}
                             <button
                               type="button"
                               onClick={() => handleEditBasic(tmpl)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 rounded-lg border border-slate-200 transition-colors cursor-pointer shadow-2xs"
-                              title="Edit basic info (name, department, price, signatures) - API_UPDATE_TEMPLATE"
+                              className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 rounded-lg border border-slate-200 transition-colors cursor-pointer shadow-2xs whitespace-nowrap"
+                              title="Edit basic info (name, department, price, signatures)"
                             >
-                              <Edit3 className="w-3.5 h-3.5 text-slate-500" />
+                              <Edit3 className="w-3 h-3 text-slate-500" />
                               <span>Info</span>
                             </button>
 
@@ -619,10 +815,10 @@ export default function MasterDataManager() {
                             <button
                               type="button"
                               onClick={() => handleOpenAwsEditor(tmpl)}
-                              className="p-1.5 text-slate-400 hover:text-amber-700 bg-white hover:bg-amber-50 rounded-lg border border-slate-200 hover:border-amber-300 transition-colors cursor-pointer shadow-2xs"
-                              title="Open official AWS template editor (editTemplateV2.jsp) in new window"
+                              className="p-1 text-slate-400 hover:text-amber-700 bg-white hover:bg-amber-50 rounded-lg border border-slate-200 hover:border-amber-300 transition-colors cursor-pointer shadow-2xs shrink-0"
+                              title="Open official AWS template editor (editTemplateV2.jsp)"
                             >
-                              <ExternalLink className="w-3.5 h-3.5" />
+                              <ExternalLink className="w-3 h-3" />
                             </button>
                           </div>
                         </td>
@@ -670,15 +866,23 @@ export default function MasterDataManager() {
                 </div>
               </div>
 
-              <table className="w-full text-left text-xs">
+              <table className="w-full table-fixed text-left text-xs border-collapse">
+                <colgroup>
+                  <col className="w-[10%]" />
+                  <col className="w-[24%]" />
+                  <col className="w-[8%]" />
+                  <col className="w-[38%]" />
+                  <col className="w-[8%]" />
+                  <col className="w-[12%]" />
+                </colgroup>
                 <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
                   <tr>
-                    <th className="py-2.5 px-4 w-20">Target ID</th>
-                    <th className="py-2.5 px-4 min-w-[200px]">Target Name</th>
-                    <th className="py-2.5 px-4 w-24">Type</th>
-                    <th className="py-2.5 px-4 min-w-[280px]">Clinical Interpretation Preview</th>
-                    <th className="py-2.5 px-4 w-24">Status</th>
-                    <th className="py-2.5 px-4 text-right w-36">Action</th>
+                    <th className="py-2.5 px-3 truncate">Target ID</th>
+                    <th className="py-2.5 px-3 truncate">Target Name</th>
+                    <th className="py-2.5 px-3 truncate">Type</th>
+                    <th className="py-2.5 px-3 truncate">Clinical Interpretation Preview</th>
+                    <th className="py-2.5 px-3 truncate">Status</th>
+                    <th className="py-2.5 px-3 text-right truncate">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -711,19 +915,21 @@ export default function MasterDataManager() {
                         return (
                           <tr key={item.ID || item.id} className="hover:bg-slate-50/80 transition-colors">
                             {/* ID */}
-                            <td className="py-2.5 px-4 font-mono font-bold text-indigo-600">
+                            <td className="py-2.5 px-3 font-mono font-bold text-indigo-600 truncate" title={item.ID || item.id}>
                               {item.ID || item.id}
                             </td>
 
                             {/* Name */}
-                            <td className="py-2.5 px-4 font-semibold text-slate-800">
-                              {item.Name || item.name}
+                            <td className="py-2.5 px-3">
+                              <span className="font-semibold text-slate-800 text-[11px] leading-tight truncate block" title={item.Name || item.name}>
+                                {item.Name || item.name}
+                              </span>
                             </td>
 
                             {/* Type badge */}
-                            <td className="py-2.5 px-4">
+                            <td className="py-2.5 px-3">
                               <span
-                                className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md border truncate inline-block ${
                                   isProfile
                                     ? 'bg-purple-50 text-purple-700 border-purple-200'
                                     : 'bg-blue-50 text-blue-700 border-blue-200'
@@ -734,25 +940,25 @@ export default function MasterDataManager() {
                             </td>
 
                             {/* Interpretation Styled Preview */}
-                            <td className="py-2.5 px-4 max-w-md">
+                            <td className="py-2.5 px-3">
                               {rawHtml ? (
                                 <div className="space-y-1">
                                   <div
-                                    className="text-xs line-clamp-2 text-slate-700 bg-slate-50/80 p-2 rounded-lg border border-slate-200/70"
+                                    className="text-[11px] line-clamp-2 text-slate-700 bg-slate-50/80 p-1.5 rounded border border-slate-200/70"
                                     dangerouslySetInnerHTML={{ __html: rawHtml }}
                                   />
                                 </div>
                               ) : (
-                                <span className="text-slate-400 italic text-[11px]">
+                                <span className="text-slate-400 italic text-[11px] truncate block">
                                   No clinical interpretation recorded yet.
                                 </span>
                               )}
                             </td>
 
                             {/* Status */}
-                            <td className="py-2.5 px-4">
+                            <td className="py-2.5 px-3">
                               <span
-                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full truncate inline-block ${
                                   String(item.Status || item.status || '').toLowerCase() === 'active'
                                     ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                     : 'bg-slate-100 text-slate-600 border border-slate-200'
@@ -763,15 +969,15 @@ export default function MasterDataManager() {
                             </td>
 
                             {/* Action Button */}
-                            <td className="py-2.5 px-4 text-right">
+                            <td className="py-2.5 px-3 text-right">
                               <button
                                 type="button"
                                 onClick={() => handleEditItem(item)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:scale-95 rounded-lg shadow-xs transition-all cursor-pointer"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:scale-95 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap shrink-0"
                                 title="Open styled writing panel (API_UPDATE_INTERPRETATION)"
                               >
-                                <Edit3 className="w-3.5 h-3.5" />
-                                <span>Write / Edit</span>
+                                <Edit3 className="w-3 h-3" />
+                                <span>Write</span>
                               </button>
                             </td>
                           </tr>
@@ -785,14 +991,21 @@ export default function MasterDataManager() {
 
 
           {activeTab === 'samples' && (
-            <table className="w-full text-left text-xs">
+            <table className="w-full table-fixed text-left text-xs border-collapse">
+              <colgroup>
+                <col className="w-[12%]" />
+                <col className="w-[38%]" />
+                <col className="w-[30%]" />
+                <col className="w-[10%]" />
+                <col className="w-[10%]" />
+              </colgroup>
               <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
                 <tr>
-                  <th className="py-2.5 px-4 w-24">Sample ID</th>
-                  <th className="py-2.5 px-4">Sample / Specimen Name</th>
-                  <th className="py-2.5 px-4">Target Application</th>
-                  <th className="py-2.5 px-4">Status</th>
-                  <th className="py-2.5 px-4 text-right">Action</th>
+                  <th className="py-2.5 px-3 truncate">Sample ID</th>
+                  <th className="py-2.5 px-3 truncate">Sample / Specimen Name</th>
+                  <th className="py-2.5 px-3 truncate">Target Application</th>
+                  <th className="py-2.5 px-3 truncate">Status</th>
+                  <th className="py-2.5 px-3 text-right truncate">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -813,25 +1026,29 @@ export default function MasterDataManager() {
                     })
                     .map((s, idx) => (
                       <tr key={s['Sample Id'] || s.id || idx} className="hover:bg-slate-50">
-                        <td className="py-2 px-4 font-mono font-bold text-amber-700">
+                        <td className="py-2 px-3 font-mono font-bold text-amber-700 truncate" title={s['Sample Id'] || s.id || idx + 1}>
                           #{s['Sample Id'] || s.id || idx + 1}
                         </td>
-                        <td className="py-2 px-4">
-                          <span className="font-bold text-slate-900">{s.Name || s.name}</span>
+                        <td className="py-2 px-3">
+                          <span className="font-bold text-slate-900 text-xs truncate block" title={s.Name || s.name}>
+                            {s.Name || s.name}
+                          </span>
                         </td>
-                        <td className="py-2 px-4 text-slate-500 text-[11px]">
-                          Master Test & Patient Specimen Accessioning
+                        <td className="py-2 px-3">
+                          <span className="text-slate-500 text-[11px] truncate block">
+                            Master Test & Specimen Accessioning
+                          </span>
                         </td>
-                        <td className="py-2 px-4">
-                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                        <td className="py-2 px-3">
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded truncate inline-block">
                             {s.Status || s.status || 'Active'}
                           </span>
                         </td>
-                        <td className="py-2 px-4 text-right">
+                        <td className="py-2 px-3 text-right">
                           <button
                             type="button"
                             onClick={() => handleEditItem(s)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer shrink-0"
                           >
                             <Edit3 className="w-3 h-3" />
                             <span>Edit</span>
@@ -844,19 +1061,26 @@ export default function MasterDataManager() {
             </table>
           )}
 
-          {/* 1b. TEMPLATES TAB (Total 15 types of master templates) */}
-
           {activeTab === 'profiles' && (
-            <table className="w-full text-left text-xs">
+            <table className="w-full table-fixed text-left text-xs border-collapse">
+              <colgroup>
+                <col className="w-[9%]" />
+                <col className="w-[21%]" />
+                <col className="w-[14%]" />
+                <col className="w-[36%]" />
+                <col className="w-[8%]" />
+                <col className="w-[5%]" />
+                <col className="w-[7%]" />
+              </colgroup>
               <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
                 <tr>
-                  <th className="py-2.5 px-4 w-20">Profile ID</th>
-                  <th className="py-2.5 px-4">Profile Name</th>
-                  <th className="py-2.5 px-4">Department</th>
-                  <th className="py-2.5 px-4 min-w-[260px]">Included Tests</th>
-                  <th className="py-2.5 px-4 min-w-[130px]">Rate (₹)</th>
-                  <th className="py-2.5 px-4">Status</th>
-                  <th className="py-2.5 px-4 text-right">Action</th>
+                  <th className="py-2.5 px-3 truncate">Profile ID</th>
+                  <th className="py-2.5 px-3 truncate">Profile Name</th>
+                  <th className="py-2.5 px-3 truncate">Department</th>
+                  <th className="py-2.5 px-3 truncate">Included Tests</th>
+                  <th className="py-2.5 px-3 truncate">Rate (₹)</th>
+                  <th className="py-2.5 px-3 truncate">Status</th>
+                  <th className="py-2.5 px-3 text-right truncate">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -879,22 +1103,29 @@ export default function MasterDataManager() {
 
                     return (
                       <tr key={p['Profile Id']} className="hover:bg-slate-50">
-                        <td className="py-2 px-4 font-mono font-bold text-indigo-600">{p['Profile Id']}</td>
-                        <td className="py-2 px-4 font-semibold text-slate-800">{p.Name}</td>
-                        <td className="py-2 px-4 text-slate-600">
-                          <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[11px] text-slate-700 font-medium">
+                        <td className="py-2 px-3 font-mono font-bold text-indigo-600 truncate" title={p['Profile Id']}>
+                          {p['Profile Id']}
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className="font-semibold text-slate-800 text-[11px] leading-tight truncate block" title={p.Name}>
+                            {p.Name}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[10px] text-slate-700 font-medium truncate block" title={resolvedDept}>
                             {resolvedDept}
                           </span>
                         </td>
-                        <td className="py-2 px-4">
+                        <td className="py-2 px-3">
                           {subTestNames.length === 0 ? (
                             <span className="text-slate-400">-</span>
                           ) : (
-                            <div className="flex flex-wrap gap-1 max-w-xl">
+                            <div className="flex flex-wrap gap-1 max-h-14 overflow-y-auto">
                               {subTestNames.map((tName, idx) => (
                                 <span
                                   key={idx}
-                                  className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200/80"
+                                  className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200/80 truncate max-w-[140px]"
+                                  title={tName}
                                 >
                                   {tName}
                                 </span>
@@ -902,35 +1133,32 @@ export default function MasterDataManager() {
                             </div>
                           )}
                         </td>
-                        {/* Rates: Standard Rate + Special Rate 1, 2 & 3 (aligned with template display) */}
-                        <td className="py-2 px-4 whitespace-nowrap">
-                          <div className="font-bold text-slate-900 text-xs font-mono">
+                        {/* Rates */}
+                        <td className="py-2 px-3">
+                          <div className="font-bold text-slate-900 text-xs font-mono truncate">
                             ₹{p.Rate || p.rate || p.price || '0'}
                           </div>
                           {(p.Rate1 || p.rate1 || p.price1 || p.Rate2 || p.rate2 || p.price2 || p.Rate3 || p.rate3) ? (
-                            <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center gap-1.5">
+                            <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center gap-1 truncate">
                               {Boolean(p.Rate1 || p.rate1 || p.price1) && (
-                                <span>R1: ₹{p.Rate1 || p.rate1 || p.price1}</span>
+                                <span>R1:₹{p.Rate1 || p.rate1 || p.price1}</span>
                               )}
                               {Boolean(p.Rate2 || p.rate2 || p.price2) && (
-                                <span>R2: ₹{p.Rate2 || p.rate2 || p.price2}</span>
-                              )}
-                              {Boolean(p.Rate3 || p.rate3) && (
-                                <span>R3: ₹{p.Rate3 || p.rate3}</span>
+                                <span>R2:₹{p.Rate2 || p.rate2 || p.price2}</span>
                               )}
                             </div>
                           ) : null}
                         </td>
-                        <td className="py-2 px-4">
-                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                        <td className="py-2 px-3">
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded truncate inline-block">
                             {p.Status || 'Active'}
                           </span>
                         </td>
-                        <td className="py-2 px-4 text-right">
+                        <td className="py-2 px-3 text-right">
                           <button
                             type="button"
                             onClick={() => handleEditItem(p)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer shrink-0"
                           >
                             <Edit3 className="w-3 h-3" />
                             <span>Edit</span>
@@ -943,20 +1171,28 @@ export default function MasterDataManager() {
             </table>
           )}
 
-          {/* 1b. TEMPLATES TAB (Total 15 types of master templates) */}
-
           {activeTab === 'packages' && (
-            <table className="w-full text-left text-xs">
+            <table className="w-full table-fixed text-left text-xs border-collapse">
+              <colgroup>
+                <col className="w-[8%]" />
+                <col className="w-[18%]" />
+                <col className="w-[12%]" />
+                <col className="w-[24%]" />
+                <col className="w-[20%]" />
+                <col className="w-[6%]" />
+                <col className="w-[5%]" />
+                <col className="w-[7%]" />
+              </colgroup>
               <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
                 <tr>
-                  <th className="py-2.5 px-4 w-20">Pkg ID</th>
-                  <th className="py-2.5 px-4">Package Name</th>
-                  <th className="py-2.5 px-4">Department</th>
-                  <th className="py-2.5 px-4 min-w-[200px]">Included Tests</th>
-                  <th className="py-2.5 px-4 min-w-[180px]">Included Profiles</th>
-                  <th className="py-2.5 px-4">Rate (₹)</th>
-                  <th className="py-2.5 px-4">Status</th>
-                  <th className="py-2.5 px-4 text-right">Action</th>
+                  <th className="py-2.5 px-3 truncate">Pkg ID</th>
+                  <th className="py-2.5 px-3 truncate">Package Name</th>
+                  <th className="py-2.5 px-3 truncate">Department</th>
+                  <th className="py-2.5 px-3 truncate">Included Tests</th>
+                  <th className="py-2.5 px-3 truncate">Included Profiles</th>
+                  <th className="py-2.5 px-3 truncate">Rate (₹)</th>
+                  <th className="py-2.5 px-3 truncate">Status</th>
+                  <th className="py-2.5 px-3 text-right truncate">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -991,24 +1227,29 @@ export default function MasterDataManager() {
 
                       return (
                         <tr key={pkg['Package Id'] || pkg.id} className="hover:bg-slate-50">
-                          <td className="py-2 px-4 font-mono font-bold text-indigo-600">
+                          <td className="py-2 px-3 font-mono font-bold text-indigo-600 truncate" title={pkg['Package Id'] || pkg.id}>
                             {pkg['Package Id'] || pkg.id}
                           </td>
-                          <td className="py-2 px-4 font-semibold text-slate-900">{pkg.Name || pkg.name}</td>
-                          <td className="py-2 px-4 text-slate-600">
-                            <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[11px] text-slate-700 font-medium">
+                          <td className="py-2 px-3">
+                            <span className="font-semibold text-slate-900 text-[11px] leading-tight truncate block" title={pkg.Name || pkg.name}>
+                              {pkg.Name || pkg.name}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3">
+                            <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[10px] text-slate-700 font-medium truncate block" title={resolvedDept}>
                               {resolvedDept}
                             </span>
                           </td>
-                          <td className="py-2 px-4">
+                          <td className="py-2 px-3">
                             {subTestNames.length === 0 ? (
                               <span className="text-slate-400">-</span>
                             ) : (
-                              <div className="flex flex-wrap gap-1 max-w-sm">
+                              <div className="flex flex-wrap gap-1 max-h-14 overflow-y-auto">
                                 {subTestNames.map((tName, idx) => (
                                   <span
                                     key={idx}
-                                    className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200/80"
+                                    className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200/80 truncate max-w-[120px]"
+                                    title={tName}
                                   >
                                     {tName}
                                   </span>
@@ -1016,15 +1257,16 @@ export default function MasterDataManager() {
                               </div>
                             )}
                           </td>
-                          <td className="py-2 px-4">
+                          <td className="py-2 px-3">
                             {subProfNames.length === 0 ? (
                               <span className="text-slate-400">-</span>
                             ) : (
-                              <div className="flex flex-wrap gap-1 max-w-sm">
+                              <div className="flex flex-wrap gap-1 max-h-14 overflow-y-auto">
                                 {subProfNames.map((pName, idx) => (
                                   <span
                                     key={idx}
-                                    className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200/70"
+                                    className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200/70 truncate max-w-[120px]"
+                                    title={pName}
                                   >
                                     {pName}
                                   </span>
@@ -1032,27 +1274,27 @@ export default function MasterDataManager() {
                               </div>
                             )}
                           </td>
-                          <td className="py-2 px-4 whitespace-nowrap">
-                            <div className="font-bold text-slate-900 text-xs font-mono">
+                          <td className="py-2 px-3">
+                            <div className="font-bold text-slate-900 text-xs font-mono truncate">
                               ₹{pkg.Rate || pkg.rate || '0'}
                             </div>
                             {(pkg.Rate1 || pkg.rate1 || pkg.Rate2 || pkg.rate2) ? (
-                              <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center gap-1.5">
-                                {Boolean(pkg.Rate1 || pkg.rate1) && <span>R1: ₹{pkg.Rate1 || pkg.rate1}</span>}
-                                {Boolean(pkg.Rate2 || pkg.rate2) && <span>R2: ₹{pkg.Rate2 || pkg.rate2}</span>}
+                              <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center gap-1 truncate">
+                                {Boolean(pkg.Rate1 || pkg.rate1) && <span>R1:₹{pkg.Rate1 || pkg.rate1}</span>}
+                                {Boolean(pkg.Rate2 || pkg.rate2) && <span>R2:₹{pkg.Rate2 || pkg.rate2}</span>}
                               </div>
                             ) : null}
                           </td>
-                          <td className="py-2 px-4">
-                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                          <td className="py-2 px-3">
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded truncate inline-block">
                               {pkg.Status || 'Active'}
                             </span>
                           </td>
-                          <td className="py-2 px-4 text-right">
+                          <td className="py-2 px-3 text-right">
                             <button
                               type="button"
                               onClick={() => handleEditItem(pkg)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer shrink-0"
                             >
                               <Edit3 className="w-3 h-3" />
                               <span>Edit</span>
@@ -1065,19 +1307,25 @@ export default function MasterDataManager() {
               </tbody>
             </table>
           )}
-
-          {/* 1b. TEMPLATES TAB (Total 15 types of master templates) */}
-
+          {/* DOCTORS TAB */}
           {activeTab === 'doctors' && (
-            <table className="w-full text-left text-xs">
+            <table className="w-full table-fixed text-left text-xs border-collapse">
+              <colgroup>
+                <col className="w-[9%]" />
+                <col className="w-[27%]" />
+                <col className="w-[27%]" />
+                <col className="w-[18%]" />
+                <col className="w-[9%]" />
+                <col className="w-[10%]" />
+              </colgroup>
               <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
                 <tr>
-                  <th className="py-2.5 px-4 w-20">Doc ID</th>
-                  <th className="py-2.5 px-4">Doctor Name</th>
-                  <th className="py-2.5 px-4">Degrees / Specialization</th>
-                  <th className="py-2.5 px-4">Contact</th>
-                  <th className="py-2.5 px-4">Status</th>
-                  <th className="py-2.5 px-4 text-right">Action</th>
+                  <th className="py-2.5 px-3 truncate">Doc ID</th>
+                  <th className="py-2.5 px-3 truncate">Doctor Name</th>
+                  <th className="py-2.5 px-3 truncate">Degrees / Specialization</th>
+                  <th className="py-2.5 px-3 truncate">Contact</th>
+                  <th className="py-2.5 px-3 truncate">Status</th>
+                  <th className="py-2.5 px-3 text-right truncate">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1093,20 +1341,34 @@ export default function MasterDataManager() {
                   })
                   .map((d) => (
                     <tr key={d['Doct Id']} className="hover:bg-slate-50">
-                      <td className="py-2 px-4 font-mono font-bold text-indigo-600">{d['Doct Id']}</td>
-                      <td className="py-2 px-4 font-semibold text-slate-800">{d.Name}</td>
-                      <td className="py-2 px-4 text-slate-600">{d.Deg || '-'}</td>
-                      <td className="py-2 px-4 text-slate-600">{d.Contact || '-'}</td>
-                      <td className="py-2 px-4">
-                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                      <td className="py-2 px-3 font-mono font-bold text-indigo-600 truncate" title={d['Doct Id']}>
+                        {d['Doct Id']}
+                      </td>
+                      <td className="py-2 px-3">
+                        <span className="font-semibold text-slate-800 text-[11px] leading-tight truncate block" title={d.Name}>
+                          {d.Name}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3">
+                        <span className="text-slate-600 text-[11px] truncate block" title={d.Deg || '-'}>
+                          {d.Deg || '-'}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3">
+                        <span className="text-slate-600 text-[11px] truncate block" title={d.Contact || '-'}>
+                          {d.Contact || '-'}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3">
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded truncate inline-block">
                           {d.Status || 'Active'}
                         </span>
                       </td>
-                      <td className="py-2 px-4 text-right">
+                      <td className="py-2 px-3 text-right">
                         <button
                           type="button"
                           onClick={() => handleEditItem(d)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer shrink-0"
                         >
                           <Edit3 className="w-3 h-3" />
                           <span>Edit</span>
@@ -1118,20 +1380,29 @@ export default function MasterDataManager() {
             </table>
           )}
 
-
           {/* 7. REFERRING AGENTS TAB (REFERANCE_LIST) */}
           {activeTab === 'references' && (
-            <table className="w-full text-left text-xs">
+            <table className="w-full table-fixed text-left text-xs border-collapse">
+              <colgroup>
+                <col className="w-[8%]" />
+                <col className="w-[21%]" />
+                <col className="w-[21%]" />
+                <col className="w-[15%]" />
+                <col className="w-[13%]" />
+                <col className="w-[9%]" />
+                <col className="w-[6%]" />
+                <col className="w-[7%]" />
+              </colgroup>
               <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
                 <tr>
-                  <th className="py-2.5 px-4 w-20">Refer ID</th>
-                  <th className="py-2.5 px-4">Referring Agent / Source</th>
-                  <th className="py-2.5 px-4">Address / Location</th>
-                  <th className="py-2.5 px-4">Contact</th>
-                  <th className="py-2.5 px-4">Commission Rate</th>
-                  <th className="py-2.5 px-4">Type</th>
-                  <th className="py-2.5 px-4">Status</th>
-                  <th className="py-2.5 px-4 text-right">Action</th>
+                  <th className="py-2.5 px-3 truncate">Refer ID</th>
+                  <th className="py-2.5 px-3 truncate">Referring Agent / Source</th>
+                  <th className="py-2.5 px-3 truncate">Address / Location</th>
+                  <th className="py-2.5 px-3 truncate">Contact</th>
+                  <th className="py-2.5 px-3 truncate">Commission Rate</th>
+                  <th className="py-2.5 px-3 truncate">Type</th>
+                  <th className="py-2.5 px-3 truncate">Status</th>
+                  <th className="py-2.5 px-3 text-right truncate">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1162,32 +1433,44 @@ export default function MasterDataManager() {
                       const status = r.Status || r.status || 'Active';
                       return (
                         <tr key={referId} className="hover:bg-slate-50">
-                          <td className="py-2 px-4 font-mono font-bold text-indigo-600">#{referId}</td>
-                          <td className="py-2 px-4 font-semibold text-slate-900">{name}</td>
-                          <td className="py-2 px-4 text-slate-600">{address}</td>
-                          <td className="py-2 px-4 text-slate-600 font-mono text-[11px]">{contact}</td>
-                          <td className="py-2 px-4">
-                            <span className="font-mono font-bold text-slate-800">
+                          <td className="py-2 px-3 font-mono font-bold text-indigo-600 truncate" title={`#${referId}`}>
+                            #{referId}
+                          </td>
+                          <td className="py-2 px-3">
+                            <span className="font-semibold text-slate-900 text-[11px] leading-tight truncate block" title={name}>
+                              {name}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3">
+                            <span className="text-slate-600 text-[11px] truncate block" title={address}>
+                              {address}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 font-mono text-slate-600 text-[11px] truncate" title={contact}>
+                            {contact}
+                          </td>
+                          <td className="py-2 px-3">
+                            <span className="font-mono font-bold text-slate-800 text-xs truncate block">
                               {rate}{type === 'P' ? '%' : ' Fixed'}
                             </span>
                           </td>
-                          <td className="py-2 px-4">
-                            <span className={'text-[10px] font-bold px-2 py-0.5 rounded-full ' + (
+                          <td className="py-2 px-3">
+                            <span className={'text-[10px] font-bold px-1.5 py-0.5 rounded-full truncate inline-block ' + (
                               type === 'P' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
                             )}>
                               {type === 'P' ? 'Percentage' : 'Fixed'}
                             </span>
                           </td>
-                          <td className="py-2 px-4">
-                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                          <td className="py-2 px-3">
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded truncate inline-block">
                               {status}
                             </span>
                           </td>
-                          <td className="py-2 px-4 text-right">
+                          <td className="py-2 px-3 text-right">
                             <button
                               type="button"
                               onClick={() => handleEditItem(r)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer shrink-0"
                             >
                               <Edit3 className="w-3 h-3" />
                               <span>Edit</span>
@@ -1201,16 +1484,25 @@ export default function MasterDataManager() {
             </table>
           )}
 
+          {/* DEPARTMENTS TAB */}
           {activeTab === 'departments' && (
-            <table className="w-full text-left text-xs">
+            <table className="w-full table-fixed text-left text-xs border-collapse">
+              <colgroup>
+                <col className="w-[10%]" />
+                <col className="w-[30%]" />
+                <col className="w-[15%]" />
+                <col className="w-[25%]" />
+                <col className="w-[10%]" />
+                <col className="w-[10%]" />
+              </colgroup>
               <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
                 <tr>
-                  <th className="py-2.5 px-4 w-20">Dept ID</th>
-                  <th className="py-2.5 px-4">Department Name</th>
-                  <th className="py-2.5 px-4">Short Name</th>
-                  <th className="py-2.5 px-4">Signatures</th>
-                  <th className="py-2.5 px-4">Status</th>
-                  <th className="py-2.5 px-4 text-right">Action</th>
+                  <th className="py-2.5 px-3 truncate">Dept ID</th>
+                  <th className="py-2.5 px-3 truncate">Department Name</th>
+                  <th className="py-2.5 px-3 truncate">Short Name</th>
+                  <th className="py-2.5 px-3 truncate">Signatures</th>
+                  <th className="py-2.5 px-3 truncate">Status</th>
+                  <th className="py-2.5 px-3 text-right truncate">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1225,20 +1517,30 @@ export default function MasterDataManager() {
                   })
                   .map((dept) => (
                     <tr key={dept['Dept Id']} className="hover:bg-slate-50">
-                      <td className="py-2 px-4 font-mono font-bold text-indigo-600">{dept['Dept Id']}</td>
-                      <td className="py-2 px-4 font-semibold text-slate-800">{dept.Name}</td>
-                      <td className="py-2 px-4 text-slate-500 font-medium">{dept['Short Name'] || '-'}</td>
-                      <td className="py-2 px-4">{renderSignatureBadges(dept.sign)}</td>
-                      <td className="py-2 px-4">
-                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                      <td className="py-2 px-3 font-mono font-bold text-indigo-600 truncate" title={dept['Dept Id']}>
+                        {dept['Dept Id']}
+                      </td>
+                      <td className="py-2 px-3">
+                        <span className="font-semibold text-slate-800 text-[11px] leading-tight truncate block" title={dept.Name}>
+                          {dept.Name}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3">
+                        <span className="text-slate-500 font-medium text-[11px] truncate block" title={dept['Short Name'] || '-'}>
+                          {dept['Short Name'] || '-'}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3 truncate">{renderSignatureBadges(dept.sign)}</td>
+                      <td className="py-2 px-3">
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded truncate inline-block">
                           {dept.Status || 'Active'}
                         </span>
                       </td>
-                      <td className="py-2 px-4 text-right">
+                      <td className="py-2 px-3 text-right">
                         <button
                           type="button"
                           onClick={() => handleEditItem(dept)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer shrink-0"
                         >
                           <Edit3 className="w-3 h-3" />
                           <span>Edit</span>
@@ -1250,16 +1552,21 @@ export default function MasterDataManager() {
             </table>
           )}
 
-          {/* 1b. TEMPLATES TAB (Total 15 types of master templates) */}
-
+          {/* UNITS TAB */}
           {activeTab === 'units' && (
-            <table className="w-full text-left text-xs">
+            <table className="w-full table-fixed text-left text-xs border-collapse">
+              <colgroup>
+                <col className="w-[15%]" />
+                <col className="w-[55%]" />
+                <col className="w-[15%]" />
+                <col className="w-[15%]" />
+              </colgroup>
               <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
                 <tr>
-                  <th className="py-2.5 px-4 w-24">Unit ID</th>
-                  <th className="py-2.5 px-4">Unit Name / Symbol</th>
-                  <th className="py-2.5 px-4">Status</th>
-                  <th className="py-2.5 px-4 text-right">Action</th>
+                  <th className="py-2.5 px-3 truncate">Unit ID</th>
+                  <th className="py-2.5 px-3 truncate">Unit Name / Symbol</th>
+                  <th className="py-2.5 px-3 truncate">Status</th>
+                  <th className="py-2.5 px-3 text-right truncate">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1280,18 +1587,24 @@ export default function MasterDataManager() {
                     })
                     .map((u) => (
                       <tr key={u['Unit Id'] || u.id} className="hover:bg-slate-50">
-                        <td className="py-2 px-4 font-mono font-bold text-indigo-600">{u['Unit Id'] || u.id}</td>
-                        <td className="py-2 px-4 font-bold text-slate-900">{u.Name || u.name}</td>
-                        <td className="py-2 px-4">
-                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                        <td className="py-2 px-3 font-mono font-bold text-indigo-600 truncate" title={u['Unit Id'] || u.id}>
+                          {u['Unit Id'] || u.id}
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className="font-bold text-slate-900 text-xs truncate block" title={u.Name || u.name}>
+                            {u.Name || u.name}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded truncate inline-block">
                             {u.Status || 'Active'}
                           </span>
                         </td>
-                        <td className="py-2 px-4 text-right">
+                        <td className="py-2 px-3 text-right">
                           <button
                             type="button"
                             onClick={() => handleEditItem(u)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer shrink-0"
                           >
                             <Edit3 className="w-3 h-3" />
                             <span>Edit</span>
@@ -1304,18 +1617,90 @@ export default function MasterDataManager() {
             </table>
           )}
 
-          {/* 1b. TEMPLATES TAB (Total 15 types of master templates) */}
-
-          {activeTab === 'branches' && (
-            <table className="w-full text-left text-xs">
+          {/* METHODS TAB */}
+          {activeTab === 'methods' && (
+            <table className="w-full table-fixed text-left text-xs border-collapse">
+              <colgroup>
+                <col className="w-[15%]" />
+                <col className="w-[55%]" />
+                <col className="w-[15%]" />
+                <col className="w-[15%]" />
+              </colgroup>
               <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
                 <tr>
-                  <th className="py-2.5 px-4 w-24">Branch ID</th>
-                  <th className="py-2.5 px-4">Branch Name</th>
-                  <th className="py-2.5 px-4">Location / Address</th>
-                  <th className="py-2.5 px-4">Contact Phone</th>
-                  <th className="py-2.5 px-4">Status</th>
-                  <th className="py-2.5 px-4 text-right">Action</th>
+                  <th className="py-2.5 px-3 truncate">Method ID</th>
+                  <th className="py-2.5 px-3 truncate">Methodology / Technique</th>
+                  <th className="py-2.5 px-3 truncate">Status</th>
+                  <th className="py-2.5 px-3 text-right truncate">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {(methods || []).length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="py-6 text-center text-slate-400">
+                      No methodologies found in catalog.
+                    </td>
+                  </tr>
+                ) : (
+                  (methods || [])
+                    .filter((m) => {
+                      if (!searchTerm) return true;
+                      const q = searchTerm.toLowerCase().trim();
+                      const name = String(m.Name || m.name || '').toLowerCase();
+                      const id = String(m['Method Id'] || m.id || '').toLowerCase();
+                      return name.includes(q) || id.includes(q);
+                    })
+                    .map((m) => (
+                      <tr key={m['Method Id'] || m.id} className="hover:bg-slate-50">
+                        <td className="py-2 px-3 font-mono font-bold text-indigo-600 truncate" title={m['Method Id'] || m.id}>
+                          {m['Method Id'] || m.id}
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className="font-bold text-slate-900 text-xs truncate block" title={m.Name || m.name}>
+                            {m.Name || m.name}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded truncate inline-block">
+                            {m.Status || m.status || 'Active'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleEditItem(m)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer shrink-0"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Edit</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                )}
+              </tbody>
+            </table>
+          )}
+
+          {/* BRANCHES TAB */}
+          {activeTab === 'branches' && (
+            <table className="w-full table-fixed text-left text-xs border-collapse">
+              <colgroup>
+                <col className="w-[10%]" />
+                <col className="w-[28%]" />
+                <col className="w-[30%]" />
+                <col className="w-[16%]" />
+                <col className="w-[8%]" />
+                <col className="w-[8%]" />
+              </colgroup>
+              <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                <tr>
+                  <th className="py-2.5 px-3 truncate">Branch ID</th>
+                  <th className="py-2.5 px-3 truncate">Branch Name</th>
+                  <th className="py-2.5 px-3 truncate">Location / Address</th>
+                  <th className="py-2.5 px-3 truncate">Contact Phone</th>
+                  <th className="py-2.5 px-3 truncate">Status</th>
+                  <th className="py-2.5 px-3 text-right truncate">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1338,22 +1723,32 @@ export default function MasterDataManager() {
                     })
                     .map((b) => (
                       <tr key={b.branchId || b.id} className="hover:bg-slate-50">
-                        <td className="py-2 px-4 font-mono font-bold text-indigo-600">
+                        <td className="py-2 px-3 font-mono font-bold text-indigo-600 truncate" title={`#${b.branchId || b.id}`}>
                           #{b.branchId || b.id}
                         </td>
-                        <td className="py-2 px-4 font-bold text-slate-900">{b.name || b.Name}</td>
-                        <td className="py-2 px-4 text-slate-600 font-medium">{b.location || '-'}</td>
-                        <td className="py-2 px-4 font-mono text-slate-700">{b.contact || '-'}</td>
-                        <td className="py-2 px-4">
-                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                        <td className="py-2 px-3">
+                          <span className="font-bold text-slate-900 text-xs truncate block" title={b.name || b.Name}>
+                            {b.name || b.Name}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className="text-slate-600 font-medium text-[11px] truncate block" title={b.location || '-'}>
+                            {b.location || '-'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3 font-mono text-slate-700 text-[11px] truncate" title={b.contact || '-'}>
+                          {b.contact || '-'}
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded truncate inline-block">
                             {b.status || 'Active'}
                           </span>
                         </td>
-                        <td className="py-2 px-4 text-right">
+                        <td className="py-2 px-3 text-right">
                           <button
                             type="button"
                             onClick={() => handleEditItem(b)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer shrink-0"
                           >
                             <Edit3 className="w-3 h-3" />
                             <span>Edit</span>
@@ -1366,20 +1761,29 @@ export default function MasterDataManager() {
             </table>
           )}
 
-          {/* 1b. TEMPLATES TAB (Total 15 types of master templates) */}
-
+          {/* USERS TAB */}
           {activeTab === 'users' && (
-            <table className="w-full text-left text-xs">
+            <table className="w-full table-fixed text-left text-xs border-collapse">
+              <colgroup>
+                <col className="w-[8%]" />
+                <col className="w-[14%]" />
+                <col className="w-[20%]" />
+                <col className="w-[16%]" />
+                <col className="w-[14%]" />
+                <col className="w-[12%]" />
+                <col className="w-[8%]" />
+                <col className="w-[8%]" />
+              </colgroup>
               <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
                 <tr>
-                  <th className="py-2.5 px-4 w-16">User ID</th>
-                  <th className="py-2.5 px-4">Login ID</th>
-                  <th className="py-2.5 px-4">Staff Name</th>
-                  <th className="py-2.5 px-4">Access Type / Role</th>
-                  <th className="py-2.5 px-4">Mobile</th>
-                  <th className="py-2.5 px-4">2FA Status</th>
-                  <th className="py-2.5 px-4">Status</th>
-                  <th className="py-2.5 px-4 text-right">Action</th>
+                  <th className="py-2.5 px-3 truncate">User ID</th>
+                  <th className="py-2.5 px-3 truncate">Login ID</th>
+                  <th className="py-2.5 px-3 truncate">Staff Name</th>
+                  <th className="py-2.5 px-3 truncate">Access Type / Role</th>
+                  <th className="py-2.5 px-3 truncate">Mobile</th>
+                  <th className="py-2.5 px-3 truncate">2FA Status</th>
+                  <th className="py-2.5 px-3 truncate">Status</th>
+                  <th className="py-2.5 px-3 text-right truncate">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1402,34 +1806,38 @@ export default function MasterDataManager() {
 
                     return (
                       <tr key={u.userId} className="hover:bg-slate-50">
-                        <td className="py-2 px-4 font-mono">{u.userId}</td>
-                        <td className="py-2 px-4 font-bold text-indigo-700">{u.loginId}</td>
-                        <td className="py-2 px-4 font-semibold text-slate-800">{u.name}</td>
-                        <td className="py-2 px-4">
-                          <span className="text-[11px] font-semibold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded">
+                        <td className="py-2 px-3 font-mono text-[11px] truncate" title={u.userId}>{u.userId}</td>
+                        <td className="py-2 px-3 font-bold text-indigo-700 text-xs truncate" title={u.loginId}>{u.loginId}</td>
+                        <td className="py-2 px-3">
+                          <span className="font-semibold text-slate-800 text-[11px] leading-tight truncate block" title={u.name}>
+                            {u.name}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className="text-[11px] font-semibold bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded truncate inline-block">
                             {access || 'Staff'}
                           </span>
                         </td>
-                        <td className="py-2 px-4 text-slate-600">{u.mobile}</td>
-                        <td className="py-2 px-4">
+                        <td className="py-2 px-3 text-slate-600 text-[11px] truncate" title={u.mobile}>{u.mobile}</td>
+                        <td className="py-2 px-3">
                           <span
-                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded truncate inline-block ${
                               u.status2FA === 'Enabled' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
                             }`}
                           >
                             {u.status2FA || 'DISABLED'}
                           </span>
                         </td>
-                        <td className="py-2 px-4">
-                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                        <td className="py-2 px-3">
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded truncate inline-block">
                             {u.status || 'Active'}
                           </span>
                         </td>
-                        <td className="py-2 px-4 text-right">
+                        <td className="py-2 px-3 text-right">
                           <button
                             type="button"
                             onClick={() => handleEditItem(u)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 rounded-md border border-indigo-200 transition-colors cursor-pointer shrink-0"
                           >
                             <Edit3 className="w-3 h-3" />
                             <span>Edit</span>

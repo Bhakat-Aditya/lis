@@ -104,7 +104,7 @@ export default function ResultsTableView({
     const isPanic = num > maxRef * 1.5 || num < minRef * 0.6;
 
     return (
-      <div className="w-18 h-2 bg-slate-200 rounded-full relative overflow-hidden shrink-0 mt-0.5 border border-slate-300/80">
+      <div className="w-14 h-2 bg-slate-200 rounded-full relative overflow-hidden shrink-0 border border-slate-300/80">
         <div className="absolute inset-y-0 left-[22%] right-[22%] bg-emerald-400/90 rounded-full" />
         <div
           className={`absolute top-0 bottom-0 w-2 rounded-full shadow-xs ${
@@ -128,17 +128,27 @@ export default function ResultsTableView({
       className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden w-full"
     >
       <div className="overflow-x-auto max-h-[calc(100vh-250px)]">
-        <table className="w-full text-left border-collapse text-xs">
+        <table className="w-full table-fixed text-left border-collapse text-xs">
+          <colgroup>
+            <col style={{ width: '38px' }} />
+            <col style={{ width: '28%' }} />
+            <col style={{ width: '80px' }} />
+            <col style={{ width: '22%' }} />
+            <col style={{ width: '65px' }} />
+            <col style={{ width: '90px' }} />
+            <col style={{ width: '25%' }} />
+            <col style={{ width: '72px' }} />
+          </colgroup>
           <thead className="sticky top-0 bg-slate-100/95 backdrop-blur-xs z-20 border-b border-slate-200 select-none shadow-2xs">
-            <tr className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wider">
-              <th className="py-2 px-2.5 w-10 text-center">#</th>
-              <th className="py-2 px-3 min-w-[210px]">Diagnostic Test Parameter</th>
-              <th className="py-2 px-2 w-24 text-center">Phase</th>
-              <th className="py-2 px-3 min-w-[170px]">Observed Reading</th>
-              <th className="py-2 px-2 w-16">Unit</th>
-              <th className="py-2 px-2.5 w-28">Ref Range</th>
-              <th className="py-2 px-3 min-w-[180px]">Clinical Evaluation & Range Gauge</th>
-              <th className="py-2 px-2.5 w-28 text-right">Action</th>
+            <tr className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider">
+              <th className="py-2 px-1 text-center">#</th>
+              <th className="py-2 px-2">Diagnostic Test Parameter</th>
+              <th className="py-2 px-1 text-center">Phase</th>
+              <th className="py-2 px-2">Observed Reading</th>
+              <th className="py-2 px-1">Unit</th>
+              <th className="py-2 px-1">Ref Range</th>
+              <th className="py-2 px-2">Clinical Evaluation & Gauge</th>
+              <th className="py-2 px-2 text-right">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -192,41 +202,42 @@ export default function ResultsTableView({
                   className={`transition-all duration-150 ${rowHighlightClass}`}
                 >
                   {/* # Index & Status Indicator Dot */}
-                  <td className="py-1.5 px-2.5 text-center">
-                    <div className="flex items-center justify-center gap-1">
+                  <td className="py-1 px-1 text-center overflow-hidden">
+                    <div className="flex items-center justify-center gap-0.5">
                       {hasUnsavedVal && (
                         <span
-                          className="w-2 h-2 rounded-full bg-amber-500 animate-ping shrink-0"
+                          className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping shrink-0"
                           title="Unsaved modifications"
                         />
                       )}
-                      <span className="font-mono font-bold text-slate-500 text-[11px]">
+                      <span className="font-mono font-bold text-slate-500 text-[10.5px]">
                         {idx + 1}
                       </span>
                     </div>
                   </td>
 
                   {/* Diagnostic Test & Specimen Info */}
-                  <td className="py-1.5 px-3 min-w-[210px]">
-                    <div className="flex items-center gap-2">
+                  <td className="py-1 px-2 overflow-hidden">
+                    <div className="flex items-center gap-1.5 min-w-0">
                       {/* Specimen Tube Dot */}
                       <span
-                        className={`w-2.5 h-2.5 rounded-full shrink-0 border border-black/10 shadow-2xs ${tube.dotClass || 'bg-amber-500'}`}
+                        className={`w-2 h-2 rounded-full shrink-0 border border-black/10 shadow-2xs ${tube.dotClass || 'bg-amber-500'}`}
                         title={`${tube.tubeName} (${tube.capColor})`}
                       />
 
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1 min-w-0">
                           <span
-                            className={`font-bold text-xs truncate ${
+                            className={`font-bold text-[11px] leading-tight truncate block ${
                               isDeleted ? 'line-through text-slate-400' : 'text-slate-900'
                             }`}
+                            title={report.testName}
                           >
                             {report.testName}
                           </span>
                           {phase.phaseId === 'RECEIVED' && (
                             <span
-                              className="inline-flex items-center gap-0.5 text-[9px] font-bold text-cyan-800 bg-cyan-100 border border-cyan-300 px-1 py-0.2 rounded shrink-0"
+                              className="inline-flex items-center gap-0.5 text-[8px] font-bold text-cyan-800 bg-cyan-100 border border-cyan-300 px-1 py-0.2 rounded shrink-0"
                               title="Auto-received from laboratory analyzer"
                             >
                               <Cpu className="w-2.5 h-2.5 text-cyan-700" />
@@ -242,27 +253,27 @@ export default function ResultsTableView({
                             <Info className="w-3 h-3" />
                           </button>
                         </div>
-                        <div className="text-[10px] text-slate-400 truncate flex items-center gap-1.5">
-                          <span>{report.deptName || tube.department}</span>
-                          <span>•</span>
-                          <span>{tube.tubeName}</span>
+                        <div className="text-[9.5px] text-slate-400 truncate flex items-center gap-1 leading-tight mt-0.5">
+                          <span className="truncate">{report.deptName || tube.department}</span>
+                          <span className="shrink-0">•</span>
+                          <span className="shrink-0">{tube.tubeName}</span>
                         </div>
                       </div>
                     </div>
                   </td>
 
                   {/* Phase Status */}
-                  <td className="py-1.5 px-2 text-center w-24">
+                  <td className="py-1 px-1 text-center overflow-hidden">
                     <span
-                      className={`inline-flex items-center gap-1 text-[9px] font-extrabold px-1.5 py-0.5 rounded-full border shadow-2xs ${phase.theme.badgeBg}`}
+                      className={`inline-flex items-center gap-1 text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-full border shadow-2xs ${phase.theme.badgeBg}`}
                     >
                       <span className={`w-1.5 h-1.5 rounded-full ${phase.theme.dot} shrink-0`} />
-                      <span>{phase.shortLabel}</span>
+                      <span className="truncate">{phase.shortLabel}</span>
                     </span>
                   </td>
 
                   {/* Observed Reading Input */}
-                  <td className="py-1.5 px-3 min-w-[170px]">
+                  <td className="py-1 px-2 overflow-hidden">
                     {permissions.possibleEntry ? (
                       <>
                         <div className="relative flex items-center">
@@ -376,23 +387,23 @@ export default function ResultsTableView({
 
 
                   {/* Unit */}
-                  <td className="py-1.5 px-2 font-mono text-[11px] font-semibold text-slate-700">
+                  <td className="py-1 px-1 font-mono text-[10.5px] font-semibold text-slate-700 truncate" title={formatUnitName(report.unit || report.unitName, masterUnits) || '-'}>
                     {formatUnitName(report.unit || report.unitName, masterUnits) || '-'}
                   </td>
 
                   {/* Reference Range */}
-                  <td className="py-1.5 px-2.5 w-28">
-                    <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded border border-slate-200 inline-block">
+                  <td className="py-1 px-1 overflow-hidden">
+                    <span className="text-[9.5px] font-mono font-bold bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded border border-slate-200 inline-block truncate max-w-full" title={report.refRange || 'Standard'}>
                       {report.refRange || 'Standard'}
                     </span>
                   </td>
 
                   {/* Clinical Evaluation & Mini Gauge */}
-                  <td className="py-1.5 px-3 min-w-[180px]">
+                  <td className="py-1 px-2 overflow-hidden">
                     {evalRes.status !== 'EMPTY' ? (
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0 flex-wrap sm:flex-nowrap">
                         <span
-                          className={`inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-md border shadow-2xs ${
+                          className={`inline-flex items-center gap-1 text-[9.5px] font-extrabold px-1.5 py-0.5 rounded-md border shadow-2xs shrink-0 ${
                             evalRes.status.includes('PANIC')
                               ? 'bg-rose-600 text-white border-rose-700 animate-pulse shadow-rose-300'
                               : evalRes.status === 'REACTIVE'
@@ -422,7 +433,7 @@ export default function ResultsTableView({
                   </td>
 
                   {/* Actions */}
-                  <td className="py-1.5 px-2.5 text-right w-auto min-w-[90px]">
+                  <td className="py-1 px-2 text-right overflow-hidden">
                     <div className="flex items-center justify-end gap-1">
                       {isDeleted ? (
                         <button

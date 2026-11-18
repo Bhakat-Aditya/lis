@@ -286,22 +286,21 @@ export default function PatientProfileView({
       <div className="lg:col-span-4 space-y-4">
         {/* Card 1: Patient Profile matching Screenshot 2 */}
         <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
-          {/* Header Banner (Clean White Theme) */}
-          <div className="bg-slate-50 border-b border-slate-200/80 px-4 py-3 flex items-center justify-between text-slate-800">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center font-bold">
+          {/* Header Banner: Title & Primary Record Actions */}
+          <div className="bg-slate-50 border-b border-slate-200/80 px-4 py-2.5 flex items-center justify-between text-slate-800">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center font-bold shrink-0">
                 <User className="w-4 h-4" />
               </div>
-              <div>
-                <h2 className="text-sm font-bold text-slate-900 leading-tight">Patient Profile</h2>
-                <div className="text-[11px] text-blue-700 font-mono font-bold">Barcode: {patient.slNo || patient.barcode || '-'}</div>
-              </div>
+              <h2 className="text-sm font-bold text-slate-900 leading-tight truncate">
+                Patient Profile
+              </h2>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 shrink-0">
               <button
                 type="button"
                 onClick={() => onEditPatient && onEditPatient(patient)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors cursor-pointer shadow-2xs active:scale-95"
                 title="Edit Patient Demographic Details"
               >
                 <Edit className="w-3.5 h-3.5" />
@@ -311,21 +310,33 @@ export default function PatientProfileView({
                 <button
                   type="button"
                   onClick={() => onDeletePatient(patient)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer shadow-2xs active:scale-95"
                   title="Delete Patient Record"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   <span>Delete</span>
                 </button>
               )}
-              <button
-                onClick={onOpenSettings}
-                className="p-1.5 hover:bg-slate-200/70 rounded-lg transition-colors text-slate-500 cursor-pointer"
-                title="Patient Settings / Barcode"
-              >
-                <Settings className="w-4 h-4" />
-              </button>
             </div>
+          </div>
+
+          {/* Dedicated Barcode Accession Strip with Single Print Button */}
+          <div className="bg-purple-50/30 border-b border-slate-200/70 px-4 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-[11px] font-semibold text-slate-500">Barcode:</span>
+              <span className="font-mono font-bold text-xs text-blue-800 bg-white border border-blue-200/90 px-2 py-0.5 rounded shadow-2xs tracking-wide">
+                {patient.slNo || patient.barcode || '-'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-all cursor-pointer shadow-2xs active:scale-95 shrink-0"
+              title="Print Specimen Tube Barcode Labels"
+            >
+              <Printer className="w-3.5 h-3.5 text-purple-600" />
+              <span>Print Label</span>
+            </button>
           </div>
 
           {/* Demographic Rows matching Screenshot 2 */}
