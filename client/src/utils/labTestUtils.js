@@ -1241,24 +1241,58 @@ export function getTestOperationPermissions(report = {}, masterTests = []) {
     }
   }
 
-  const resolveFlag = (key, defaultVal) => {
+  const resolveFlag = (keys, defaultVal) => {
+    const keyList = Array.isArray(keys) ? keys : [keys];
     // 1. Priority to direct flag on report object if present
-    if (report[key] !== undefined && report[key] !== null && report[key] !== '') {
-      return toBooleanFlag(report[key], defaultVal);
+    for (const k of keyList) {
+      if (report[k] !== undefined && report[k] !== null && report[k] !== '') {
+        return toBooleanFlag(report[k], defaultVal);
+      }
     }
     // 2. From matched master test
-    if (matchedTest && matchedTest[key] !== undefined && matchedTest[key] !== null && matchedTest[key] !== '') {
-      return toBooleanFlag(matchedTest[key], defaultVal);
+    if (matchedTest) {
+      for (const k of keyList) {
+        if (matchedTest[k] !== undefined && matchedTest[k] !== null && matchedTest[k] !== '') {
+          return toBooleanFlag(matchedTest[k], defaultVal);
+        }
+      }
     }
     // 3. Fallback default
     return defaultVal;
   };
 
+  // Automated Formula Calculate check:
+  // Checks all possible flag variations: possibleCalculate, calculate, isCalculate, isFormula, formula
+  let isCalc = resolveFlag(
+    ['possibleCalculate', 'PossibleCalculate', 'calculate', 'Calculate', 'isCalculate', 'isFormula', 'formula', 'Formula'],
+    false
+  );
+
+  if (!isCalc) {
+    const tName = String(report.testName || report.name || matchedTest?.Name || matchedTest?.name || '').toLowerCase();
+    const isKnownCalc =
+      tName.includes('mcv') ||
+      tName.includes('mch') ||
+      tName.includes('mchc') ||
+      tName.includes('mean corpuscular') ||
+      tName.includes('globulin') ||
+      tName.includes('a/g ratio') ||
+      tName.includes('ag ratio') ||
+      tName.includes('vldl') ||
+      tName.includes('ldl cholesterol') ||
+      tName.includes('indirect bilirubin') ||
+      tName.includes('bilirubin indirect') ||
+      tName.includes('egfr');
+    if (isKnownCalc) {
+      isCalc = true;
+    }
+  }
+
   return {
-    possibleCalculate: resolveFlag('possibleCalculate', false),
-    possibleDownload: resolveFlag('possibleDownload', true),
-    possibleEntry: resolveFlag('possibleEntry', true),
-    possibleUpload: resolveFlag('possibleUpload', false),
+    possibleCalculate: isCalc,
+    possibleDownload: resolveFlag(['possibleDownload', 'PossibleDownload', 'download', 'Download'], true),
+    possibleEntry: resolveFlag(['possibleEntry', 'PossibleEntry', 'entry', 'Entry'], true),
+    possibleUpload: resolveFlag(['possibleUpload', 'PossibleUpload', 'upload', 'Upload'], false),
     matchedTest,
   };
 }

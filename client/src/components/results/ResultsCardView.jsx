@@ -290,21 +290,38 @@ export default function ResultsCardView({
                           )}
                         </button>
                       ) : (
-                        permissions.possibleDownload && (
-                          <button
-                            type="button"
-                            onClick={() => onDownloadResult && onDownloadResult(report)}
-                            disabled={downloadingId === report.reportId || isSaving || isDeleting}
-                            title="Download reading from analyzer equipment (DOWNLOADRESULT)"
-                            className="p-1 rounded-md bg-violet-50 hover:bg-violet-100 active:scale-95 text-violet-600 hover:text-violet-700 border border-violet-200 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
-                          >
-                            {downloadingId === report.reportId ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-600" />
-                            ) : (
-                              <Download className="w-3.5 h-3.5" />
-                            )}
-                          </button>
-                        )
+                        <>
+                          {permissions.possibleCalculate && (
+                            <button
+                              type="button"
+                              onClick={() => onCalculate(report.reportId)}
+                              disabled={calculatingId === report.reportId || isSaving}
+                              title="Evaluate automated formula calculation"
+                              className="p-1 rounded-md bg-indigo-50 hover:bg-indigo-100 active:scale-95 text-indigo-600 hover:text-indigo-800 border border-indigo-200 shadow-2xs transition-all cursor-pointer disabled:opacity-50 shrink-0"
+                            >
+                              {calculatingId === report.reportId ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+                              ) : (
+                                <Calculator className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          )}
+                          {permissions.possibleDownload && (
+                            <button
+                              type="button"
+                              onClick={() => onDownloadResult && onDownloadResult(report)}
+                              disabled={downloadingId === report.reportId || isSaving || isDeleting}
+                              title="Download reading from analyzer equipment (DOWNLOADRESULT)"
+                              className="p-1 rounded-md bg-violet-50 hover:bg-violet-100 active:scale-95 text-violet-600 hover:text-violet-700 border border-violet-200 shadow-2xs transition-all cursor-pointer disabled:opacity-50 shrink-0"
+                            >
+                              {downloadingId === report.reportId ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-600" />
+                              ) : (
+                                <Download className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          )}
+                        </>
                       )}
                       <span className="text-[10px] font-mono font-semibold text-slate-500">
                         {formatUnitName(report.unit || report.unitName, masterUnits)}

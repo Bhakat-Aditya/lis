@@ -287,7 +287,15 @@ export default function ResultsTableView({
                             onFocus={() => setFocusedIndex(idx)}
                             onBlur={() => setFocusedIndex(null)}
                             placeholder={getDefaultHealthyValue(report.refRange, report.testName) || 'Enter reading'}
-                            className={`w-full pl-2.5 pr-8 py-1 rounded-lg text-xs font-mono font-bold transition-all border outline-none ${inputHighlightClass}`}
+                            className={`w-full pl-2.5 ${
+                              hasUnsavedVal || isSaving
+                                ? 'pr-8'
+                                : permissions.possibleCalculate && permissions.possibleDownload
+                                ? 'pr-14'
+                                : permissions.possibleCalculate || permissions.possibleDownload
+                                ? 'pr-8'
+                                : 'pr-2.5'
+                            } py-1 rounded-lg text-xs font-mono font-bold transition-all border outline-none ${inputHighlightClass}`}
                           />
                           {hasUnsavedVal || isSaving ? (
                             /* When user starts typing / has unsaved edits, swap to Save button */
@@ -305,22 +313,41 @@ export default function ResultsTableView({
                               )}
                             </button>
                           ) : (
-                            /* Default: Download button to fetch reading from analyzer equipment */
-                            permissions.possibleDownload && (
-                              <button
-                                type="button"
-                                onClick={() => onDownloadResult && onDownloadResult(report)}
-                                disabled={downloadingId === report.reportId || isSaving || isDeleting}
-                                title="Download reading from analyzer equipment (DOWNLOADRESULT)"
-                                className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded-md bg-violet-50 hover:bg-violet-100 active:scale-95 text-violet-600 hover:text-violet-700 border border-violet-200 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
-                              >
-                                {downloadingId === report.reportId ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-600" />
-                                ) : (
-                                  <Download className="w-3.5 h-3.5" />
-                                )}
-                              </button>
-                            )
+                            <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+                              {/* Calculate button right beside the result value */}
+                              {permissions.possibleCalculate && (
+                                <button
+                                  type="button"
+                                  onClick={() => onCalculate(report.reportId)}
+                                  disabled={calculatingId === report.reportId || isSaving}
+                                  title="Evaluate automated formula calculation"
+                                  className="p-1 rounded-md bg-indigo-50 hover:bg-indigo-100 active:scale-95 text-indigo-600 hover:text-indigo-800 border border-indigo-200 shadow-2xs transition-all cursor-pointer disabled:opacity-50 shrink-0"
+                                >
+                                  {calculatingId === report.reportId ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+                                  ) : (
+                                    <Calculator className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
+                              )}
+
+                              {/* Download button to fetch reading from analyzer equipment */}
+                              {permissions.possibleDownload && (
+                                <button
+                                  type="button"
+                                  onClick={() => onDownloadResult && onDownloadResult(report)}
+                                  disabled={downloadingId === report.reportId || isSaving || isDeleting}
+                                  title="Download reading from analyzer equipment (DOWNLOADRESULT)"
+                                  className="p-1 rounded-md bg-violet-50 hover:bg-violet-100 active:scale-95 text-violet-600 hover:text-violet-700 border border-violet-200 shadow-2xs transition-all cursor-pointer disabled:opacity-50 shrink-0"
+                                >
+                                  {downloadingId === report.reportId ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-600" />
+                                  ) : (
+                                    <Download className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
+                              )}
+                            </div>
                           )}
                         </div>
 

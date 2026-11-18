@@ -331,9 +331,31 @@ export const getPatientReport = async (req, res, next) => {
         deptName: resolvedDeptName || r.deptName || 'Haematology',
         deptId: rawDept || 'D1',
         ...(statusOverride ? { status: statusOverride, isDeleted: isDel } : {}),
-        possibleCalculate: r.possibleCalculate !== undefined
-          ? toBoolFlag(r.possibleCalculate, false)
-          : (matchedTest ? toBoolFlag(matchedTest.possibleCalculate, false) : false),
+        possibleCalculate: (
+          r.possibleCalculate !== undefined ? toBoolFlag(r.possibleCalculate, false) :
+          r.calculate !== undefined ? toBoolFlag(r.calculate, false) :
+          r.Calculate !== undefined ? toBoolFlag(r.Calculate, false) :
+          r.isCalculate !== undefined ? toBoolFlag(r.isCalculate, false) :
+          r.isFormula !== undefined ? toBoolFlag(r.isFormula, false) :
+          (matchedTest ? (
+            matchedTest.possibleCalculate !== undefined ? toBoolFlag(matchedTest.possibleCalculate, false) :
+            matchedTest.calculate !== undefined ? toBoolFlag(matchedTest.calculate, false) :
+            matchedTest.Calculate !== undefined ? toBoolFlag(matchedTest.Calculate, false) :
+            matchedTest.isCalculate !== undefined ? toBoolFlag(matchedTest.isCalculate, false) :
+            matchedTest.isFormula !== undefined ? toBoolFlag(matchedTest.isFormula, false) : false
+          ) : false)
+        ) || (
+          String(r.testName || '').toLowerCase().includes('mcv') ||
+          String(r.testName || '').toLowerCase().includes('mch') ||
+          String(r.testName || '').toLowerCase().includes('mchc') ||
+          String(r.testName || '').toLowerCase().includes('mean corpuscular') ||
+          String(r.testName || '').toLowerCase().includes('globulin') ||
+          String(r.testName || '').toLowerCase().includes('a/g ratio') ||
+          String(r.testName || '').toLowerCase().includes('vldl') ||
+          String(r.testName || '').toLowerCase().includes('ldl') ||
+          String(r.testName || '').toLowerCase().includes('indirect bilirubin') ||
+          String(r.testName || '').toLowerCase().includes('egfr')
+        ),
         possibleDownload: r.possibleDownload !== undefined
           ? toBoolFlag(r.possibleDownload, true)
           : (matchedTest ? toBoolFlag(matchedTest.possibleDownload, true) : true),

@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   User,
+  Loader2,
 } from 'lucide-react';
 import { StatusBadge } from '../components/common/Badge.jsx';
 import ClinicalGuideModal from '../components/common/ClinicalGuideModal.jsx';
@@ -41,6 +42,7 @@ export default function ResultsPage() {
   const [reports, setReports] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadingReports, setLoadingReports] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [queuePhaseFilter, setQueuePhaseFilter] = useState('ALL');
   const [isGuideOpen, setIsGuideOpen] = useState(false);
@@ -87,7 +89,9 @@ export default function ResultsPage() {
   };
 
   const loadPatientReport = async (patient) => {
+    if (!patient) return null;
     setSelectedPatient(patient);
+    setLoadingReports(true);
     try {
       const pid = patient.patientId || patient.slNo;
       const res = await api.get('/reports/patient-report', {
@@ -102,13 +106,13 @@ export default function ResultsPage() {
       if (repList.length > 0 || !isRateLimited) {
         setReports(repList);
       }
-      if (res.data?.templates?.length > 0) {
-        setTemplates(res.data.templates);
-      }
+      setTemplates(res.data?.templates || []);
       return res.data;
     } catch (err) {
       console.warn('Error loading tests for patient:', err.message);
       return null;
+    } finally {
+      setLoadingReports(false);
     }
   };
 
@@ -401,7 +405,7 @@ export default function ResultsPage() {
             <button
               type="button"
               onClick={handlePrevPatient}
-              disabled={currentPatientIndex <= 0}
+              disabled={currentPatientIndex <= 0 || loadingReports}
               className="flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-slate-50 border border-slate-300 disabled:opacity-40 text-slate-700 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
               title="Switch to previous patient"
             >
@@ -409,19 +413,24 @@ export default function ResultsPage() {
               <span>Prev</span>
             </button>
 
-            <div className="px-2.5 py-1 bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-extrabold text-indigo-900 font-mono shadow-2xs">
-              {currentPatientIndex >= 0 ? `${currentPatientIndex + 1} / ${filteredPatients.length}` : '0 / 0'}
+            <div className="px-2.5 py-1 bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-extrabold text-indigo-900 font-mono shadow-2xs flex items-center gap-1.5">
+              {loadingReports && <Loader2 className="w-3 h-3 animate-spin text-indigo-600" />}
+              <span>{currentPatientIndex >= 0 ? `${currentPatientIndex + 1} / ${filteredPatients.length}` : '0 / 0'}</span>
             </div>
 
             <button
               type="button"
               onClick={handleNextPatient}
-              disabled={currentPatientIndex < 0 || currentPatientIndex >= filteredPatients.length - 1}
+              disabled={currentPatientIndex < 0 || currentPatientIndex >= filteredPatients.length - 1 || loadingReports}
               className="flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-slate-50 border border-slate-300 disabled:opacity-40 text-slate-700 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
               title="Switch to next patient"
             >
               <span>Next</span>
-              <ChevronRight className="w-3.5 h-3.5" />
+              {loadingReports ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5" />
+              )}
             </button>
 
             <button
@@ -471,6 +480,9 @@ export default function ResultsPage() {
                       >
                         {p.slNo || p.barcode || '-'}
                       </span>
+                      {isSelected && loadingReports && (
+                        <Loader2 className="w-3 h-3 animate-spin text-white ml-0.5" />
+                      )}
                     </div>
                     <StatusBadge status={p.status || 'SAMPLE'} />
                   </div>
@@ -503,13 +515,44 @@ export default function ResultsPage() {
       {/* 2. RESULTS ENTRY WORKSTATION: Full-width Results Bench, Filters & Test Evaluation Panel */}
       <div className="w-full">
         {selectedPatient ? (
-          <ResultsEntry
-            key={selectedPatient.patientId || selectedPatient.slNo}
-            patient={selectedPatient}
-            reports={reports}
-            templates={templates}
-            onRefresh={() => loadPatientReport(selectedPatient)}
-          />
+          loadingReports ? (
+            <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-12 text-center flex flex-col items-center justify-center min-h-[380px]">
+              <div className="relative mb-4">
+                <div className="w-14 h-14 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 shadow-inner">
+                  <FlaskConical className="w-7 h-7 animate-pulse text-indigo-600" />
+                </div>
+                <span className="absolute -top-1 -right-1 flex h-4 w-4">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-4 w-4 bg-indigo-600"></span>
+                </span>
+              </div>
+              <div className="flex items-center gap-2 mb-1.5">
+                <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
+                <h3 className="text-sm font-bold text-slate-900">
+                  Loading Patient Diagnostic Parameters...
+                </h3>
+              </div>
+              <p className="text-xs text-slate-500 font-medium max-w-sm mb-3">
+                Synchronizing real-time lab parameters, observed readings, and reference ranges for{' '}
+                <span className="font-bold text-slate-800">
+                  {selectedPatient.title ? `${selectedPatient.title} ` : ''}{selectedPatient.name}
+                </span>{' '}
+                (#{selectedPatient.slNo || selectedPatient.barcode || selectedPatient.patientId}).
+              </p>
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-slate-50 border border-slate-200 rounded-full text-[11px] text-slate-600 font-mono">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>Connecting with LIS Middleman Server</span>
+              </div>
+            </div>
+          ) : (
+            <ResultsEntry
+              key={selectedPatient.patientId || selectedPatient.slNo}
+              patient={selectedPatient}
+              reports={reports}
+              templates={templates}
+              onRefresh={() => loadPatientReport(selectedPatient)}
+            />
+          )
         ) : (
           <div className="bg-white p-16 text-center text-slate-400 rounded-2xl border border-slate-200">
             <FlaskConical className="w-8 h-8 mx-auto mb-2 text-slate-300" />
