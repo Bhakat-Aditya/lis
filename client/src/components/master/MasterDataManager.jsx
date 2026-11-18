@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMaster } from '../../context/context.master.jsx';
 import MasterEditModal from './MasterEditModal.jsx';
 import TemplateReportModal from '../results/TemplateReportModal.jsx';
+import { formatUnitName } from '../../utils/labTestUtils.js';
 import {
   Database,
   RefreshCw,
@@ -203,10 +204,12 @@ export default function MasterDataManager() {
     const map = new Map();
     (units || []).forEach((u) => {
       const id = String(u['Unit Id'] || u.id || '').trim();
-      const name = u.Name || u.name || id;
+      const name = u.Name || u.name || formatUnitName(id);
       if (id) {
         map.set(id, name);
         map.set(id.toUpperCase(), name);
+        map.set(id.toLowerCase(), name);
+        map.set(id.replace(/^u/i, ''), name);
       }
     });
     return map;
@@ -458,7 +461,7 @@ export default function MasterDataManager() {
                   })
                   .map((t) => {
                     const resolvedDept = deptMap.get(String(t['Dept Id'])) || t['Dept Id'] || '-';
-                    const resolvedUnit = unitMap.get(String(t['Unit Id'])) || t['Unit Id'] || '-';
+                    const resolvedUnit = unitMap.get(String(t['Unit Id'])) || formatUnitName(t['Unit Id']) || '-';
                     return (
                       <tr key={t['Test Id']} className="hover:bg-slate-50">
                         <td className="py-2 px-4 font-mono font-bold text-indigo-600">{t['Test Id']}</td>
@@ -471,7 +474,17 @@ export default function MasterDataManager() {
                         </td>
                         <td className="py-2 px-4 font-medium text-slate-600">{resolvedUnit}</td>
                         <td className="py-2 px-4 text-slate-600">{t['Sample Type'] || 'Serum'}</td>
-                        <td className="py-2 px-4 font-bold text-slate-900">₹{t.Rate || '100'}</td>
+                        <td className="py-2 px-4 whitespace-nowrap">
+                          <div className="font-bold text-slate-900 text-xs font-mono">
+                            ₹{t.Rate || t.rate || '100'}
+                          </div>
+                          {(t.Rate1 || t.rate1 || t.Rate2 || t.rate2) ? (
+                            <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center gap-1.5">
+                              {Boolean(t.Rate1 || t.rate1) && <span>R1: ₹{t.Rate1 || t.rate1}</span>}
+                              {Boolean(t.Rate2 || t.rate2) && <span>R2: ₹{t.Rate2 || t.rate2}</span>}
+                            </div>
+                          ) : null}
+                        </td>
                         <td className="py-2 px-4">
                           <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
                             {t.Status || 'Active'}
@@ -841,7 +854,7 @@ export default function MasterDataManager() {
                   <th className="py-2.5 px-4">Profile Name</th>
                   <th className="py-2.5 px-4">Department</th>
                   <th className="py-2.5 px-4 min-w-[260px]">Included Tests</th>
-                  <th className="py-2.5 px-4">Rate (₹)</th>
+                  <th className="py-2.5 px-4 min-w-[130px]">Rate (₹)</th>
                   <th className="py-2.5 px-4">Status</th>
                   <th className="py-2.5 px-4 text-right">Action</th>
                 </tr>
@@ -889,7 +902,25 @@ export default function MasterDataManager() {
                             </div>
                           )}
                         </td>
-                        <td className="py-2 px-4 font-bold text-slate-900">₹{p.Rate || '0'}</td>
+                        {/* Rates: Standard Rate + Special Rate 1, 2 & 3 (aligned with template display) */}
+                        <td className="py-2 px-4 whitespace-nowrap">
+                          <div className="font-bold text-slate-900 text-xs font-mono">
+                            ₹{p.Rate || p.rate || p.price || '0'}
+                          </div>
+                          {(p.Rate1 || p.rate1 || p.price1 || p.Rate2 || p.rate2 || p.price2 || p.Rate3 || p.rate3) ? (
+                            <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center gap-1.5">
+                              {Boolean(p.Rate1 || p.rate1 || p.price1) && (
+                                <span>R1: ₹{p.Rate1 || p.rate1 || p.price1}</span>
+                              )}
+                              {Boolean(p.Rate2 || p.rate2 || p.price2) && (
+                                <span>R2: ₹{p.Rate2 || p.rate2 || p.price2}</span>
+                              )}
+                              {Boolean(p.Rate3 || p.rate3) && (
+                                <span>R3: ₹{p.Rate3 || p.rate3}</span>
+                              )}
+                            </div>
+                          ) : null}
+                        </td>
                         <td className="py-2 px-4">
                           <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
                             {p.Status || 'Active'}
@@ -1001,7 +1032,17 @@ export default function MasterDataManager() {
                               </div>
                             )}
                           </td>
-                          <td className="py-2 px-4 font-bold text-slate-900">₹{pkg.Rate || '0'}</td>
+                          <td className="py-2 px-4 whitespace-nowrap">
+                            <div className="font-bold text-slate-900 text-xs font-mono">
+                              ₹{pkg.Rate || pkg.rate || '0'}
+                            </div>
+                            {(pkg.Rate1 || pkg.rate1 || pkg.Rate2 || pkg.rate2) ? (
+                              <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center gap-1.5">
+                                {Boolean(pkg.Rate1 || pkg.rate1) && <span>R1: ₹{pkg.Rate1 || pkg.rate1}</span>}
+                                {Boolean(pkg.Rate2 || pkg.rate2) && <span>R2: ₹{pkg.Rate2 || pkg.rate2}</span>}
+                              </div>
+                            ) : null}
+                          </td>
                           <td className="py-2 px-4">
                             <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
                               {pkg.Status || 'Active'}

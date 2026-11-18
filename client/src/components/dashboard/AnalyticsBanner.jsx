@@ -6,13 +6,23 @@ import {
   Activity,
   Timer,
   Cpu,
+  Check,
 } from 'lucide-react';
+
+const getTodayStr = () => {
+  const d = new Date();
+  const m = `${d.getMonth() + 1}`.padStart(2, '0');
+  const day = `${d.getDate()}`.padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+};
 
 export default function AnalyticsBanner({
   fromDate,
   toDate,
   onFromDateChange,
   onToDateChange,
+  onSubmitDates,
+  loading = false,
   onRefreshUpstream,
   isRefreshing = false,
   refreshSecondsLeft = 0,
@@ -24,6 +34,36 @@ export default function AnalyticsBanner({
 }) {
   const [currentTime, setCurrentTime] = useState('');
   const [currentDateFormatted, setCurrentDateFormatted] = useState('');
+  const todayStr = getTodayStr();
+
+  const [localFrom, setLocalFrom] = useState(fromDate || todayStr);
+  const [localTo, setLocalTo] = useState(toDate || todayStr);
+
+  useEffect(() => {
+    if (fromDate) setLocalFrom(fromDate);
+  }, [fromDate]);
+
+  useEffect(() => {
+    if (toDate) setLocalTo(toDate);
+  }, [toDate]);
+
+  const isTodayActive = localFrom === todayStr && localTo === todayStr;
+
+  const handleTodayClick = () => {
+    const t = getTodayStr();
+    setLocalFrom(t);
+    setLocalTo(t);
+    if (onSubmitDates) {
+      onSubmitDates(t, t);
+    }
+  };
+
+  const handleSubmit = (e) => {
+    if (e) e.preventDefault();
+    if (onSubmitDates) {
+      onSubmitDates(localFrom, localTo);
+    }
+  };
 
   useEffect(() => {
     const updateTime = () => {
@@ -222,28 +262,60 @@ export default function AnalyticsBanner({
           </div>
         </div>
 
-        {/* Date Inputs: From & To */}
-        <div className="flex items-center gap-2 flex-wrap">
+        {/* Date Form: Today Shortcut, From & To Inputs, and Submit Button */}
+        <form onSubmit={handleSubmit} className="flex items-center gap-2 flex-wrap">
+          {/* Today Button */}
+          <button
+            type="button"
+            onClick={handleTodayClick}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer outline-none ${
+              isTodayActive
+                ? 'bg-white text-emerald-800 shadow-sm ring-2 ring-white/60 font-black'
+                : 'bg-white/15 hover:bg-white/25 text-white border border-white/20'
+            }`}
+            title="Set date range to Today"
+          >
+            <Calendar className="w-3.5 h-3.5" />
+            <span>Today</span>
+          </button>
+
+          {/* From Date */}
           <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1.5 rounded-xl border border-white/20">
             <span className="text-[10px] font-bold text-emerald-100 uppercase tracking-wider">From:</span>
             <input
               type="date"
-              value={fromDate}
-              onChange={(e) => onFromDateChange(e.target.value)}
-              className="bg-white text-slate-800 text-xs font-semibold px-2 py-1 rounded-lg border border-emerald-300 shadow-inner focus:outline-hidden focus:ring-2 focus:ring-blue-400 cursor-pointer"
+              value={localFrom}
+              onChange={(e) => setLocalFrom(e.target.value)}
+              className="bg-white text-slate-800 text-xs font-semibold px-2 py-1 rounded-lg border border-emerald-300 shadow-inner focus:outline-hidden focus:ring-2 focus:ring-emerald-400 cursor-pointer"
             />
           </div>
 
+          {/* To Date */}
           <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1.5 rounded-xl border border-white/20">
             <span className="text-[10px] font-bold text-emerald-100 uppercase tracking-wider">To:</span>
             <input
               type="date"
-              value={toDate}
-              onChange={(e) => onToDateChange(e.target.value)}
-              className="bg-white text-slate-800 text-xs font-semibold px-2 py-1 rounded-lg border border-emerald-300 shadow-inner focus:outline-hidden focus:ring-2 focus:ring-blue-400 cursor-pointer"
+              value={localTo}
+              onChange={(e) => setLocalTo(e.target.value)}
+              className="bg-white text-slate-800 text-xs font-semibold px-2 py-1 rounded-lg border border-emerald-300 shadow-inner focus:outline-hidden focus:ring-2 focus:ring-emerald-400 cursor-pointer"
             />
           </div>
-        </div>
+
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={loading}
+            className="bg-slate-900/90 hover:bg-slate-900 active:scale-95 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl shadow-xs transition-all flex items-center gap-1.5 border border-white/20 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            title="Submit date range and load analytics"
+          >
+            {loading ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-300" />
+            ) : (
+              <Check className="w-3.5 h-3.5 text-emerald-400" />
+            )}
+            <span>{loading ? 'Submitting...' : 'Submit'}</span>
+          </button>
+        </form>
       </div>
     </div>
   );

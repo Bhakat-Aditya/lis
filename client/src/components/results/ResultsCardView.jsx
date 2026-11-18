@@ -27,6 +27,7 @@ import {
   evaluateResultValue,
   getDefaultHealthyValue,
   getTestOperationPermissions,
+  formatUnitName,
 } from '../../utils/labTestUtils.js';
 import { useMaster } from '../../context/context.master.jsx';
 
@@ -52,8 +53,9 @@ export default function ResultsCardView({
   onDownloadResult,
   onOpenEditReport,
 }) {
-  const { tests: contextMasterTests = [] } = useMaster();
+  const { tests: contextMasterTests = [], units: masterUnits = [] } = useMaster();
   const activeMasterTests = masterTests || contextMasterTests || [];
+
 
   return (
     <div
@@ -166,7 +168,7 @@ export default function ResultsCardView({
                         : getDefaultHealthyValue(report.refRange, report.testName) || '0'}
                     </span>
                     <span className="text-[11px] text-emerald-200 font-sans font-medium">
-                      {report.unit || ''}
+                      {formatUnitName(report.unit || report.unitName, masterUnits)}
                     </span>
                     <button
                       type="button"
@@ -237,7 +239,7 @@ export default function ResultsCardView({
                               v{v.num}
                             </span>
                             <span className="font-extrabold text-xs text-slate-900 font-mono truncate">
-                              {v.val} {report.unit || ''}
+                              {v.val} {formatUnitName(report.unit || report.unitName, masterUnits)}
                             </span>
                           </div>
 
@@ -272,20 +274,39 @@ export default function ResultsCardView({
                       className={`w-full pl-2.5 pr-18 py-1 rounded-xl text-xs font-mono font-bold transition-all border outline-none ${inputHighlightClass}`}
                     />
                     <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                      {current.resultData === '' && (
+                      {hasUnsavedVal || isSaving ? (
                         <button
                           type="button"
-                          onClick={() => {
-                            const defVal = getDefaultHealthyValue(report.refRange, report.testName);
-                            if (defVal) onInputChange(report.reportId, 'resultData', defVal);
-                          }}
-                          className="text-[9px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-200 transition-colors cursor-pointer"
+                          onClick={() => onSaveSingle(report)}
+                          disabled={isSaving}
+                          title="Save result for this parameter"
+                          className="p-1 rounded-md bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white shadow-xs transition-all cursor-pointer disabled:opacity-50"
                         >
-                          Auto
+                          {isSaving ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Save className="w-3.5 h-3.5" />
+                          )}
                         </button>
+                      ) : (
+                        permissions.possibleDownload && (
+                          <button
+                            type="button"
+                            onClick={() => onDownloadResult && onDownloadResult(report)}
+                            disabled={downloadingId === report.reportId || isSaving || isDeleting}
+                            title="Download reading from analyzer equipment (DOWNLOADRESULT)"
+                            className="p-1 rounded-md bg-violet-50 hover:bg-violet-100 active:scale-95 text-violet-600 hover:text-violet-700 border border-violet-200 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                          >
+                            {downloadingId === report.reportId ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-600" />
+                            ) : (
+                              <Download className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        )
                       )}
                       <span className="text-[10px] font-mono font-semibold text-slate-500">
-                        {report.unit || ''}
+                        {formatUnitName(report.unit || report.unitName, masterUnits)}
                       </span>
                     </div>
                   </div>
@@ -294,7 +315,7 @@ export default function ResultsCardView({
                     className="w-full px-2.5 py-1.5 rounded-xl text-xs font-mono font-bold bg-slate-100 text-slate-600 border border-slate-200 flex items-center justify-between mt-2 select-none"
                     title="Result entry option is disabled for this test parameter"
                   >
-                    <span className="truncate">{current.resultData || '—'} {report.unit || ''}</span>
+                    <span className="truncate">{current.resultData || '—'} {formatUnitName(report.unit || report.unitName, masterUnits)}</span>
                     <span className="text-[9px] font-extrabold text-slate-400 uppercase bg-slate-200/80 px-1.5 py-0.5 rounded">
                       Entry Disabled
                     </span>
@@ -388,23 +409,6 @@ export default function ResultsCardView({
                               <Loader2 className="w-3 h-3 animate-spin text-sky-600" />
                             ) : (
                               <Upload className="w-3 h-3" />
-                            )}
-                          </button>
-                        )}
-
-                        {/* Download Result from Analyzer (DOWNLOADRESULT) - Only show if possibleDownload is true */}
-                        {permissions.possibleDownload && (
-                          <button
-                            type="button"
-                            onClick={() => onDownloadResult && onDownloadResult(report)}
-                            disabled={downloadingId === report.reportId || isSaving || isDeleting}
-                            title="Download Result from Analyzer Equipment (DOWNLOADRESULT)"
-                            className="p-1 bg-white hover:bg-violet-50 border border-slate-200 hover:border-violet-300 text-violet-600 rounded-md transition-colors cursor-pointer disabled:opacity-50"
-                          >
-                            {downloadingId === report.reportId ? (
-                              <Loader2 className="w-3 h-3 animate-spin text-violet-600" />
-                            ) : (
-                              <Download className="w-3 h-3" />
                             )}
                           </button>
                         )}

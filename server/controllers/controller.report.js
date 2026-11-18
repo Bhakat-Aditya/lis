@@ -11,6 +11,50 @@ import { templateStore } from '../services/service.templateStore.js';
 const reportCache = new Map();
 const inFlightReports = new Map();
 
+export const STATIC_UNIT_MAP = {
+  u1: 'mg%',
+  u2: 'mg/dl',
+  u3: 'ng/ml',
+  u4: 'IU/ml',
+  u5: 'ml/minute',
+  u6: 'u/ml',
+  u7: '/cumm',
+  u8: 'millions/cumm',
+  u9: 'lakhs/cumm',
+  u10: '%',
+  u11: 'fl',
+  u12: 'pg',
+  u13: 'gm/dl',
+  u14: 'mm/hrs',
+  u15: 'mg / L',
+  u16: '10^9/L',
+  u28: '-',
+  '41': 'mm/hrs',
+  '42': 'Sec',
+  '43': 'U/L',
+  '44': 'U/g of HB',
+  '45': 'mmol/L',
+  '46': 'g/dl',
+  '47': 'OD',
+  '48': 'Pan Bio Unit',
+  '49': 'ug/dl',
+  '50': 'ulU/mL',
+  '51': 'pg/ml',
+  '52': 'ng/dl',
+  '54': 'mg/g creatinine',
+  '55': 'mIU/ml',
+  '56': 'mg/Lit',
+};
+
+export const resolveReadableUnit = (raw, customMap = {}) => {
+  if (!raw && raw !== 0) return '';
+  const clean = String(raw).trim();
+  if (!clean || clean === '-') return clean;
+  const lower = clean.toLowerCase();
+  const noU = lower.replace(/^u/i, '');
+  return customMap[lower] || customMap[noU] || STATIC_UNIT_MAP[lower] || STATIC_UNIT_MAP[noU] || clean;
+};
+
 export const invalidateReportCache = (patientId) => {
   if (!patientId) {
     reportCache.clear();
@@ -155,6 +199,24 @@ export const getPatientReport = async (req, res, next) => {
       // Ignore cache lookup failure
     }
 
+    // Retrieve master units to resolve human-readable unit names (e.g. U2 -> mg/dl)
+    let masterUnits = [];
+    try {
+      const cachedUnits = await cacheService.getList(CACHE_KEYS.UNIT_LIST, false, req.user?.upstreamSid);
+      masterUnits = cachedUnits?.data || [];
+    } catch (e) {
+      // Ignore cache lookup failure
+    }
+
+    const unitMap = {};
+    (masterUnits || []).forEach((u) => {
+      const id = String(u['Unit Id'] || u.id || '').trim().toLowerCase();
+      const name = String(u.Name || u.name || '').trim();
+      if (id && name) {
+        unitMap[id] = name;
+      }
+    });
+
     const toBoolFlag = (val, def) => {
       if (val === undefined || val === null || val === '') return def;
       if (typeof val === 'boolean') return val;
@@ -187,8 +249,15 @@ export const getPatientReport = async (req, res, next) => {
         return Boolean(mName && rName && mName === rName);
       });
 
+      const rawUnit = String(r.unit || '').trim();
+      const resolvedUnitName = resolveReadableUnit(rawUnit, unitMap);
+
       return {
         ...r,
+        unit: resolvedUnitName, // Replace unit with the readable unit name across the entire website
+        unitId: rawUnit, // Retain underlying unit ID for API sync
+        unitCode: rawUnit,
+        unitName: resolvedUnitName,
         ...(statusOverride ? { status: statusOverride, isDeleted: isDel } : {}),
         possibleCalculate: r.possibleCalculate !== undefined
           ? toBoolFlag(r.possibleCalculate, false)
@@ -710,6 +779,13 @@ export const updateReport = async (req, res, next) => {
             );
             if (matchByName) {
               finalUnitId = String(matchByName['Unit Id'] || matchByName.id || '').trim();
+            } else {
+              const invertedEntry = Object.entries(STATIC_UNIT_MAP).find(
+                ([, v]) => v.toLowerCase().trim() === cleanU
+              );
+              if (invertedEntry) {
+                finalUnitId = invertedEntry[0].toUpperCase();
+              }
             }
           }
         }

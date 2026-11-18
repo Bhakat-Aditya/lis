@@ -51,6 +51,7 @@ import {
   getDefaultHealthyValue,
   getSpecimenTubeInfo,
   getTestOperationPermissions,
+  formatUnitName,
 } from '../../utils/labTestUtils.js';
 import { useMaster } from '../../context/context.master.jsx';
 
@@ -1630,7 +1631,7 @@ export default function ResultsEntry({
                           </div>
                         </td>
                         <td className="py-2.5 px-3 hidden md:table-cell text-slate-500 font-mono text-[11px]">
-                          {report.refRange || 'Standard'} {report.unit || ''}
+                          {report.refRange || 'Standard'} {formatUnitName(report.unit || report.unitName)}
                         </td>
                         <td className="py-2.5 px-3 text-right">
                           <button

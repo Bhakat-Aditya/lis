@@ -272,14 +272,10 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
       return;
     }
 
-    // 2. Validate Mobile Number (Cannot be empty and must be 10 digits)
+    // 2. Validate Mobile Number (Optional - validate only if provided)
     const cleanMobile = String(formData.mobile || '').replace(/\D/g, '');
-    if (!cleanMobile) {
-      setError('Please enter mobile number (Required)');
-      return;
-    }
-    if (cleanMobile.length !== 10) {
-      setError('Please enter a valid 10-digit mobile number');
+    if (cleanMobile && cleanMobile.length !== 10) {
+      setError('Please enter a valid 10-digit mobile number, or leave it blank');
       return;
     }
 
@@ -395,19 +391,18 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
               </div>
             </div>
 
-            {/* 2. Mobile Number (Required) */}
+            {/* 2. Mobile Number (Optional) */}
             <div>
               <label className="text-[11px] font-semibold text-slate-500 block mb-1.5">
-                Mobile Number <span className="text-rose-500 font-bold">*</span>
+                Mobile Number
               </label>
               <div className="relative">
                 <Phone className="w-4 h-4 text-blue-500 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="tel"
                   name="mobile"
-                  placeholder="10-digit number"
+                  placeholder="10-digit number (Optional)"
                   maxLength={10}
-                  required
                   value={formData.mobile}
                   onChange={handleInputChange}
                   className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 shadow-2xs"

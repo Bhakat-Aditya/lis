@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Modal from '../common/Modal.jsx';
 import { useMaster } from '../../context/context.master.jsx';
 import InterpretationRichEditor from './InterpretationRichEditor.jsx';
+import { formatUnitName } from '../../utils/labTestUtils.js';
 import {
   Save,
   Loader2,
@@ -763,11 +764,15 @@ export default function MasterEditModal({
                   onChange={(e) => handleChange('TEST_UNIT_ID', e.target.value)}
                   className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg"
                 >
-                  {units.map((u) => (
-                    <option key={u['Unit Id'] || u.id} value={u['Unit Id'] || u.id}>
-                      {u.Name || u.name} ({u['Unit Id'] || u.id})
-                    </option>
-                  ))}
+                  {units.map((u) => {
+                    const uId = u['Unit Id'] || u.id;
+                    const uName = u.Name || u.name || formatUnitName(uId);
+                    return (
+                      <option key={uId} value={uId}>
+                        {uName}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
@@ -1065,7 +1070,7 @@ export default function MasterEditModal({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
                   Department *
@@ -1085,7 +1090,7 @@ export default function MasterEditModal({
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                  Profile Rate (₹) *
+                  Standard Rate (₹) *
                 </label>
                 <input
                   type="number"
@@ -1100,17 +1105,47 @@ export default function MasterEditModal({
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                  Status
+                  Special Rate 1 (₹)
                 </label>
-                <select
-                  value={formData.PROFILE_STATUS || 'Active'}
-                  onChange={(e) => handleChange('PROFILE_STATUS', e.target.value)}
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={formData.PROFILE_RATE1 || ''}
+                  onChange={(e) => handleChange('PROFILE_RATE1', e.target.value)}
+                  placeholder="Optional rate 1"
                   className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-bold"
-                >
-                  <option value="Active">Active</option>
-                  <option value="Deactive">Deactive</option>
-                </select>
+                />
               </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Special Rate 2 (₹)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={formData.PROFILE_RATE2 || ''}
+                  onChange={(e) => handleChange('PROFILE_RATE2', e.target.value)}
+                  placeholder="Optional rate 2"
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-bold"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                Status
+              </label>
+              <select
+                value={formData.PROFILE_STATUS || 'Active'}
+                onChange={(e) => handleChange('PROFILE_STATUS', e.target.value)}
+                className="w-full sm:w-1/3 px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-bold"
+              >
+                <option value="Active">Active</option>
+                <option value="Deactive">Deactive</option>
+              </select>
             </div>
 
             {/* Test Selection for Profile */}

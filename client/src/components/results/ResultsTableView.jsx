@@ -24,6 +24,7 @@ import {
   evaluateResultValue,
   getDefaultHealthyValue,
   getTestOperationPermissions,
+  formatUnitName,
 } from '../../utils/labTestUtils.js';
 import { useMaster } from '../../context/context.master.jsx';
 
@@ -49,14 +50,26 @@ export default function ResultsTableView({
   onDownloadResult,
   onOpenEditReport,
 }) {
-  const { tests: contextMasterTests = [] } = useMaster();
+  const { tests: contextMasterTests = [], units: masterUnits = [] } = useMaster();
   const activeMasterTests = masterTests || contextMasterTests || [];
   const [focusedIndex, setFocusedIndex] = useState(null);
   const inputRefs = useRef([]);
 
 
-  const handleKeyDown = (e, idx) => {
-    if (e.key === 'Enter' || e.key === 'ArrowDown') {
+
+  const handleKeyDown = (e, idx, report) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const current = resultsState[report?.reportId] || {};
+      const hasUnsaved = current.resultData !== (report?.resultData || '');
+      if (hasUnsaved && onSaveSingle && report) {
+        onSaveSingle(report);
+      }
+      if (idx < reports.length - 1 && inputRefs.current[idx + 1]) {
+        inputRefs.current[idx + 1].focus();
+        inputRefs.current[idx + 1].select?.();
+      }
+    } else if (e.key === 'ArrowDown') {
       e.preventDefault();
       if (idx < reports.length - 1 && inputRefs.current[idx + 1]) {
         inputRefs.current[idx + 1].focus();
@@ -252,30 +265,50 @@ export default function ResultsTableView({
                   <td className="py-1.5 px-3 min-w-[170px]">
                     {permissions.possibleEntry ? (
                       <>
-                        <div className="relative">
+                        <div className="relative flex items-center">
                           <input
                             ref={(el) => (inputRefs.current[idx] = el)}
                             type="text"
                             value={current.resultData || ''}
                             onChange={(e) => onInputChange(report.reportId, 'resultData', e.target.value)}
-                            onKeyDown={(e) => handleKeyDown(e, idx)}
+                            onKeyDown={(e) => handleKeyDown(e, idx, report)}
                             onFocus={() => setFocusedIndex(idx)}
                             onBlur={() => setFocusedIndex(null)}
                             placeholder={getDefaultHealthyValue(report.refRange, report.testName) || 'Enter reading'}
-                            className={`w-full px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all border outline-none ${inputHighlightClass}`}
+                            className={`w-full pl-2.5 pr-8 py-1 rounded-lg text-xs font-mono font-bold transition-all border outline-none ${inputHighlightClass}`}
                           />
-                          {current.resultData === '' && (
+                          {hasUnsavedVal || isSaving ? (
+                            /* When user starts typing / has unsaved edits, swap to Save button */
                             <button
                               type="button"
-                              onClick={() => {
-                                const defVal = getDefaultHealthyValue(report.refRange, report.testName);
-                                if (defVal) onInputChange(report.reportId, 'resultData', defVal);
-                              }}
-                              title="Click to fill normal baseline value"
-                              className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-200 transition-all cursor-pointer"
+                              onClick={() => onSaveSingle(report)}
+                              disabled={isSaving}
+                              title="Save reading (or press Enter)"
+                              className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded-md bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white shadow-xs transition-all cursor-pointer disabled:opacity-50"
                             >
-                              Auto
+                              {isSaving ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Save className="w-3.5 h-3.5" />
+                              )}
                             </button>
+                          ) : (
+                            /* Default: Download button to fetch reading from analyzer equipment */
+                            permissions.possibleDownload && (
+                              <button
+                                type="button"
+                                onClick={() => onDownloadResult && onDownloadResult(report)}
+                                disabled={downloadingId === report.reportId || isSaving || isDeleting}
+                                title="Download reading from analyzer equipment (DOWNLOADRESULT)"
+                                className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded-md bg-violet-50 hover:bg-violet-100 active:scale-95 text-violet-600 hover:text-violet-700 border border-violet-200 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                              >
+                                {downloadingId === report.reportId ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-600" />
+                                ) : (
+                                  <Download className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            )
                           )}
                         </div>
 
@@ -343,8 +376,8 @@ export default function ResultsTableView({
 
 
                   {/* Unit */}
-                  <td className="py-1.5 px-2 font-mono text-[11px] font-semibold text-slate-600">
-                    {report.unit || '-'}
+                  <td className="py-1.5 px-2 font-mono text-[11px] font-semibold text-slate-700">
+                    {formatUnitName(report.unit || report.unitName, masterUnits) || '-'}
                   </td>
 
                   {/* Reference Range */}
@@ -389,7 +422,7 @@ export default function ResultsTableView({
                   </td>
 
                   {/* Actions */}
-                  <td className="py-1.5 px-2.5 text-right w-auto min-w-[170px]">
+                  <td className="py-1.5 px-2.5 text-right w-auto min-w-[90px]">
                     <div className="flex items-center justify-end gap-1">
                       {isDeleted ? (
                         <button
@@ -430,44 +463,6 @@ export default function ResultsTableView({
                                 <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-600" />
                               ) : (
                                 <Upload className="w-3.5 h-3.5" />
-                              )}
-                            </button>
-                          )}
-
-                          {/* Download Result from Analyzer (DOWNLOADRESULT) - Only show if possibleDownload is true */}
-                          {permissions.possibleDownload && (
-                            <button
-                              type="button"
-                              onClick={() => onDownloadResult && onDownloadResult(report)}
-                              disabled={downloadingId === report.reportId || isSaving || isDeleting}
-                              title="Download reading from analyzer equipment (DOWNLOADRESULT)"
-                              className="p-1 rounded-lg border font-bold text-xs bg-white hover:bg-violet-50 text-violet-600 hover:text-violet-700 border-slate-200 hover:border-violet-300 transition-all cursor-pointer shadow-2xs disabled:opacity-50"
-                            >
-                              {downloadingId === report.reportId ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin text-violet-600" />
-                              ) : (
-                                <Download className="w-3.5 h-3.5" />
-                              )}
-                            </button>
-                          )}
-
-                          {/* Save Result - Only show if possibleEntry is true */}
-                          {permissions.possibleEntry && (
-                            <button
-                              type="button"
-                              onClick={() => onSaveSingle(report)}
-                              disabled={isSaving}
-                              title="Save result for this parameter"
-                              className={`p-1 rounded-lg border font-bold text-xs transition-all cursor-pointer ${
-                                hasUnsavedVal
-                                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600 shadow-xs active:scale-95'
-                                  : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
-                              } disabled:opacity-50`}
-                            >
-                              {isSaving ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <Save className="w-3.5 h-3.5" />
                               )}
                             </button>
                           )}

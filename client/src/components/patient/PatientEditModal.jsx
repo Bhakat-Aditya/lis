@@ -334,14 +334,10 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
       return;
     }
 
-    // 2. Validate Mobile Number (Cannot be empty and must be 10 digits)
+    // 2. Validate Mobile Number (Optional - validate only if provided)
     const cleanMobile = String(formData.mobile || '').replace(/\D/g, '');
-    if (!cleanMobile) {
-      setError('Please enter mobile number (Required)');
-      return;
-    }
-    if (cleanMobile.length !== 10) {
-      setError('Please enter a valid 10-digit mobile number');
+    if (cleanMobile && cleanMobile.length !== 10) {
+      setError('Please enter a valid 10-digit mobile number, or leave it blank');
       return;
     }
 
@@ -472,7 +468,7 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
                 <input
                   type="tel"
                   name="mobile"
-                  placeholder="10-digit number"
+                  placeholder="10-digit number (Optional)"
                   maxLength={10}
                   value={formData.mobile}
                   onChange={handleInputChange}

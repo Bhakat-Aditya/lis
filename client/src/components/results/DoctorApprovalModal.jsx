@@ -18,6 +18,7 @@ import ConfirmationModal from '../common/ConfirmationModal.jsx';
 import ReferenceRangeGauge from '../common/ReferenceRangeGauge.jsx';
 import ClinicalGuideModal from '../common/ClinicalGuideModal.jsx';
 import { formatDisplayDate } from '../../utils/dateUtils.js';
+import { formatUnitName } from '../../utils/labTestUtils.js';
 
 const formatGender = (raw) => {
   const s = String(raw || '').trim().toLowerCase();
@@ -170,7 +171,7 @@ export default function DoctorApprovalModal({
                 <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                 <span className="font-bold text-xs shrink-0">{abnormalTests.length} Abnormal Flag(s):</span>
                 <span className="truncate text-[11px] text-amber-800">
-                  {abnormalTests.map((t) => `${t.testName} (${t.resultData} ${t.unit || ''})`).join(' • ')}
+                  {abnormalTests.map((t) => `${t.testName} (${t.resultData} ${formatUnitName(t.unit || t.unitName)})`).join(' • ')}
                 </span>
               </div>
               <span className="text-[10px] font-bold bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded shrink-0">
@@ -229,7 +230,7 @@ export default function DoctorApprovalModal({
                       <ReferenceRangeGauge
                         value={r.resultData}
                         refRange={r.refRange}
-                        unit={r.unit}
+                        unit={formatUnitName(r.unit || r.unitName)}
                         testName={r.testName}
                       />
                     </div>

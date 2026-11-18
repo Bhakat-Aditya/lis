@@ -3,6 +3,7 @@ import Modal from '../common/Modal.jsx';
 import api from '../../services/api.js';
 import { useMaster } from '../../context/context.master.jsx';
 import { Save, X, Loader2, FlaskConical, AlertCircle, CheckCircle } from 'lucide-react';
+import { formatUnitName } from '../../utils/labTestUtils.js';
 
 // Standard specimen types common in clinical diagnostics
 const DEFAULT_SAMPLE_TYPES = [
@@ -428,15 +429,15 @@ export default function EditIndividualReportModal({
                   <option value="">Select Unit (None)</option>
                   {masterUnits.map((u) => {
                     const uId = String(u['Unit Id'] || u.id || '').trim();
-                    const uName = String(u.Name || u.name || '').trim();
+                    const uName = String(u.Name || u.name || '').trim() || formatUnitName(uId);
                     if (!uId) return null;
                     return (
                       <option key={uId} value={uId}>
-                        {uName ? `${uName} (ID: ${uId})` : `Unit ${uId}`}
+                        {uName}
                       </option>
                     );
                   })}
-                  <option value="__CUSTOM__">+ Custom Unit ID...</option>
+                  <option value="__CUSTOM__">+ Custom Unit...</option>
                 </select>
               ) : (
                 <div className="relative">
@@ -444,7 +445,7 @@ export default function EditIndividualReportModal({
                     type="text"
                     value={formData.unit}
                     onChange={(e) => handleInputChange('unit', e.target.value)}
-                    placeholder="Enter Unit ID (e.g. 41)"
+                    placeholder="Enter unit (e.g. mg/dl)"
                     className="w-full pl-3 pr-6 py-2 text-xs font-semibold text-slate-800 bg-white border border-blue-400 rounded-xl focus:ring-2 focus:ring-blue-500/20 outline-none font-mono"
                     autoFocus
                   />

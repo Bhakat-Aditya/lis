@@ -1,5 +1,6 @@
 import React from 'react';
 import { AlertCircle, AlertTriangle, CheckCircle2, TrendingUp, TrendingDown } from 'lucide-react';
+import { formatUnitName } from '../../utils/labTestUtils.js';
 
 /**
  * Visual Medical Reference Range Gauge
@@ -12,11 +13,13 @@ export default function ReferenceRangeGauge({
   testName = '',
   compact = false,
 }) {
+  const displayUnit = formatUnitName(unit);
+
   if (!value || value === '-' || !refRange || refRange === '-' || !refRange.includes('-')) {
     return (
       <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
         <span className="font-mono font-bold text-slate-900">{value || '-'}</span>
-        {unit && <span className="text-[11px] text-slate-400 font-normal">{unit}</span>}
+        {displayUnit && <span className="text-[11px] text-slate-400 font-normal">{displayUnit}</span>}
       </div>
     );
   }
@@ -29,7 +32,7 @@ export default function ReferenceRangeGauge({
     return (
       <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
         <span className="font-mono font-bold text-slate-900">{value}</span>
-        {unit && <span className="text-[11px] text-slate-400 font-normal">{unit}</span>}
+        {displayUnit && <span className="text-[11px] text-slate-400 font-normal">{displayUnit}</span>}
       </div>
     );
   }
@@ -73,7 +76,7 @@ export default function ReferenceRangeGauge({
     return (
       <div className="flex items-center gap-2">
         <span className={`font-mono font-extrabold text-xs ${status === 'HIGH' ? 'text-rose-600' : status === 'LOW' ? 'text-amber-600' : 'text-slate-900'}`}>
-          {value} {unit}
+          {value} {displayUnit}
         </span>
         <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.2 rounded border ${badgeClass}`}>
           {icon}
@@ -91,7 +94,7 @@ export default function ReferenceRangeGauge({
           <span className={`font-mono font-extrabold text-sm ${status === 'HIGH' ? 'text-rose-600' : status === 'LOW' ? 'text-amber-600' : 'text-slate-900'}`}>
             {value}
           </span>
-          <span className="text-[11px] text-slate-500 font-medium">{unit}</span>
+          <span className="text-[11px] text-slate-500 font-medium">{displayUnit}</span>
         </div>
 
         <div className="flex items-center gap-1">

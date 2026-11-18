@@ -1,5 +1,6 @@
 import { cacheService, CACHE_KEYS, computeNextIdForList, DEFAULT_SIGNATURES } from '../services/service.cache.js';
 import { upstreamService } from '../services/service.upstream.js';
+import { STATIC_UNIT_MAP } from './controller.report.js';
 
 export const getMasterList = async (req, res, next) => {
   try {
@@ -234,6 +235,39 @@ export const updateMethod = async (req, res, next) => {
 
 export const updateTest = async (req, res, next) => {
   try {
+    let finalUnitId = req.body.TEST_UNIT_ID ?? req.body.unitId ?? req.body['Unit Id'] ?? '';
+    if (finalUnitId) {
+      const cleanU = String(finalUnitId).trim().toLowerCase();
+      try {
+        const unitListRes = await cacheService.getList(CACHE_KEYS.UNIT_LIST).catch(() => ({ data: [] }));
+        const masterUnits = unitListRes?.data || [];
+        const matchById = masterUnits.find(
+          (u) =>
+            String(u['Unit Id'] || u.id || '').trim().toLowerCase() === cleanU ||
+            String(u['Unit Id'] || u.id || '').replace(/^U/i, '').toLowerCase() === cleanU.replace(/^U/i, '')
+        );
+        if (matchById) {
+          finalUnitId = String(matchById['Unit Id'] || matchById.id || '').trim();
+        } else {
+          const matchByName = masterUnits.find(
+            (u) => String(u.Name || u.name || '').toLowerCase().trim() === cleanU
+          );
+          if (matchByName) {
+            finalUnitId = String(matchByName['Unit Id'] || matchByName.id || '').trim();
+          } else {
+            const invertedEntry = Object.entries(STATIC_UNIT_MAP).find(
+              ([, v]) => v.toLowerCase().trim() === cleanU
+            );
+            if (invertedEntry) {
+              finalUnitId = invertedEntry[0].toUpperCase();
+            }
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
     const params = {
       TEST_ID: req.body.TEST_ID ?? req.body.id ?? req.body['Test Id'] ?? '',
       TEST_SHORT_NAME: req.body.TEST_SHORT_NAME ?? req.body.shortName ?? req.body['Short Name'] ?? '',
@@ -241,7 +275,7 @@ export const updateTest = async (req, res, next) => {
       TEST_DEPTID: req.body.TEST_DEPTID ?? req.body.deptId ?? req.body['Dept Id'] ?? '',
       TEST_SAMPLE: req.body.TEST_SAMPLE ?? req.body.sampleType ?? req.body['Sample Type'] ?? 'Serum',
       TEST_METHOD_ID: req.body.TEST_METHOD_ID ?? req.body.methodId ?? req.body['Method Id'] ?? '',
-      TEST_UNIT_ID: req.body.TEST_UNIT_ID ?? req.body.unitId ?? req.body['Unit Id'] ?? '',
+      TEST_UNIT_ID: finalUnitId,
       TEST_STATUS: req.body.TEST_STATUS ?? req.body.status ?? req.body.Status ?? 'Active',
       TEST_RATE: req.body.TEST_RATE ?? req.body.rate ?? req.body.Rate ?? '',
       TEST_RATE1: req.body.TEST_RATE1 ?? req.body.rate1 ?? req.body.Rate1 ?? '',

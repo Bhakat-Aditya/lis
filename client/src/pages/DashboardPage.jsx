@@ -57,10 +57,8 @@ const calculatePastDate = (baseDateStr, daysPrior = 8) => {
 export default function DashboardPage({ onOpenNewPatient }) {
   const [activeView, setActiveView] = useState('analytics'); // 'analytics' | 'machines'
   const todayStr = getTodayDate();
-  // Default to recent active window (past 2 days ending today) so active records and billing populate immediately
-  const defaultFromStr = calculatePastDate(todayStr, 2);
   const [toDate, setToDate] = useState(todayStr);
-  const [fromDate, setFromDate] = useState(defaultFromStr);
+  const [fromDate, setFromDate] = useState(todayStr);
   const [analyticsData, setAnalyticsData] = useState(null);
   const [loadingAnalytics, setLoadingAnalytics] = useState(true);
   const [selectedDetailChart, setSelectedDetailChart] = useState(null);
@@ -241,9 +239,12 @@ export default function DashboardPage({ onOpenNewPatient }) {
   };
 
   const handleDatesSubmit = (newFrom, newTo) => {
-    setFromDate(newFrom);
-    setToDate(newTo);
-    // Note: useEffect automatically triggers fetchDashboardJson with new dates (prevent duplicate call)
+    if (newFrom === fromDate && newTo === toDate) {
+      fetchDashboardJson(newFrom, newTo, true);
+    } else {
+      setFromDate(newFrom);
+      setToDate(newTo);
+    }
   };
 
   // Clean 4-KPI values requested by user: Total Patients, Total Payment Received, Total Reports Released, Total Billed Amount
@@ -345,6 +346,7 @@ export default function DashboardPage({ onOpenNewPatient }) {
         toDate={toDate}
         onFromDateChange={setFromDate}
         onToDateChange={setToDate}
+        onSubmitDates={handleDatesSubmit}
         onRefreshUpstream={handleRefreshUpstream}
         isRefreshing={isRefreshing}
         refreshSecondsLeft={refreshSecondsLeft}

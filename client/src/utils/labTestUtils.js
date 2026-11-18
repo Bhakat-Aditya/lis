@@ -1262,3 +1262,80 @@ export function getTestOperationPermissions(report = {}, masterTests = []) {
     matchedTest,
   };
 }
+
+/**
+ * Static master unit mapping covering standard LIS measurement unit IDs.
+ * Ensures receptionists, nurses, and lab staff see clinical units (mg/dl, gm/dl, etc.)
+ * rather than opaque internal database codes (U1, U2, U13, etc.).
+ */
+export const STATIC_UNIT_MAP = {
+  u1: 'mg%',
+  u2: 'mg/dl',
+  u3: 'ng/ml',
+  u4: 'IU/ml',
+  u5: 'ml/minute',
+  u6: 'u/ml',
+  u7: '/cumm',
+  u8: 'millions/cumm',
+  u9: 'lakhs/cumm',
+  u10: '%',
+  u11: 'fl',
+  u12: 'pg',
+  u13: 'gm/dl',
+  u14: 'mm/hrs',
+  u15: 'mg / L',
+  u16: '10^9/L',
+  u28: '-',
+  '41': 'mm/hrs',
+  '42': 'Sec',
+  '43': 'U/L',
+  '44': 'U/g of HB',
+  '45': 'mmol/L',
+  '46': 'g/dl',
+  '47': 'OD',
+  '48': 'Pan Bio Unit',
+  '49': 'ug/dl',
+  '50': 'ulU/mL',
+  '51': 'pg/ml',
+  '52': 'ng/dl',
+  '54': 'mg/g creatinine',
+  '55': 'mIU/ml',
+  '56': 'mg/Lit',
+};
+
+/**
+ * Formats any raw unit identifier into its human-readable clinical unit name.
+ * Resolves codes like 'U2' -> 'mg/dl', 'U13' -> 'gm/dl', 'U1' -> 'mg%', 'U11' -> 'fl'.
+ */
+export function formatUnitName(rawUnit, masterUnits = []) {
+  if (!rawUnit && rawUnit !== 0) return '';
+  const clean = String(rawUnit).trim();
+  if (!clean || clean === '-') return clean;
+
+  // 1. Dynamic lookup against active masterUnits catalog if provided
+  if (Array.isArray(masterUnits) && masterUnits.length > 0) {
+    const cleanLower = clean.toLowerCase();
+    const cleanNoU = cleanLower.replace(/^u/i, '');
+    const found = masterUnits.find((u) => {
+      const uId = String(u['Unit Id'] || u.id || '').trim().toLowerCase();
+      const uNoU = uId.replace(/^u/i, '');
+      return uId === cleanLower || (uNoU && cleanNoU && uNoU === cleanNoU);
+    });
+    if (found && (found.Name || found.name)) {
+      const foundName = String(found.Name || found.name).trim();
+      if (foundName) return foundName;
+    }
+  }
+
+  // 2. High-speed lookup against static unit catalog
+  const lower = clean.toLowerCase();
+  if (STATIC_UNIT_MAP[lower]) {
+    return STATIC_UNIT_MAP[lower];
+  }
+  const noU = lower.replace(/^u/i, '');
+  if (STATIC_UNIT_MAP[noU]) {
+    return STATIC_UNIT_MAP[noU];
+  }
+
+  return clean;
+}
