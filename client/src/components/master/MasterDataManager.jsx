@@ -633,7 +633,7 @@ export default function MasterDataManager() {
                     const resolvedDept = deptMap.get(String(t['Dept Id'])) || t['Dept Id'] || '-';
                     const resolvedUnit = unitMap.get(String(t['Unit Id'])) || formatUnitName(t['Unit Id']) || '-';
                     return (
-                      <tr key={t['Test Id']} className="hover:bg-slate-50">
+                      <tr key={t['Test Id']} className="hover:bg-blue-100/70 transition-colors">
                         <td className="py-2 px-3 font-mono font-bold text-indigo-600 truncate" title={t['Test Id']}>
                           {t['Test Id']}
                         </td>
@@ -734,7 +734,7 @@ export default function MasterDataManager() {
                       return name.includes(q) || id.includes(q);
                     })
                     .map((tmpl, idx) => (
-                      <tr key={tmpl.templatesId || tmpl.reportId || idx} className="hover:bg-slate-50/80 transition-colors">
+                      <tr key={tmpl.templatesId || tmpl.reportId || idx} className="hover:bg-blue-100/70 transition-colors">
                         {/* 1. Report ID */}
                         <td className="py-3 px-3 font-mono font-bold text-purple-700 truncate" title={tmpl.reportId || (tmpl.templatesId ? `P14R${String(tmpl.templatesId).replace(/^T/i, '')}` : `P14R${idx + 1}`)}>
                           <span className="bg-purple-50 border border-purple-200/80 px-1.5 py-0.5 rounded text-[11px] truncate block">
@@ -913,7 +913,7 @@ export default function MasterDataManager() {
                         const isProfile = String(item.Type || item.type || '').toLowerCase() === 'profile';
 
                         return (
-                          <tr key={item.ID || item.id} className="hover:bg-slate-50/80 transition-colors">
+                          <tr key={item.ID || item.id} className="hover:bg-blue-100/70 transition-colors">
                             {/* ID */}
                             <td className="py-2.5 px-3 font-mono font-bold text-indigo-600 truncate" title={item.ID || item.id}>
                               {item.ID || item.id}
@@ -1025,7 +1025,7 @@ export default function MasterDataManager() {
                       return name.includes(q) || id.includes(q);
                     })
                     .map((s, idx) => (
-                      <tr key={s['Sample Id'] || s.id || idx} className="hover:bg-slate-50">
+                      <tr key={s['Sample Id'] || s.id || idx} className="hover:bg-blue-100/70 transition-colors">
                         <td className="py-2 px-3 font-mono font-bold text-amber-700 truncate" title={s['Sample Id'] || s.id || idx + 1}>
                           #{s['Sample Id'] || s.id || idx + 1}
                         </td>
@@ -1102,7 +1102,7 @@ export default function MasterDataManager() {
                     const subTestNames = rawTestIds.map((tId) => testMap.get(tId) || tId);
 
                     return (
-                      <tr key={p['Profile Id']} className="hover:bg-slate-50">
+                      <tr key={p['Profile Id']} className="hover:bg-blue-100/70 transition-colors">
                         <td className="py-2 px-3 font-mono font-bold text-indigo-600 truncate" title={p['Profile Id']}>
                           {p['Profile Id']}
                         </td>
@@ -1226,7 +1226,7 @@ export default function MasterDataManager() {
                       const subProfNames = rawProfIds.map((pId) => profileMap.get(pId) || pId);
 
                       return (
-                        <tr key={pkg['Package Id'] || pkg.id} className="hover:bg-slate-50">
+                        <tr key={pkg['Package Id'] || pkg.id} className="hover:bg-blue-100/70 transition-colors">
                           <td className="py-2 px-3 font-mono font-bold text-indigo-600 truncate" title={pkg['Package Id'] || pkg.id}>
                             {pkg['Package Id'] || pkg.id}
                           </td>
@@ -1340,7 +1340,7 @@ export default function MasterDataManager() {
                     return name.includes(q) || id.includes(q) || deg.includes(q) || contact.includes(q);
                   })
                   .map((d) => (
-                    <tr key={d['Doct Id']} className="hover:bg-slate-50">
+                    <tr key={d['Doct Id']} className="hover:bg-blue-100/70 transition-colors">
                       <td className="py-2 px-3 font-mono font-bold text-indigo-600 truncate" title={d['Doct Id']}>
                         {d['Doct Id']}
                       </td>
@@ -1432,7 +1432,7 @@ export default function MasterDataManager() {
                       const type = r.Type || r.type || 'P';
                       const status = r.Status || r.status || 'Active';
                       return (
-                        <tr key={referId} className="hover:bg-slate-50">
+                        <tr key={referId} className="hover:bg-blue-100/70 transition-colors">
                           <td className="py-2 px-3 font-mono font-bold text-indigo-600 truncate" title={`#${referId}`}>
                             #{referId}
                           </td>
@@ -1516,7 +1516,7 @@ export default function MasterDataManager() {
                     return name.includes(q) || id.includes(q) || shortName.includes(q);
                   })
                   .map((dept) => (
-                    <tr key={dept['Dept Id']} className="hover:bg-slate-50">
+                    <tr key={dept['Dept Id']} className="hover:bg-blue-100/70 transition-colors">
                       <td className="py-2 px-3 font-mono font-bold text-indigo-600 truncate" title={dept['Dept Id']}>
                         {dept['Dept Id']}
                       </td>
@@ -1586,7 +1586,7 @@ export default function MasterDataManager() {
                       return name.includes(q) || id.includes(q);
                     })
                     .map((u) => (
-                      <tr key={u['Unit Id'] || u.id} className="hover:bg-slate-50">
+                      <tr key={u['Unit Id'] || u.id} className="hover:bg-blue-100/70 transition-colors">
                         <td className="py-2 px-3 font-mono font-bold text-indigo-600 truncate" title={u['Unit Id'] || u.id}>
                           {u['Unit Id'] || u.id}
                         </td>
@@ -1651,7 +1651,7 @@ export default function MasterDataManager() {
                       return name.includes(q) || id.includes(q);
                     })
                     .map((m) => (
-                      <tr key={m['Method Id'] || m.id} className="hover:bg-slate-50">
+                      <tr key={m['Method Id'] || m.id} className="hover:bg-blue-100/70 transition-colors">
                         <td className="py-2 px-3 font-mono font-bold text-indigo-600 truncate" title={m['Method Id'] || m.id}>
                           {m['Method Id'] || m.id}
                         </td>
@@ -1722,7 +1722,7 @@ export default function MasterDataManager() {
                       return name.includes(q) || id.includes(q) || loc.includes(q) || contact.includes(q);
                     })
                     .map((b) => (
-                      <tr key={b.branchId || b.id} className="hover:bg-slate-50">
+                      <tr key={b.branchId || b.id} className="hover:bg-blue-100/70 transition-colors">
                         <td className="py-2 px-3 font-mono font-bold text-indigo-600 truncate" title={`#${b.branchId || b.id}`}>
                           #{b.branchId || b.id}
                         </td>
@@ -1805,7 +1805,7 @@ export default function MasterDataManager() {
                     } catch (e) {}
 
                     return (
-                      <tr key={u.userId} className="hover:bg-slate-50">
+                      <tr key={u.userId} className="hover:bg-blue-100/70 transition-colors">
                         <td className="py-2 px-3 font-mono text-[11px] truncate" title={u.userId}>{u.userId}</td>
                         <td className="py-2 px-3 font-bold text-indigo-700 text-xs truncate" title={u.loginId}>{u.loginId}</td>
                         <td className="py-2 px-3">

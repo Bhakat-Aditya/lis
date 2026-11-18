@@ -181,7 +181,7 @@ export default function PatientEmrHistory({
                     return (
                       <tr
                         key={item.patientId || item.slNo || idx}
-                        className={`hover:bg-cyan-50/40 transition-colors ${
+                        className={`hover:bg-cyan-100/75 transition-colors ${
                           isCurrentCase ? 'bg-cyan-50/20' : ''
                         }`}
                       >

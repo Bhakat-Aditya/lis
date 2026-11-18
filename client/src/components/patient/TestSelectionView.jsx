@@ -1339,7 +1339,7 @@ export default function TestSelectionView({
 
                       return (
                         <React.Fragment key={t.id}>
-                          <tr className="hover:bg-slate-50/80 transition-colors">
+                          <tr className="hover:bg-blue-100/70 transition-colors">
                             <td className="py-3 px-4">
                               <div className="space-y-1">
                                 <div className="flex flex-wrap items-center gap-2">

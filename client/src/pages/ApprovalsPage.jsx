@@ -323,7 +323,7 @@ export default function ApprovalsPage() {
                 </tr>
               ) : filteredPatients.length > 0 ? (
                 filteredPatients.map((p, idx) => (
-                  <tr key={p.patientId || idx} className="hover:bg-slate-50/80 transition-colors">
+                  <tr key={p.patientId || idx} className="hover:bg-blue-100/70 transition-colors">
                     {/* SN (1 to size) */}
                     <td className="py-3 px-3 text-center font-bold text-slate-700">
                       {idx + 1}

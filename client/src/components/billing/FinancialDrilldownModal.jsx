@@ -192,7 +192,7 @@ export default function FinancialDrilldownModal({
                   const due = Number(p.totalOutstanding ?? 0);
 
                   return (
-                    <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                    <tr key={idx} className="hover:bg-blue-100/70 transition-colors">
                       {/* SN (1 to size) */}
                       <td className="py-2.5 px-3 text-center font-bold text-slate-600">
                         {idx + 1}

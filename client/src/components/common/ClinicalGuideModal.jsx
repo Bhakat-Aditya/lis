@@ -225,7 +225,7 @@ export default function ClinicalGuideModal({ isOpen, onClose, initialSearch = ''
                       </thead>
                       <tbody className="divide-y divide-slate-100 font-medium">
                         {selectedTest.parameters.map((param, idx) => (
-                          <tr key={idx} className="hover:bg-slate-50">
+                          <tr key={idx} className="hover:bg-blue-100/70 transition-colors">
                             <td className="py-2 px-3 font-semibold text-slate-900">{param.name}</td>
                             <td className="py-2 px-3 font-mono text-slate-700">
                               {param.maleRef || param.femaleRef}
@@ -353,7 +353,7 @@ export default function ClinicalGuideModal({ isOpen, onClose, initialSearch = ''
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium">
                   {CRITICAL_PANIC_VALUES.map((panic, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50">
+                    <tr key={idx} className="hover:bg-blue-100/70 transition-colors">
                       <td className="py-3 px-4 font-bold text-slate-900">{panic.test}</td>
                       <td className="py-3 px-4 font-mono font-bold text-amber-700">{panic.low}</td>
                       <td className="py-3 px-4 font-mono font-bold text-rose-700">{panic.high}</td>

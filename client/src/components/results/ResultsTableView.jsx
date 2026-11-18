@@ -167,34 +167,34 @@ export default function ResultsTableView({
               const isFocused = focusedIndex === idx;
 
               // High-impact dynamic highlighting
-              let rowHighlightClass = 'hover:bg-slate-50/80 transition-colors';
+              let rowHighlightClass = 'hover:bg-blue-100/80 transition-colors';
               let inputHighlightClass = 'border-slate-300 bg-slate-50/70 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 text-slate-800';
 
               if (isDeleted) {
-                rowHighlightClass = 'bg-rose-50/60 hover:bg-rose-100/60 border-l-[6px] border-l-rose-500 text-rose-950 opacity-80';
+                rowHighlightClass = 'bg-rose-50/60 hover:bg-rose-200/80 border-l-[6px] border-l-rose-500 text-rose-950 opacity-80';
                 inputHighlightClass = 'border-rose-300 bg-rose-50/40 text-slate-500 line-through';
               } else if (evalRes.status.includes('PANIC')) {
-                rowHighlightClass = 'bg-rose-100/90 hover:bg-rose-100/95 border-l-[6px] border-l-rose-600 font-bold text-rose-950 shadow-xs';
+                rowHighlightClass = 'bg-rose-100/90 hover:bg-rose-200/90 border-l-[6px] border-l-rose-600 font-bold text-rose-950 shadow-xs';
                 inputHighlightClass = 'border-rose-600 ring-2 ring-rose-500/70 bg-rose-50 text-rose-950 font-black shadow-xs';
               } else if (evalRes.status === 'REACTIVE') {
-                rowHighlightClass = 'bg-rose-100/80 hover:bg-rose-100/90 border-l-[6px] border-l-rose-600 font-bold text-rose-950';
+                rowHighlightClass = 'bg-rose-100/80 hover:bg-rose-200/85 border-l-[6px] border-l-rose-600 font-bold text-rose-950';
                 inputHighlightClass = 'border-rose-600 ring-2 ring-rose-500/70 bg-rose-50 text-rose-950 font-bold shadow-xs';
               } else if (evalRes.status === 'HIGH') {
-                rowHighlightClass = 'bg-amber-100/75 hover:bg-amber-100/90 border-l-[6px] border-l-amber-500 font-semibold text-amber-950 shadow-xs';
+                rowHighlightClass = 'bg-amber-100/75 hover:bg-amber-200/90 border-l-[6px] border-l-amber-500 font-semibold text-amber-950 shadow-xs';
                 inputHighlightClass = 'border-amber-500 ring-2 ring-amber-400/60 bg-amber-50 text-amber-950 font-bold shadow-xs';
               } else if (evalRes.status === 'LOW') {
-                rowHighlightClass = 'bg-sky-100/75 hover:bg-sky-100/90 border-l-[6px] border-l-sky-500 font-semibold text-sky-950 shadow-xs';
+                rowHighlightClass = 'bg-sky-100/75 hover:bg-sky-200/90 border-l-[6px] border-l-sky-500 font-semibold text-sky-950 shadow-xs';
                 inputHighlightClass = 'border-sky-500 ring-2 ring-sky-400/60 bg-sky-50 text-sky-950 font-bold shadow-xs';
               } else if (hasUnsavedVal) {
-                rowHighlightClass = 'bg-amber-50/80 hover:bg-amber-100/60 border-l-[6px] border-l-amber-400 font-medium';
+                rowHighlightClass = 'bg-amber-50/80 hover:bg-amber-200/80 border-l-[6px] border-l-amber-400 font-medium';
                 inputHighlightClass = 'border-amber-400 ring-2 ring-amber-300/60 bg-amber-50/60 text-amber-900 font-bold';
               } else if (evalRes.status === 'NORMAL') {
-                rowHighlightClass = 'border-l-[4px] border-l-emerald-500/80 hover:bg-emerald-50/30';
+                rowHighlightClass = 'border-l-[4px] border-l-emerald-500/80 hover:bg-emerald-100/80';
                 inputHighlightClass = 'border-emerald-400 bg-emerald-50/40 text-emerald-950 font-bold';
               }
 
               if (isFocused) {
-                rowHighlightClass += ' ring-2 ring-indigo-500 bg-indigo-50/60 z-10 relative';
+                rowHighlightClass += ' ring-2 ring-indigo-500 bg-indigo-100/80 z-10 relative';
               }
 
               return (

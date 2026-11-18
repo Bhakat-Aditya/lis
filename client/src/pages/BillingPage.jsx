@@ -1057,7 +1057,7 @@ export default function BillingPage() {
                   const testSummary = p.testList?.map((t) => t['Bill Particulars'] || t.name).filter(Boolean).join(', ');
 
                   return (
-                    <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
+                    <tr key={idx} className="hover:bg-blue-100/70 transition-colors">
                       {/* 1. SN (1 to size) */}
                       <td className="py-3 px-3 text-center font-bold text-slate-700">
                         {idx + 1}

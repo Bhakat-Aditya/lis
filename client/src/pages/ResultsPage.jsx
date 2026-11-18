@@ -454,7 +454,7 @@ export default function ResultsPage() {
                   className={`min-w-[220px] max-w-[250px] shrink-0 rounded-xl p-2.5 cursor-pointer transition-all outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent] ${
                     isSelected
                       ? 'bg-gradient-to-br from-indigo-600 via-indigo-600 to-indigo-700 text-white shadow-md ring-2 ring-indigo-400/60 border border-indigo-500 scale-[1.01]'
-                      : 'bg-slate-50/90 hover:bg-slate-100/90 text-slate-800 border border-slate-200/90 hover:border-slate-300 shadow-2xs'
+                      : 'bg-slate-50/90 hover:bg-indigo-50/90 text-slate-800 border border-slate-200/90 hover:border-indigo-300 hover:shadow-xs'
                   }`}
                 >
                   <div className="flex items-center justify-between text-xs mb-1">

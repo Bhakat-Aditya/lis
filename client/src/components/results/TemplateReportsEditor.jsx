@@ -1712,7 +1712,7 @@ export default function TemplateReportsEditor({
 
                 return (
                   <React.Fragment key={rId || idx}>
-                    <tr className="hover:bg-purple-50/40 transition-colors">
+                    <tr className="hover:bg-purple-100/80 transition-colors">
                       <td className="py-2.5 px-3 font-mono text-slate-400 text-xs">
                         {idx + 1}
                       </td>

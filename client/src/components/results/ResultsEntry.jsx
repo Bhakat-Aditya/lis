@@ -1604,7 +1604,7 @@ export default function ResultsEntry({
                     const isDeleting = deletingId === report.reportId;
 
                     return (
-                      <tr key={report.reportId} className="hover:bg-rose-50/40 transition-colors">
+                      <tr key={report.reportId} className="hover:bg-rose-100/80 transition-colors">
                         <td className="py-2.5 px-3 font-mono text-slate-400 text-xs">
                           {idx + 1}
                         </td>

@@ -531,7 +531,7 @@ export default function AnalyticsDetailModal({
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-800">
                   {config.tableData.map((row, rIdx) => (
-                    <tr key={rIdx} className="hover:bg-blue-50/40 transition-colors">
+                    <tr key={rIdx} className="hover:bg-blue-100/70 transition-colors">
                       <td className="py-2.5 px-3 font-bold text-slate-900">
                         {row.col1}
                       </td>

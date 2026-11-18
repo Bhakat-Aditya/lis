@@ -973,7 +973,7 @@ export default function PatientProfileView({
 
                       return (
                         <React.Fragment key={lot.id || i}>
-                          <tr className="hover:bg-slate-50">
+                          <tr className="hover:bg-blue-100/70 transition-colors">
                             <td className="py-2.5 px-3 font-mono text-slate-500">{i + 1}</td>
                             <td className="py-2.5 px-3">
                               <div className="space-y-1">
@@ -1105,7 +1105,7 @@ export default function PatientProfileView({
                 <tbody className="divide-y divide-slate-100 text-slate-800">
                   {paymentLines.length > 0 ? (
                     paymentLines.map((line, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50">
+                      <tr key={idx} className="hover:bg-blue-100/70 transition-colors">
                         <td className="py-2.5 px-3 font-mono text-slate-500">{idx + 1}</td>
                         <td className="py-2.5 px-3 font-semibold text-slate-800 flex items-center gap-1.5">
                           <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
@@ -1120,7 +1120,7 @@ export default function PatientProfileView({
                       </tr>
                     ))
                   ) : depositsAmount > 0 ? (
-                    <tr className="hover:bg-slate-50">
+                    <tr className="hover:bg-blue-100/70 transition-colors">
                       <td className="py-2.5 px-3 font-mono text-slate-500">1</td>
                       <td className="py-2.5 px-3 font-semibold text-slate-800 flex items-center gap-1.5">
                         <CreditCard className="w-3.5 h-3.5 text-emerald-600" />

@@ -216,7 +216,7 @@ export default function RecentWorklistTable({
                   return (
                     <tr
                       key={pid}
-                      className="hover:bg-indigo-50/40 transition-colors group"
+                      className="hover:bg-blue-100/70 transition-colors group"
                     >
                       {/* Barcode / SL No with copy */}
                       <td className="py-3 px-4 font-mono font-bold text-blue-700">

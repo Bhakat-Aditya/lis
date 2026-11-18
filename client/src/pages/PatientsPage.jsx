@@ -670,7 +670,7 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                             ? 'bg-blue-50/80 border-l-4 border-l-blue-600'
                             : isExpanded
                             ? 'bg-slate-50'
-                            : 'hover:bg-slate-50/80'
+                            : 'hover:bg-blue-100/70'
                         }`}
                         title="Click to select & expand • Double-click to open patient profile"
                       >

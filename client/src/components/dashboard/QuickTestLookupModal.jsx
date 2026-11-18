@@ -160,7 +160,7 @@ export default function QuickTestLookupModal({ isOpen, onClose }) {
                   return (
                     <tr
                       key={testCode + idx}
-                      className="hover:bg-indigo-50/40 transition-colors group"
+                      className="hover:bg-blue-100/70 transition-colors group"
                     >
                       <td className="py-2.5 px-4 font-mono font-bold text-indigo-700">
                         {testCode}
