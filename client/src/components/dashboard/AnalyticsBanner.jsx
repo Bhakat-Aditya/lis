@@ -2,14 +2,9 @@ import React, { useState, useEffect } from 'react';
 import {
   Calendar,
   Clock,
-  CheckCircle2,
-  UserPlus,
   RefreshCw,
   Activity,
-  Layers,
-  Sparkles,
   Timer,
-  AlertCircle,
   Cpu,
 } from 'lucide-react';
 
@@ -18,18 +13,14 @@ export default function AnalyticsBanner({
   toDate,
   onFromDateChange,
   onToDateChange,
-  onSubmitDates,
-  onOpenNewPatient,
   onRefreshUpstream,
   isRefreshing = false,
   refreshSecondsLeft = 0,
   onSkipWait,
   activeView,
   onToggleView,
-  loading = false,
   lastCacheTime = null,
   lastCacheDate = null,
-  isFromCache = false,
 }) {
   const [currentTime, setCurrentTime] = useState('');
   const [currentDateFormatted, setCurrentDateFormatted] = useState('');
@@ -66,28 +57,9 @@ export default function AnalyticsBanner({
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  const formatD = (d) => {
-    const m = `${d.getMonth() + 1}`.padStart(2, '0');
-    const day = `${d.getDate()}`.padStart(2, '0');
-    return `${d.getFullYear()}-${m}-${day}`;
-  };
-
-  const todayDateObj = new Date();
-  const todayStr = formatD(todayDateObj);
-
-  const isTodayActive = fromDate === todayStr && toDate === todayStr;
-
-  const handleQuickPreset = (preset) => {
-    if (preset === 'today') {
-      onFromDateChange(todayStr);
-      onToDateChange(todayStr);
-      if (onSubmitDates) onSubmitDates(todayStr, todayStr);
-    }
-  };
-
   return (
     <div className="space-y-3">
-      {/* Top System Status & Navigation Bar - Clean, Reconstructed, Professional */}
+      {/* Top System Status & Navigation Bar - Clean, Professional */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs space-y-3.5">
         {/* Row 1: Hospital Lab Identity & Live Telemetry Information */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
@@ -133,13 +105,13 @@ export default function AnalyticsBanner({
           </div>
         </div>
 
-        {/* Row 2: View Switcher Tabs (Left) and Action Buttons (Right) */}
+        {/* Row 2: View Switcher Tabs (Left) and Refresh Action (Right) */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           {/* View Mode Segmented Tabs */}
           <div className="bg-slate-100/90 p-1 rounded-xl flex items-center text-xs font-semibold self-start sm:self-auto border border-slate-200/60 shadow-inner">
             <button
               onClick={() => onToggleView('analytics')}
-              className={`px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent] ${
                 activeView === 'analytics'
                   ? 'bg-white text-indigo-700 shadow-xs font-bold'
                   : 'text-slate-600 hover:text-slate-900'
@@ -150,7 +122,7 @@ export default function AnalyticsBanner({
             </button>
             <button
               onClick={() => onToggleView('machines')}
-              className={`px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent] ${
                 activeView === 'machines'
                   ? 'bg-white text-indigo-700 shadow-xs font-bold'
                   : 'text-slate-600 hover:text-slate-900'
@@ -159,22 +131,10 @@ export default function AnalyticsBanner({
               <Cpu className="w-3.5 h-3.5 text-blue-600" />
               <span>Machine Status Hub</span>
             </button>
-            <button
-              onClick={() => onToggleView('worklist')}
-              className={`px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
-                activeView === 'worklist'
-                  ? 'bg-white text-indigo-700 shadow-xs font-bold'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Layers className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Patient Queue</span>
-            </button>
           </div>
 
-          {/* Action Buttons: Refresh Analytics & Patient Entry */}
+          {/* Action Button: Refresh Analytics */}
           <div className="flex items-center gap-2 self-end sm:self-auto">
-            {/* Upstream DASHBOARDREFRESH Button */}
             <button
               onClick={onRefreshUpstream}
               disabled={isRefreshing || refreshSecondsLeft > 0}
@@ -198,17 +158,6 @@ export default function AnalyticsBanner({
                   : 'Refresh Analytics'}
               </span>
             </button>
-
-            {/* Patient Entry Shortcut */}
-            {onOpenNewPatient && (
-              <button
-                onClick={onOpenNewPatient}
-                className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-xs transition-all cursor-pointer"
-              >
-                <UserPlus className="w-3.5 h-3.5" />
-                <span>Patient Entry</span>
-              </button>
-            )}
           </div>
         </div>
       </div>
@@ -259,49 +208,23 @@ export default function AnalyticsBanner({
         </div>
       )}
 
-      {/* Green Calendar / Date Selector Bar (Exact Visual from Screenshot) */}
+      {/* Green Calendar / Date Selector Bar - Minimal & Clean */}
       <div className="bg-gradient-to-r from-emerald-600 to-green-600 px-4 py-3 rounded-2xl shadow-xs text-white flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0">
             <Calendar className="w-4 h-4 text-white" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-extrabold text-sm tracking-wide text-white">Select Date</h3>
-              <span className="text-[10px] bg-white/20 text-emerald-100 font-mono px-2 py-0.5 rounded-md">
-                Range: {fromDate} to {toDate}
-              </span>
-            </div>
+            <h3 className="font-extrabold text-sm tracking-wide text-white">Select Date</h3>
             <p className="text-[10px] text-emerald-100 font-medium hidden sm:block">
               Always calls GETDASHBOARDJSON for real-time laboratory analytics
             </p>
           </div>
         </div>
 
-        {/* Date Input Form */}
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (onSubmitDates) onSubmitDates(fromDate, toDate);
-          }}
-          className="flex items-center gap-2 flex-wrap"
-        >
-          {/* Quick Date Preset: Only Today */}
-          <div className="flex items-center text-xs mr-1">
-            <button
-              type="button"
-              onClick={() => handleQuickPreset('today')}
-              className={`px-3 py-1 rounded-lg transition-all cursor-pointer text-xs ${
-                isTodayActive
-                  ? 'bg-white text-emerald-800 font-extrabold shadow-sm scale-105 ring-2 ring-white/60'
-                  : 'bg-white/15 hover:bg-white/25 text-emerald-50 font-semibold'
-              }`}
-            >
-              Today
-            </button>
-          </div>
-
-          <div className="flex items-center gap-1.5 bg-white/10 px-2 py-1 rounded-xl border border-white/20">
+        {/* Date Inputs: From & To */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1.5 rounded-xl border border-white/20">
             <span className="text-[10px] font-bold text-emerald-100 uppercase tracking-wider">From:</span>
             <input
               type="date"
@@ -311,7 +234,7 @@ export default function AnalyticsBanner({
             />
           </div>
 
-          <div className="flex items-center gap-1.5 bg-white/10 px-2 py-1 rounded-xl border border-white/20">
+          <div className="flex items-center gap-1.5 bg-white/10 px-2.5 py-1.5 rounded-xl border border-white/20">
             <span className="text-[10px] font-bold text-emerald-100 uppercase tracking-wider">To:</span>
             <input
               type="date"
@@ -320,46 +243,7 @@ export default function AnalyticsBanner({
               className="bg-white text-slate-800 text-xs font-semibold px-2 py-1 rounded-lg border border-emerald-300 shadow-inner focus:outline-hidden focus:ring-2 focus:ring-blue-400 cursor-pointer"
             />
           </div>
-
-          {/* Filter / Submit button: ALWAYS calls GET API_GET_DASHBOARD_JSON="GETDASHBOARDJSON" */}
-          <button
-            type="submit"
-            disabled={loading}
-            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 disabled:opacity-50 text-white font-bold text-xs py-1.5 px-3.5 rounded-xl shadow-xs transition-all cursor-pointer"
-            title="Always calls GET API_GET_DASHBOARD_JSON='GETDASHBOARDJSON'"
-          >
-            {loading ? (
-              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <CheckCircle2 className="w-3.5 h-3.5" />
-            )}
-            <span>Filter</span>
-          </button>
-
-          {/* Upstream DASHBOARDREFRESH Button */}
-          <button
-            type="button"
-            onClick={onRefreshUpstream}
-            disabled={isRefreshing || refreshSecondsLeft > 0}
-            className={`flex items-center gap-1.5 font-bold text-xs py-1.5 px-3 rounded-xl shadow-xs transition-all cursor-pointer ${
-              refreshSecondsLeft > 0
-                ? 'bg-amber-400/20 text-amber-100 border border-amber-300/40 cursor-not-allowed'
-                : 'bg-emerald-900/60 hover:bg-emerald-900 text-white border border-emerald-400/40 active:scale-95'
-            }`}
-            title="Calls POST DASHBOARDREFRESH with fromDate & toDate, waits 2 min timer, then calls GETDASHBOARDJSON"
-          >
-            <RefreshCw
-              className={`w-3.5 h-3.5 ${
-                refreshSecondsLeft > 0 || isRefreshing ? 'animate-spin' : ''
-              }`}
-            />
-            <span>
-              {refreshSecondsLeft > 0
-                ? `Wait ${formatSeconds(refreshSecondsLeft)}`
-                : 'Refresh'}
-            </span>
-          </button>
-        </form>
+        </div>
       </div>
     </div>
   );

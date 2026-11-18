@@ -136,6 +136,7 @@ export const getPatientReport = async (req, res, next) => {
     const printPDFUrl = payload.printPDFUrl || '';
     const printPDFUrlWithHeader = printPDFUrl ? printPDFUrl.replace('addHeader=false', 'addHeader=true') : '';
     const printPDFUrlWithoutHeader = printPDFUrl ? printPDFUrl.replace('addHeader=true', 'addHeader=false') : '';
+    const printBarCodeUrls = Array.isArray(payload.printBarCodeUrls) ? payload.printBarCodeUrls : [];
 
     // Apply persisted soft-deleted and status overrides so deleted tests persist across page refreshes
     let overrides = {};
@@ -413,6 +414,7 @@ export const getPatientReport = async (req, res, next) => {
           printPDFUrlWithHeader,
           printPDFUrlWithoutHeader,
           testList: billing?.testList || [],
+          printBarCodeUrls,
         }
       : null;
 
@@ -428,6 +430,7 @@ export const getPatientReport = async (req, res, next) => {
       printPDFUrlWithHeader,
       printPDFUrlWithoutHeader,
       billUrl,
+      printBarCodeUrls,
     };
 
     if (responseData.reports && responseData.reports.length > 0) {

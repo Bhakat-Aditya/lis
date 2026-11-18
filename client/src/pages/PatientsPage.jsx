@@ -28,6 +28,7 @@ import {
   Package,
   Layers,
   ListTree,
+  Sparkles,
 } from 'lucide-react';
 
 import { useMaster } from '../context/context.master.jsx';
@@ -1170,88 +1171,79 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
 
                               {/* Card 4: Quick Actions */}
                               <div className="space-y-2 flex flex-col justify-center">
-                                <div className="text-xs font-bold text-indigo-700">
-                                  Quick Actions
+                                <div className="text-xs font-bold text-indigo-700 flex items-center gap-1.5">
+                                  <Sparkles className="w-3.5 h-3.5" />
+                                  <span>Quick Actions</span>
                                 </div>
-                                <div className="space-y-1.5">
+
+                                <div className="grid grid-cols-2 gap-1.5">
+                                  {/* 1. Edit Patient Details */}
                                   <button
+                                    type="button"
                                     onClick={() => setEditingPatient(p)}
-                                    className="w-full flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1.5 px-3 rounded-lg shadow-xs cursor-pointer transition-all"
+                                    className="flex items-center gap-1.5 bg-blue-50/80 hover:bg-blue-100/90 active:bg-blue-200/90 text-blue-800 border border-blue-200/80 text-[11px] font-bold py-2 px-2.5 rounded-xl shadow-2xs cursor-pointer transition-all outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
+                                    title="Edit Patient Details"
                                   >
-                                    <Edit className="w-3.5 h-3.5" />
-                                    <span>Edit Patient Details</span>
+                                    <Edit className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                                    <span className="truncate">Edit Details</span>
                                   </button>
 
+                                  {/* 2. Order Tests */}
                                   <button
+                                    type="button"
                                     onClick={() => {
                                       setActivePatient(p);
                                       navigate(`/patients/${pid}?tab=tests`);
                                     }}
-                                    className="w-full flex items-center justify-center gap-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold py-1.5 px-3 rounded-lg shadow-xs cursor-pointer transition-all"
+                                    className="flex items-center gap-1.5 bg-violet-50/80 hover:bg-violet-100/90 active:bg-violet-200/90 text-violet-800 border border-violet-200/90 text-[11px] font-bold py-2 px-2.5 rounded-xl shadow-2xs cursor-pointer transition-all outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
+                                    title="Order Diagnostic Tests"
                                   >
-                                    <Plus className="w-3.5 h-3.5" />
-                                    <span>Order Tests</span>
+                                    <Plus className="w-3.5 h-3.5 text-violet-600 shrink-0" />
+                                    <span className="truncate">Order Tests</span>
                                   </button>
 
+                                  {/* 3. AWS Bill Preview */}
                                   <button
+                                    type="button"
                                     onClick={() => setPreviewBillPatient(p)}
-                                    className="w-full flex items-center justify-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold py-1.5 px-3 rounded-lg shadow-xs cursor-pointer transition-all"
+                                    className="flex items-center gap-1.5 bg-amber-50/80 hover:bg-amber-100/90 active:bg-amber-200/90 text-amber-800 border border-amber-200/90 text-[11px] font-bold py-2 px-2.5 rounded-xl shadow-2xs cursor-pointer transition-all outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
+                                    title="Open official AWS Invoice Preview"
                                   >
-                                    <FileText className="w-3.5 h-3.5" />
-                                    <span>Preview Bill</span>
+                                    <FileText className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                    <span className="truncate">Bill Preview</span>
                                   </button>
 
+                                  {/* 4. AWS Report PDF */}
                                   <button
-                                    onClick={() => {
-                                      setActivePatient(p);
-                                      navigate(`/patients/${pid}?tab=results`);
-                                    }}
-                                    className="w-full flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-1.5 px-3 rounded-lg shadow-xs cursor-pointer transition-all"
-                                  >
-                                    <FileCheck className="w-3.5 h-3.5" />
-                                    <span>Enter Results</span>
-                                  </button>
-
-                                  {/* AWS Report PDF */}
-                                  {/* AWS Report PDF */}
-                                  <button
+                                    type="button"
                                     onClick={() => {
                                       const rawPid = p.patientId || pid;
                                       const cleanPid = rawPid
                                         ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
                                         : '';
-                                      const token = localStorage.getItem('token');
-                                      window.open(`/api/reports/pdf?patientId=${cleanPid || rawPid}&addHeader=true${token ? `&token=${token}` : ''}`, '_blank');
+                                      const token = localStorage.getItem('lis_auth_token') || localStorage.getItem('token') || '';
+                                      window.open(`/api/reports/pdf?patientId=${encodeURIComponent(cleanPid || rawPid)}&addHeader=true${token ? `&token=${encodeURIComponent(token)}` : ''}`, '_blank');
                                     }}
-                                    className="w-full flex items-center justify-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold py-1.5 px-3 rounded-lg shadow-xs cursor-pointer transition-all"
+                                    className="flex items-center gap-1.5 bg-teal-50/80 hover:bg-teal-100/90 active:bg-teal-200/90 text-teal-800 border border-teal-200/90 text-[11px] font-bold py-2 px-2.5 rounded-xl shadow-2xs cursor-pointer transition-all outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
                                     title="Open official AWS Diagnostic Report PDF"
                                   >
-                                    <Printer className="w-3.5 h-3.5" />
-                                    <span>AWS Report PDF</span>
-                                  </button>
-
-                                  {/* AWS Bill Preview Popup */}
-                                  <button
-                                    onClick={() => setPreviewBillPatient(p)}
-                                    className="w-full flex items-center justify-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold py-1.5 px-3 rounded-lg shadow-xs cursor-pointer transition-all"
-                                    title="Open official AWS Invoice Preview Popup"
-                                  >
-                                    <FileText className="w-3.5 h-3.5" />
-                                    <span>AWS Bill Preview</span>
-                                  </button>
-
-                                  {/* Delete Patient Record Action */}
-                                  <button
-                                    onClick={() => setDeletingPatient(p)}
-                                    className="w-full flex items-center justify-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold py-1.5 px-3 rounded-lg shadow-xs cursor-pointer transition-all"
-                                    title="Delete this patient record"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                    <span>Delete Patient</span>
+                                    <Printer className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                                    <span className="truncate">Report PDF</span>
                                   </button>
                                 </div>
 
+                                {/* 5. Delete Patient Record Action */}
+                                <button
+                                  type="button"
+                                  onClick={() => setDeletingPatient(p)}
+                                  className="w-full flex items-center justify-center gap-1.5 bg-rose-50/60 hover:bg-rose-100 active:bg-rose-200/80 text-rose-700 border border-rose-200/70 text-[11px] font-bold py-1.5 px-3 rounded-xl shadow-2xs cursor-pointer transition-all outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
+                                  title="Delete this patient record"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                                  <span>Delete Patient</span>
+                                </button>
                               </div>
+
                             </div>
                           </td>
                         </tr>

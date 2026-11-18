@@ -1,3 +1,4 @@
+import { config } from '../config/config.env.js';
 import { upstreamService, API_GET_JOURNEY_STAGES } from '../services/service.upstream.js';
 import { cacheService, CACHE_KEYS } from '../services/service.cache.js';
 import { invalidateReportCache, getCachedReport } from './controller.report.js';
@@ -963,28 +964,28 @@ export const addMultipleTests = async (req, res, next) => {
     const tokensToAdd = allowRepeat
       ? requestedTokens
       : requestedTokens.filter((token) => {
-          const upper = token.toUpperCase();
-          if (seenExisting.has(upper)) return false;
-          // Check package variations (e.g. PKG|K1 vs PKG|1)
-          if (upper.startsWith('PKG|')) {
-            const rawId = upper.replace(/^PKG\|/i, '');
-            const numId = rawId.replace(/^K+/i, '');
-            if (seenExisting.has(`PKG|${numId}`) || seenExisting.has(`PKG|K${numId}`)) return false;
-          }
-          // Check profile variations (e.g. PROF|P1 vs PROF|1)
-          if (upper.startsWith('PROF|')) {
-            const rawId = upper.replace(/^PROF\|/i, '');
-            const numId = rawId.replace(/^P+/i, '');
-            if (seenExisting.has(`PROF|${numId}`) || seenExisting.has(`PROF|P${numId}`)) return false;
-          }
-          // Check template variations (e.g. TEMP|T1 vs TEMP|1)
-          if (upper.startsWith('TEMP|')) {
-            const rawId = upper.replace(/^TEMP\|/i, '');
-            const numId = rawId.replace(/^T+/i, '');
-            if (seenExisting.has(`TEMP|${numId}`) || seenExisting.has(`TEMP|T${numId}`)) return false;
-          }
-          return true;
-        });
+        const upper = token.toUpperCase();
+        if (seenExisting.has(upper)) return false;
+        // Check package variations (e.g. PKG|K1 vs PKG|1)
+        if (upper.startsWith('PKG|')) {
+          const rawId = upper.replace(/^PKG\|/i, '');
+          const numId = rawId.replace(/^K+/i, '');
+          if (seenExisting.has(`PKG|${numId}`) || seenExisting.has(`PKG|K${numId}`)) return false;
+        }
+        // Check profile variations (e.g. PROF|P1 vs PROF|1)
+        if (upper.startsWith('PROF|')) {
+          const rawId = upper.replace(/^PROF\|/i, '');
+          const numId = rawId.replace(/^P+/i, '');
+          if (seenExisting.has(`PROF|${numId}`) || seenExisting.has(`PROF|P${numId}`)) return false;
+        }
+        // Check template variations (e.g. TEMP|T1 vs TEMP|1)
+        if (upper.startsWith('TEMP|')) {
+          const rawId = upper.replace(/^TEMP\|/i, '');
+          const numId = rawId.replace(/^T+/i, '');
+          if (seenExisting.has(`TEMP|${numId}`) || seenExisting.has(`TEMP|T${numId}`)) return false;
+        }
+        return true;
+      });
 
     // If all requested tokens are already booked on this patient, return early success without triggering 1211
     if (tokensToAdd.length === 0) {
@@ -1042,16 +1043,17 @@ export const addMultipleTests = async (req, res, next) => {
 
     // Construct authentic upstream AWS billing URL
     const sidToUse = req.user?.upstreamSid || upstreamService.masterSid || '';
+    const labBaseUrl = upstreamService.baseUrl || config?.lab?.url || 'https://lis.newlifecaremidnapore.com/lifecare';
     let upstreamBillUrl = '';
     if (upstreamData?.redirectURL) {
       if (upstreamData.redirectURL.startsWith('http://') || upstreamData.redirectURL.startsWith('https://')) {
         upstreamBillUrl = upstreamData.redirectURL;
       } else {
         const cleanRedirect = upstreamData.redirectURL.replace(/^\/+/, '');
-        upstreamBillUrl = `${config.lab.url}/${cleanRedirect}`;
+        upstreamBillUrl = `${labBaseUrl}/${cleanRedirect}`;
       }
     } else {
-      upstreamBillUrl = `${config.lab.url}/billing.jsp${sidToUse ? `;jsessionid=${sidToUse}` : ''}?patientId=${encodeURIComponent(cleanPatientId)}`;
+      upstreamBillUrl = `${labBaseUrl}/billing.jsp${sidToUse ? `;jsessionid=${sidToUse}` : ''}?patientId=${encodeURIComponent(cleanPatientId)}`;
     }
 
     if (!upstreamBillUrl.includes('preview=')) {

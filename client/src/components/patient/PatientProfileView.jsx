@@ -114,6 +114,15 @@ export default function PatientProfileView({
     };
   }, [pid]);
 
+  const isSampleReceived = Boolean(
+    patient?.sampleTime ||
+    patient?.status === 'SAMPLE' ||
+    patient?.status === 'ENTRY' ||
+    patient?.status === 'RELEASED' ||
+    (reports || []).some((r) => r.status === 'SAMPLE' || r.status === 'RECEIVED' || r.status === 'ENTRY' || r.status === 'SAVED' || r.status === 'VERIFIED')
+  );
+  const isReportReleased = patient?.status === 'RELEASED';
+
   const investigationLots = useMemo(() => {
     return groupInvestigationsIntoLots(
       reports,
@@ -478,7 +487,7 @@ export default function PatientProfileView({
             {/* 0. Order Tests (Vibrant Violet) */}
             <button
               onClick={onAddTests}
-              className="flex items-center justify-center gap-1.5 bg-violet-600 hover:bg-violet-700 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer"
+              className="flex items-center justify-center gap-1.5 bg-violet-600 hover:bg-violet-700 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
             >
               <Plus className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate">Order Tests</span>
@@ -487,7 +496,7 @@ export default function PatientProfileView({
             {/* 1. Add Deposit / Record Payment (Vibrant Emerald) */}
             <button
               onClick={onAddDeposit}
-              className="flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer"
+              className="flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
             >
               <PlusCircle className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate">Add Deposit</span>
@@ -496,7 +505,7 @@ export default function PatientProfileView({
             {/* 2. Print Invoice (Vibrant Amber) */}
             <button
               onClick={onPrintInvoice}
-              className="flex items-center justify-center gap-1.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer"
+              className="flex items-center justify-center gap-1.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
             >
               <Printer className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate">Print Invoice</span>
@@ -505,36 +514,53 @@ export default function PatientProfileView({
             {/* 3. Add Discount (Vibrant Rose) */}
             <button
               onClick={onAddDiscount}
-              className="flex items-center justify-center gap-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer"
+              className="flex items-center justify-center gap-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
             >
               <MinusCircle className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate">Add Discount</span>
             </button>
 
-            {/* 4. Receive Sample (Vibrant Indigo) */}
+            {/* 4. Receive Sample (Vibrant Indigo / Accessioned Soft) */}
             <button
               onClick={onReceiveSample}
-              className="flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer"
+              className={`flex items-center justify-center gap-1.5 font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent] ${
+                isSampleReceived
+                  ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200'
+                  : 'bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white'
+              }`}
+              title={
+                isSampleReceived
+                  ? `Specimen already accessioned (${patient?.sampleTime || 'Received'})`
+                  : 'Receive and accession sample specimens (RECEIVESAMPLE)'
+              }
             >
               <TestTube className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">Receive Sample</span>
+              <span className="truncate">{isSampleReceived ? 'Sample Received ✓' : 'Receive Sample'}</span>
             </button>
 
-            {/* 6. Release Report (Vibrant Teal) */}
+            {/* 6. Release Report (Vibrant Teal / Finalized Soft) */}
             <button
               onClick={onReleaseReport}
-              className="flex items-center justify-center gap-1.5 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer"
-              title="Release finalized diagnostic report (RELEASEREPORT)"
+              className={`flex items-center justify-center gap-1.5 font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent] ${
+                isReportReleased
+                  ? 'bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200'
+                  : 'bg-teal-600 hover:bg-teal-700 active:scale-95 text-white'
+              }`}
+              title={
+                isReportReleased
+                  ? 'Diagnostic report is already finalized & released'
+                  : 'Release finalized diagnostic report for collection & printing (RELEASEREPORT)'
+              }
             >
               <Send className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">Release Report</span>
+              <span className="truncate">{isReportReleased ? 'Report Released ✓' : 'Release Report'}</span>
             </button>
 
             {/* 6b. Recall Report (Task 10: RECALLPORT) */}
             {onRecallReport && (
               <button
                 onClick={onRecallReport}
-                className="flex items-center justify-center gap-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer"
+                className="flex items-center justify-center gap-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
                 title="Recall report back to testing/draft status (RECALLPORT)"
               >
                 <Undo2 className="w-3.5 h-3.5 shrink-0" />
@@ -552,7 +578,7 @@ export default function PatientProfileView({
                       ? onOpenWhatsAppModal('patientReportMsg')
                       : onSendWhatsApp && onSendWhatsApp('patientReportMsg')
                   }
-                  className="flex-1 flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs py-2 px-2 transition-all cursor-pointer truncate"
+                  className="flex-1 flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs py-2 px-2 transition-all cursor-pointer truncate outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
                   title="Send report directly to patient via WhatsApp (sendType=patientReportMsg)"
                 >
                   <MessageSquare className="w-3.5 h-3.5 shrink-0" />
@@ -561,7 +587,7 @@ export default function PatientProfileView({
                 <button
                   type="button"
                   onClick={() => setShowWhatsAppDropdown((prev) => !prev)}
-                  className="px-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center border-l border-emerald-500/50 cursor-pointer transition-colors"
+                  className="px-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center border-l border-emerald-500/50 cursor-pointer transition-colors outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
                   title="Select WhatsApp Message Type"
                 >
                   <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${showWhatsAppDropdown ? 'rotate-180' : ''}`} />

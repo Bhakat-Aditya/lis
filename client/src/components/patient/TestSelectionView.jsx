@@ -691,6 +691,7 @@ export default function TestSelectionView({
     setDuplicateWarning(null);
     setSaveSuccess('');
     setSaveError('');
+    setShowSuggestions(false);
   };
 
   const toggleExpandSuggestion = (id, e) => {
@@ -1150,6 +1151,17 @@ export default function TestSelectionView({
             </div>
 
             <button
+              type="button"
+              onClick={handleClear}
+              className="flex items-center gap-1 bg-white hover:bg-rose-50 text-rose-600 hover:text-rose-700 active:scale-95 border border-rose-200 hover:border-rose-300 font-bold text-xs py-2 px-3.5 rounded-xl shadow-2xs transition-all cursor-pointer shrink-0"
+              title="Clear search or newly staged tests"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+              <span>CLEAR</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => handleAddTest()}
               className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-xs transition-all cursor-pointer shrink-0"
             >

@@ -91,8 +91,8 @@ export const getDashboardAnalytics = async (req, res, next) => {
     }
 
     const fetchPromise = (async () => {
-      // Call upstream GETDASHBOARDJSON strictly (NEVER call GETPATIENTLIST)
-      const upstreamAnalytics = await upstreamService.getDashboardJson(
+      // Call upstream GETDASHBOARDJSON
+      let upstreamAnalytics = await upstreamService.getDashboardJson(
         fromDate,
         toDate,
         activeSid
@@ -107,11 +107,32 @@ export const getDashboardAnalytics = async (req, res, next) => {
         throw err;
       }
 
+      let payload =
+        upstreamAnalytics?.payLoadJSON?.dashboardJSON ||
+        upstreamAnalytics?.payLoadJSON;
+
+      // If upstream dashboard payload is empty or uninitialized, automatically trigger DASHBOARDREFRESH to populate live metrics
+      if (!payload || Object.keys(payload).length === 0 || upstreamAnalytics?.STATUS === 'FAILED') {
+        try {
+          console.log('[Analytics] Upstream dashboard payload empty. Running DASHBOARDREFRESH...');
+          await upstreamService.refreshDashboard(fromDate, toDate, activeSid);
+          upstreamAnalytics = await upstreamService.getDashboardJson(fromDate, toDate, activeSid);
+          payload =
+            upstreamAnalytics?.payLoadJSON?.dashboardJSON ||
+            upstreamAnalytics?.payLoadJSON ||
+            {};
+        } catch (refErr) {
+          console.warn('[Analytics] Auto-refresh fallback note:', refErr.message);
+          payload = payload || {};
+        }
+      }
+
       if (
         upstreamAnalytics &&
         (upstreamAnalytics.STATUS === 'FAILED' ||
           upstreamAnalytics.STATUS === 'ERROR' ||
-          (upstreamAnalytics.StatusCode && upstreamAnalytics.StatusCode !== '0000'))
+          (upstreamAnalytics.StatusCode && upstreamAnalytics.StatusCode !== '0000')) &&
+        Object.keys(payload).length === 0
       ) {
         console.warn(
           '[Analytics] Main server rejected GETDASHBOARDJSON:',
@@ -124,11 +145,7 @@ export const getDashboardAnalytics = async (req, res, next) => {
         throw err;
       }
 
-      const payload =
-        upstreamAnalytics?.payLoadJSON?.dashboardJSON ||
-        upstreamAnalytics?.payLoadJSON ||
-        upstreamAnalytics ||
-        {};
+      payload = payload || {};
 
       const rawCatched = payload.catchedTime || payload.cachedTime || new Date().toISOString();
       let parsedStr = String(rawCatched).trim();
@@ -143,17 +160,75 @@ export const getDashboardAnalytics = async (req, res, next) => {
         ? dObj.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', month: 'short', day: '2-digit', year: 'numeric' })
         : new Date().toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', month: 'short', day: '2-digit', year: 'numeric' });
 
-      const kpiSummary = payload.summary || payload.kpiSummary || {
-        totalPatients: payload.patientBillStatus?.total || payload.maleFemaleRatio?.total || 0,
-        totalBilledAmount: payload.billAmountBreakup?.grossAmount || 0,
-        paymentReceived: payload.billAmountBreakup?.dailyStatistics?.totalReceived || 0,
-        paymentDue: payload.billAmountBreakup?.dailyStatistics?.outstandingDue || 0,
-        totalDiscount: payload.billAmountBreakup?.dailyStatistics?.discountProvided || 0,
-        roundOff: payload.billAmountBreakup?.dailyStatistics?.roundOffAdjustment || 0,
-        totalTestsOrdered: payload.testResultSummary?.totalTests || 0,
-        reportsReadyForPrinting: payload.patientReportPreparationProgress?.dailyStatistics?.readyForDelivery || 0,
-        reportsReleased: 0,
-        avgTurnaroundMinutes: 48,
+      // Core Summary Metrics requested by user:
+      // 1. Total Patients
+      const totalPatients =
+        Number(payload.summary?.totalPatients) ||
+        Number(payload.patientBillStatus?.total) ||
+        Number(payload.maleFemaleRatio?.total) ||
+        0;
+
+      // 2. Total Payment Received
+      const paymentReceived =
+        Number(payload.billAmountBreakup?.dailyStatistics?.totalReceived) ||
+        Number(payload.summary?.paymentReceived) ||
+        0;
+
+      // 3. Total Reports Released
+      const reportsReleased =
+        Number(payload.summary?.reportsReleased) ||
+        Number(payload.patientReportPreparationProgress?.dailyStatistics?.readyForDelivery) ||
+        0;
+
+      // 4. Total Billed Amount
+      const totalBilledAmount =
+        Number(payload.billAmountBreakup?.grossAmount) ||
+        Number(payload.billAmountBreakup?.dailyStatistics?.grossBilled) ||
+        Number(payload.summary?.totalBilledAmount) ||
+        0;
+
+      // Exactly the 4 clean metrics for dashboard JSON summary:
+      // 1. totalPatients (total patient)
+      // 2. paymentReceived (total payment received)
+      // 3. reportsReleased (total report released)
+      // 4. totalBilledAmount (total billed amount)
+      const summary = {
+        totalPatients,
+        paymentReceived,
+        reportsReleased,
+        totalBilledAmount,
+      };
+
+      // Define non-enumerable aliases so exact wording lookups also work seamlessly without cluttering Object.keys(summary)
+      Object.defineProperty(summary, 'totalPatient', {
+        get() { return this.totalPatients; },
+        enumerable: false,
+      });
+      Object.defineProperty(summary, 'totalPaymentReceived', {
+        get() { return this.paymentReceived; },
+        enumerable: false,
+      });
+      Object.defineProperty(summary, 'totalReportsReleased', {
+        get() { return this.reportsReleased; },
+        enumerable: false,
+      });
+
+      if (payload.dashboardJSON) {
+        payload.dashboardJSON.summary = summary;
+      }
+      payload.summary = summary;
+
+      const kpiSummary = {
+        totalPatients,
+        totalBilledAmount,
+        paymentReceived,
+        paymentDue: Number(payload.billAmountBreakup?.dailyStatistics?.outstandingDue) || Number(payload.summary?.paymentDue) || 0,
+        totalDiscount: Number(payload.billAmountBreakup?.dailyStatistics?.discountProvided) || Number(payload.summary?.totalDiscount) || 0,
+        roundOff: Number(payload.billAmountBreakup?.dailyStatistics?.roundOffAdjustment) || Number(payload.summary?.roundOff) || 0,
+        totalTestsOrdered: Number(payload.testResultSummary?.totalTests) || Number(payload.summary?.totalTestsOrdered) || 0,
+        reportsReadyForPrinting: Number(payload.patientReportPreparationProgress?.dailyStatistics?.readyForDelivery) || 0,
+        reportsReleased,
+        avgTurnaroundMinutes: Number(payload.summary?.avgTurnaroundMinutes) || 48,
       };
 
       const result = {
@@ -170,6 +245,7 @@ export const getDashboardAnalytics = async (req, res, next) => {
         cachedDateFormatted,
         isCached: false,
         ...payload,
+        summary,
         kpiSummary,
       };
 

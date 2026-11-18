@@ -114,8 +114,9 @@ export default function BillPreviewModal({
     if (blobUrl) {
       window.open(blobUrl, '_blank');
     } else {
-      const token = localStorage.getItem('token');
-      window.open(`/api/billing/pdf?patientId=${cleanPid}${token ? `&token=${token}` : ''}`, '_blank');
+      const token = localStorage.getItem('lis_auth_token') || localStorage.getItem('token') || '';
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+      window.open(`${API_BASE}/api/billing/pdf?patientId=${encodeURIComponent(cleanPid)}${token ? `&token=${encodeURIComponent(token)}` : ''}&preview=true`, '_blank');
     }
   };
 

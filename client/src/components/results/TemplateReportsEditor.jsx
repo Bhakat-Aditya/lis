@@ -364,7 +364,8 @@ export default function TemplateReportsEditor({
     if (targetUrl) {
       window.open(targetUrl, '_blank');
     } else if (cleanPid) {
-      window.open(`/api/reports/pdf?patientId=${encodeURIComponent(cleanPid)}&addHeader=true&download=true`, '_blank');
+      const token = localStorage.getItem('lis_auth_token') || localStorage.getItem('token') || '';
+      window.open(`/api/reports/pdf?patientId=${encodeURIComponent(cleanPid)}&addHeader=true&download=true${token ? `&token=${encodeURIComponent(token)}` : ''}`, '_blank');
     } else {
       setGlobalError('No report PDF available for this patient yet.');
     }

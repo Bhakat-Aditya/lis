@@ -134,6 +134,13 @@ export const login = async (req, res, next) => {
       expiresIn: config.jwtExpiresIn,
     });
 
+    res.cookie('lis_auth_token', token, {
+      httpOnly: false,
+      secure: config.nodeEnv === 'production',
+      sameSite: 'lax',
+      maxAge: 24 * 60 * 60 * 1000,
+    });
+
     return res.json({
       STATUS: 'SUCCESS',
       StatusCode: '0000',

@@ -11,6 +11,8 @@ export const requireAuth = async (req, res, next) => {
       token = authHeader.split(' ')[1];
     } else if (req.query && req.query.token) {
       token = req.query.token;
+    } else if (req.cookies && (req.cookies.lis_auth_token || req.cookies.token)) {
+      token = req.cookies.lis_auth_token || req.cookies.token;
     }
 
     if (!token) {

@@ -119,7 +119,8 @@ export default function Sidebar({ onOpenNewPatient }) {
 
   const handleOpenAwsPdf = () => {
     if (!cleanPid) return;
-    window.open(`/api/reports/pdf?patientId=${cleanPid}&addHeader=true`, '_blank');
+    const token = localStorage.getItem('lis_auth_token') || localStorage.getItem('token') || '';
+    window.open(`/api/reports/pdf?patientId=${encodeURIComponent(cleanPid)}&addHeader=true${token ? `&token=${encodeURIComponent(token)}` : ''}`, '_blank');
   };
 
   return (

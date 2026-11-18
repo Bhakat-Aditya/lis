@@ -1,8 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
 import api from '../services/api';
 import ResultsEntry from '../components/results/ResultsEntry.jsx';
-import { FlaskConical, Search, RefreshCw, UserCheck, CheckCircle, BookOpen, Clock, Calendar } from 'lucide-react';
+import {
+  FlaskConical,
+  Search,
+  RefreshCw,
+  UserCheck,
+  CheckCircle,
+  BookOpen,
+  Clock,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  User,
+} from 'lucide-react';
 import { StatusBadge } from '../components/common/Badge.jsx';
 import ClinicalGuideModal from '../components/common/ClinicalGuideModal.jsx';
 import { formatDisplayDate, sortPatientsByRecent, getLocalDateString, shiftDateDays } from '../utils/dateUtils.js';
@@ -32,6 +44,8 @@ export default function ResultsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [queuePhaseFilter, setQueuePhaseFilter] = useState('ALL');
   const [isGuideOpen, setIsGuideOpen] = useState(false);
+
+  const carouselRef = useRef(null);
 
   const handleDatePreset = (preset) => {
     setDateFilterPreset(preset);
@@ -131,6 +145,62 @@ export default function ResultsPage() {
     })
   );
 
+  const currentPatientIndex = filteredPatients.findIndex(
+    (p) => (p.patientId || p.slNo) === (selectedPatient?.patientId || selectedPatient?.slNo)
+  );
+
+  const scrollToPatientCard = (patientId) => {
+    if (!patientId || !carouselRef.current) return;
+    const cardEl = carouselRef.current.querySelector(`[data-patient-id="${patientId}"]`);
+    if (cardEl) {
+      cardEl.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'center',
+      });
+    }
+  };
+
+  const handleSelectPatient = (patient) => {
+    loadPatientReport(patient);
+    scrollToPatientCard(patient.patientId || patient.slNo);
+  };
+
+  const handlePrevPatient = () => {
+    if (currentPatientIndex > 0) {
+      const prev = filteredPatients[currentPatientIndex - 1];
+      handleSelectPatient(prev);
+    }
+  };
+
+  const handleNextPatient = () => {
+    if (currentPatientIndex >= 0 && currentPatientIndex < filteredPatients.length - 1) {
+      const next = filteredPatients[currentPatientIndex + 1];
+      handleSelectPatient(next);
+    }
+  };
+
+  const handleScrollCarousel = (direction) => {
+    if (!carouselRef.current) return;
+    const offset = direction === 'left' ? -350 : 350;
+    carouselRef.current.scrollBy({ left: offset, behavior: 'smooth' });
+  };
+
+  // If current patient is filtered out, select first matching patient
+  useEffect(() => {
+    if (filteredPatients.length > 0) {
+      const isStillPresent = selectedPatient && filteredPatients.some(
+        (p) => (p.patientId || p.slNo) === (selectedPatient.patientId || selectedPatient.slNo)
+      );
+      if (!isStillPresent) {
+        handleSelectPatient(filteredPatients[0]);
+      }
+    } else {
+      setSelectedPatient(null);
+      setReports([]);
+    }
+  }, [queuePhaseFilter, searchTerm]);
+
   return (
     <section className="space-y-3">
       <Helmet>
@@ -168,7 +238,7 @@ export default function ResultsPage() {
             <button
               type="button"
               onClick={() => handleDatePreset('today')}
-              className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+              className={`px-2 py-0.5 rounded-md transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent] ${
                 dateFilterPreset === 'today'
                   ? 'bg-blue-600 text-white shadow-xs font-bold'
                   : 'text-slate-600 hover:text-slate-900'
@@ -179,7 +249,7 @@ export default function ResultsPage() {
             <button
               type="button"
               onClick={() => handleDatePreset('yesterday')}
-              className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+              className={`px-2 py-0.5 rounded-md transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent] ${
                 dateFilterPreset === 'yesterday'
                   ? 'bg-blue-600 text-white shadow-xs font-bold'
                   : 'text-slate-600 hover:text-slate-900'
@@ -190,7 +260,7 @@ export default function ResultsPage() {
             <button
               type="button"
               onClick={() => handleDatePreset('last7days')}
-              className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+              className={`px-2 py-0.5 rounded-md transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent] ${
                 dateFilterPreset === 'last7days'
                   ? 'bg-blue-600 text-white shadow-xs font-bold'
                   : 'text-slate-600 hover:text-slate-900'
@@ -209,7 +279,7 @@ export default function ResultsPage() {
                 setFromDate(e.target.value);
                 setDateFilterPreset('custom');
               }}
-              className="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-xs text-slate-800 font-medium"
+              className="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-xs text-slate-800 font-medium outline-none focus:outline-none"
             />
             <span className="text-slate-400">to</span>
             <input
@@ -219,13 +289,13 @@ export default function ResultsPage() {
                 setToDate(e.target.value);
                 setDateFilterPreset('custom');
               }}
-              className="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-xs text-slate-800 font-medium"
+              className="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-xs text-slate-800 font-medium outline-none focus:outline-none"
             />
           </div>
 
           <button
             onClick={() => setIsGuideOpen(true)}
-            className="flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 active:scale-95 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs"
+            className="flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 active:scale-95 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
           >
             <BookOpen className="w-3.5 h-3.5" />
             <span>Guide</span>
@@ -234,7 +304,7 @@ export default function ResultsPage() {
           <button
             onClick={fetchLabWorklist}
             disabled={loading}
-            className="flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs disabled:opacity-50"
+            className="flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs disabled:opacity-50 outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
             title="Refresh worklist"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -243,139 +313,209 @@ export default function ResultsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5">
-        {/* Left Side: Patient Queue (3 cols on xl) */}
-        <div className="lg:col-span-4 xl:col-span-3 bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden flex flex-col">
-          <div className="p-3.5 bg-slate-50/80 border-b border-slate-200 space-y-2">
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Search by Barcode, Patient Name, Doctor..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-8 pr-7 py-1.5 text-xs bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-medium"
-              />
-              {searchTerm && (
-                <button
-                  type="button"
-                  onClick={() => setSearchTerm('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
-                  title="Clear search"
-                >
-                  &times;
-                </button>
-              )}
-            </div>
-
-            {/* Queue Phase Quick Filters */}
-            <div className="flex items-center gap-1 overflow-x-auto text-[10px] font-bold">
+      {/* 1. TOP NAME SELECTION: Horizontal Slide Bar & Quick Queue Navigator */}
+      <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs p-3 space-y-2.5">
+        {/* Navigation & Filter Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          {/* Left: Quick Search */}
+          <div className="relative w-full sm:w-72">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search by Barcode, Patient Name, Doctor..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-8 pr-7 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:bg-white focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20 font-medium select-none [-webkit-tap-highlight-color:transparent]"
+            />
+            {searchTerm && (
               <button
                 type="button"
-                onClick={() => setQueuePhaseFilter('ALL')}
-                className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
-                  queuePhaseFilter === 'ALL'
-                    ? 'bg-slate-900 text-white shadow-2xs'
-                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-                }`}
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
+                title="Clear search"
               >
-                All ({patients.length})
+                &times;
               </button>
-              <button
-                type="button"
-                onClick={() => setQueuePhaseFilter('SAMPLE')}
-                className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
-                  queuePhaseFilter === 'SAMPLE'
-                    ? 'bg-amber-500 text-white shadow-2xs'
-                    : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
-                }`}
-              >
-                Pending
-              </button>
-              <button
-                type="button"
-                onClick={() => setQueuePhaseFilter('ENTRY')}
-                className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
-                  queuePhaseFilter === 'ENTRY'
-                    ? 'bg-violet-600 text-white shadow-2xs'
-                    : 'bg-violet-50 text-violet-800 hover:bg-violet-100 border border-violet-200'
-                }`}
-              >
-                Testing
-              </button>
-              <button
-                type="button"
-                onClick={() => setQueuePhaseFilter('READY')}
-                className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
-                  queuePhaseFilter === 'READY'
-                    ? 'bg-emerald-600 text-white shadow-2xs'
-                    : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
-                }`}
-              >
-                Ready
-              </button>
-            </div>
+            )}
           </div>
 
-          <div className="divide-y divide-slate-100 max-h-[680px] overflow-y-auto">
-            {filteredPatients.map((p, idx) => {
-              const isSelected = selectedPatient?.patientId === p.patientId;
-              const statusStr = String(p.status || '').toUpperCase();
+          {/* Center: Phase Filter Pills */}
+          <div className="flex items-center gap-1 overflow-x-auto text-[11px] font-bold">
+            <button
+              type="button"
+              onClick={() => setQueuePhaseFilter('ALL')}
+              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent] ${
+                queuePhaseFilter === 'ALL'
+                  ? 'bg-slate-900 text-white shadow-2xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
+              }`}
+            >
+              All ({patients.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setQueuePhaseFilter('SAMPLE')}
+              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent] ${
+                queuePhaseFilter === 'SAMPLE'
+                  ? 'bg-amber-500 text-white shadow-2xs'
+                  : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
+              }`}
+            >
+              Pending
+            </button>
+            <button
+              type="button"
+              onClick={() => setQueuePhaseFilter('ENTRY')}
+              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent] ${
+                queuePhaseFilter === 'ENTRY'
+                  ? 'bg-violet-600 text-white shadow-2xs'
+                  : 'bg-violet-50 text-violet-800 hover:bg-violet-100 border border-violet-200'
+              }`}
+            >
+              Testing
+            </button>
+            <button
+              type="button"
+              onClick={() => setQueuePhaseFilter('READY')}
+              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent] ${
+                queuePhaseFilter === 'READY'
+                  ? 'bg-emerald-600 text-white shadow-2xs'
+                  : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
+              }`}
+            >
+              Ready
+            </button>
+          </div>
+
+          {/* Right: Next / Prev Step Controls */}
+          <div className="flex items-center gap-1.5 ml-auto">
+            <button
+              type="button"
+              onClick={() => handleScrollCarousel('left')}
+              className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
+              title="Scroll slide bar left"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+
+            <button
+              type="button"
+              onClick={handlePrevPatient}
+              disabled={currentPatientIndex <= 0}
+              className="flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-slate-50 border border-slate-300 disabled:opacity-40 text-slate-700 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
+              title="Switch to previous patient"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              <span>Prev</span>
+            </button>
+
+            <div className="px-2.5 py-1 bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-extrabold text-indigo-900 font-mono shadow-2xs">
+              {currentPatientIndex >= 0 ? `${currentPatientIndex + 1} / ${filteredPatients.length}` : '0 / 0'}
+            </div>
+
+            <button
+              type="button"
+              onClick={handleNextPatient}
+              disabled={currentPatientIndex < 0 || currentPatientIndex >= filteredPatients.length - 1}
+              className="flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-slate-50 border border-slate-300 disabled:opacity-40 text-slate-700 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
+              title="Switch to next patient"
+            >
+              <span>Next</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleScrollCarousel('right')}
+              className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
+              title="Scroll slide bar right"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Horizontal Patient Carousel Track */}
+        <div
+          ref={carouselRef}
+          data-lenis-prevent="true"
+          className="flex items-stretch gap-2.5 overflow-x-auto pb-1.5 pt-0.5 scrollbar-thin scroll-smooth select-none"
+        >
+          {filteredPatients.length > 0 ? (
+            filteredPatients.map((p, idx) => {
+              const isSelected = (p.patientId || p.slNo) === (selectedPatient?.patientId || selectedPatient?.slNo);
+              const pId = p.patientId || p.slNo;
 
               return (
                 <div
-                  key={p.patientId || idx}
-                  onClick={() => loadPatientReport(p)}
-                  className={`p-3.5 cursor-pointer transition-all ${
+                  key={pId || idx}
+                  data-patient-id={pId}
+                  onClick={() => handleSelectPatient(p)}
+                  className={`min-w-[220px] max-w-[250px] shrink-0 rounded-xl p-2.5 cursor-pointer transition-all outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent] ${
                     isSelected
-                      ? 'bg-indigo-50/90 border-l-4 border-indigo-600 shadow-2xs'
-                      : 'hover:bg-slate-50 border-l-4 border-transparent'
+                      ? 'bg-gradient-to-br from-indigo-600 via-indigo-600 to-indigo-700 text-white shadow-md ring-2 ring-indigo-400/60 border border-indigo-500 scale-[1.01]'
+                      : 'bg-slate-50/90 hover:bg-slate-100/90 text-slate-800 border border-slate-200/90 hover:border-slate-300 shadow-2xs'
                   }`}
                 >
-                  <div className="flex items-center justify-between text-xs mb-1.5">
+                  <div className="flex items-center justify-between text-xs mb-1">
                     <div className="flex items-center gap-1.5">
-                      <span className="font-bold text-slate-500 font-mono text-[10px]">
+                      <span className={`font-mono text-[10px] font-bold ${isSelected ? 'text-indigo-200' : 'text-slate-400'}`}>
                         #{idx + 1}
                       </span>
-                      <span className="font-bold text-blue-700 font-mono text-[11px] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200/70">
+                      <span
+                        className={`font-mono font-bold text-[11px] px-1.5 py-0.2 rounded border ${
+                          isSelected
+                            ? 'bg-white/20 text-white border-white/30'
+                            : 'bg-blue-50 text-blue-700 border-blue-200/70'
+                        }`}
+                      >
                         {p.slNo || p.barcode || '-'}
                       </span>
                     </div>
                     <StatusBadge status={p.status || 'SAMPLE'} />
                   </div>
-                  <div className="font-bold text-slate-900 text-xs">{p.name}</div>
-                  <div className="text-[11px] text-slate-500 flex justify-between mt-1">
-                    <span>{formatGender(p.gender)} • {p.age || '-'}</span>
-                    <span className="font-mono text-slate-500 font-medium text-[10px]">{formatDisplayDate(p.regDate)}</span>
+
+                  <div className={`font-bold text-xs truncate ${isSelected ? 'text-white' : 'text-slate-900'}`} title={p.name}>
+                    {p.name}
                   </div>
+
+                  <div className={`text-[10px] flex items-center justify-between mt-1 ${isSelected ? 'text-indigo-100' : 'text-slate-500'}`}>
+                    <span>{formatGender(p.gender)} • {p.age || '-'}Y</span>
+                    <span className="font-mono">{formatDisplayDate(p.regDate)}</span>
+                  </div>
+
                   {p.referedDr && (
-                    <div className="text-[10px] text-slate-400 mt-0.5 truncate">
+                    <div className={`text-[10px] truncate mt-0.5 ${isSelected ? 'text-indigo-200' : 'text-slate-400'}`} title={`Ref: ${p.referedDr}`}>
                       Ref: {p.referedDr}
                     </div>
                   )}
                 </div>
               );
-            })}
-          </div>
-        </div>
-
-        {/* Right Side: Results Entry Table (8 cols / 9 cols on xl) */}
-        <div className="lg:col-span-8 xl:col-span-9">
-          {selectedPatient ? (
-            <ResultsEntry
-              key={selectedPatient.patientId}
-              patient={selectedPatient}
-              reports={reports}
-              templates={templates}
-              onRefresh={() => loadPatientReport(selectedPatient)}
-            />
+            })
           ) : (
-            <div className="bg-white p-16 text-center text-slate-400 rounded-2xl border border-slate-200">
-              <FlaskConical className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-              <span className="font-semibold text-xs">Select a patient order from the left queue to enter test values.</span>
+            <div className="w-full py-6 text-center text-slate-400 text-xs font-semibold">
+              No patients match current filters.
             </div>
           )}
         </div>
+      </div>
+
+      {/* 2. RESULTS ENTRY WORKSTATION: Full-width Results Bench, Filters & Test Evaluation Panel */}
+      <div className="w-full">
+        {selectedPatient ? (
+          <ResultsEntry
+            key={selectedPatient.patientId || selectedPatient.slNo}
+            patient={selectedPatient}
+            reports={reports}
+            templates={templates}
+            onRefresh={() => loadPatientReport(selectedPatient)}
+          />
+        ) : (
+          <div className="bg-white p-16 text-center text-slate-400 rounded-2xl border border-slate-200">
+            <FlaskConical className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+            <span className="font-semibold text-xs">Select a patient order from the top slide bar to enter test values.</span>
+          </div>
+        )}
       </div>
 
       <ClinicalGuideModal

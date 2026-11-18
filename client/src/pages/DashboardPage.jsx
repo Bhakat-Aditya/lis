@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet-async';
 import api from '../services/api.js';
 import StatCards from '../components/dashboard/StatCards.jsx';
-import PatientsPage from './PatientsPage.jsx';
 import AnalyticsBanner from '../components/dashboard/AnalyticsBanner.jsx';
 import AnalyticsSectionCard from '../components/dashboard/AnalyticsSectionCard.jsx';
 import AnalyticsStackedBarChart from '../components/dashboard/AnalyticsStackedBarChart.jsx';
@@ -56,15 +55,15 @@ const calculatePastDate = (baseDateStr, daysPrior = 8) => {
 };
 
 export default function DashboardPage({ onOpenNewPatient }) {
-  const [activeView, setActiveView] = useState('analytics'); // 'analytics' | 'worklist'
+  const [activeView, setActiveView] = useState('analytics'); // 'analytics' | 'machines'
   const todayStr = getTodayDate();
+  // Default to recent active window (past 2 days ending today) so active records and billing populate immediately
+  const defaultFromStr = calculatePastDate(todayStr, 2);
   const [toDate, setToDate] = useState(todayStr);
-  const [fromDate, setFromDate] = useState(todayStr);
+  const [fromDate, setFromDate] = useState(defaultFromStr);
   const [analyticsData, setAnalyticsData] = useState(null);
   const [loadingAnalytics, setLoadingAnalytics] = useState(true);
   const [selectedDetailChart, setSelectedDetailChart] = useState(null);
-  const [patients, setPatients] = useState([]);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Live BetterStack Heartbeats Telemetry
   const [heartbeatData, setHeartbeatData] = useState(null);
@@ -157,11 +156,11 @@ export default function DashboardPage({ onOpenNewPatient }) {
     }
   }, []);
 
-  // Initial load and whenever fromDate/toDate or refreshTrigger changes:
+  // Initial load and whenever fromDate/toDate changes:
   // ALWAYS call getdashboard api
   useEffect(() => {
     fetchDashboardJson(fromDate, toDate);
-  }, [fromDate, toDate, refreshTrigger, fetchDashboardJson]);
+  }, [fromDate, toDate, fetchDashboardJson]);
 
   // Handle user clicking the Refresh button:
   // ONLY when user clicked on refresh button, call POST API "DASHBOARDREFRESH"
@@ -247,51 +246,34 @@ export default function DashboardPage({ onOpenNewPatient }) {
     // Note: useEffect automatically triggers fetchDashboardJson with new dates (prevent duplicate call)
   };
 
-  // Derived KPI values: strictly prefer API kpiSummary / analyticsData telemetry
-  const totalCount =
+  // Clean 4-KPI values requested by user: Total Patients, Total Payment Received, Total Reports Released, Total Billed Amount
+  const totalPatients =
+    analyticsData?.summary?.totalPatients ??
     analyticsData?.kpiSummary?.totalPatients ??
     analyticsData?.patientBillStatus?.total ??
     analyticsData?.maleFemaleRatio?.total ??
-    patients.length;
+    0;
 
-  const samplePending =
-    analyticsData?.kpiSummary?.samplePending ??
-    analyticsData?.patientReportPreparationProgress?.dailyStatistics?.inDataEntry ??
-    (analyticsData?.patientReportPreparationProgress?.breakdown?.find(
-      (b) => b.label === 'SAMPLE' || b.label === 'ENTRY'
-    )?.count) ??
-    patients.filter((p) => {
-      const s = String(p.status || '').toUpperCase();
-      return s === 'REGISTERED' || s === 'SAMPLE';
-    }).length;
+  const paymentReceived =
+    analyticsData?.summary?.paymentReceived ??
+    analyticsData?.summary?.totalPaymentReceived ??
+    analyticsData?.billAmountBreakup?.dailyStatistics?.totalReceived ??
+    analyticsData?.kpiSummary?.paymentReceived ??
+    0;
 
-  const inTesting =
-    analyticsData?.kpiSummary?.inTesting ??
-    analyticsData?.patientReportPreparationProgress?.dailyStatistics?.partiallyResulted ??
-    (analyticsData?.patientReportPreparationProgress?.breakdown?.find(
-      (b) => b.label === 'RESULT PARTLY' || b.label === 'TESTING'
-    )?.count) ??
-    patients.filter((p) => {
-      const s = String(p.status || '').toUpperCase();
-      return ['ENTRY', 'TESTING', 'SAVED', 'RESULT PARTLY'].includes(s);
-    }).length;
-
-  const readyPrint =
-    analyticsData?.kpiSummary?.reportsReadyForPrinting ??
+  const reportsReleased =
+    analyticsData?.summary?.reportsReleased ??
+    analyticsData?.summary?.totalReportsReleased ??
     analyticsData?.patientReportPreparationProgress?.dailyStatistics?.readyForDelivery ??
-    (analyticsData?.patientReportPreparationProgress?.breakdown?.find(
-      (b) => b.label === 'PRINTING' || b.label === 'RELEASED'
-    )?.count) ??
-    patients.filter((p) => {
-      const s = String(p.status || '').toUpperCase();
-      return ['PRINTING', 'APPROVED', 'RELEASED', 'READY', 'REPORT READY', 'VERIFIED'].includes(s);
-    }).length;
+    analyticsData?.kpiSummary?.reportsReleased ??
+    0;
 
-  const totalRevenue =
-    analyticsData?.kpiSummary?.totalBilledAmount ??
+  const totalBilledAmount =
+    analyticsData?.summary?.totalBilledAmount ??
     analyticsData?.billAmountBreakup?.grossAmount ??
     analyticsData?.billAmountBreakup?.dailyStatistics?.grossBilled ??
-    patients.reduce((acc, p) => acc + (Number(p.totalBill) || 0), 0);
+    analyticsData?.kpiSummary?.totalBilledAmount ??
+    0;
 
   // Derived Metrics for 3-in-a-row Grid Cards
   const regList = analyticsData?.last9DaysRegistration || [];
@@ -357,14 +339,12 @@ export default function DashboardPage({ onOpenNewPatient }) {
         />
       </Helmet>
 
-      {/* Top Banner with Date Selector, Clock, Refresh & Patient Entry */}
+      {/* Top Banner with Date Selector, Clock & Refresh */}
       <AnalyticsBanner
         fromDate={fromDate}
         toDate={toDate}
         onFromDateChange={setFromDate}
         onToDateChange={setToDate}
-        onSubmitDates={handleDatesSubmit}
-        onOpenNewPatient={onOpenNewPatient}
         onRefreshUpstream={handleRefreshUpstream}
         isRefreshing={isRefreshing}
         refreshSecondsLeft={refreshSecondsLeft}
@@ -409,13 +389,12 @@ export default function DashboardPage({ onOpenNewPatient }) {
         </div>
       )}
 
-      {/* 5-Metric Top KPI Stat Cards */}
+      {/* 4-Metric Clean KPI Stat Cards */}
       <StatCards
-        totalCount={totalCount}
-        samplePending={samplePending}
-        inTesting={inTesting}
-        readyPrint={readyPrint}
-        totalRevenue={totalRevenue}
+        totalPatients={totalPatients}
+        paymentReceived={paymentReceived}
+        reportsReleased={reportsReleased}
+        totalBilledAmount={totalBilledAmount}
       />
 
       {/* VIEW 1: Analytics Overview (3-in-a-row responsive grid with deep-dive analysis) */}
@@ -717,17 +696,6 @@ export default function DashboardPage({ onOpenNewPatient }) {
       {activeView === 'machines' && (
         <div className="animate-in fade-in duration-300">
           <MachineStatusHub />
-        </div>
-      )}
-
-      {/* VIEW 3: Primary Worklist Table (Operational Patient Queue) */}
-      {activeView === 'worklist' && (
-        <div className="animate-in fade-in duration-300">
-          <PatientsPage
-            onOpenNewPatient={onOpenNewPatient}
-            onPatientsLoaded={setPatients}
-            refreshTrigger={refreshTrigger}
-          />
         </div>
       )}
 

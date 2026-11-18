@@ -1,88 +1,87 @@
 import React from 'react';
 import {
   Users,
-  Clock,
-  FlaskConical,
-  CheckCircle2,
-  DollarSign,
+  CreditCard,
+  FileCheck2,
+  IndianRupee,
 } from 'lucide-react';
 
 export default function StatCards({
-  totalCount = 0,
-  samplePending = 0,
-  inTesting = 0,
-  readyPrint = 0,
-  totalRevenue = 0,
+  totalPatients = 0,
+  paymentReceived = 0,
+  reportsReleased = 0,
+  totalBilledAmount = 0,
+  // Legacy / fallback props
+  totalCount,
+  totalRevenue,
+  readyPrint,
 }) {
+  const patientCount = Number(totalPatients ?? totalCount ?? 0);
+  const receivedAmount = Number(paymentReceived ?? 0);
+  const releasedCount = Number(reportsReleased ?? readyPrint ?? 0);
+  const billedAmount = Number(totalBilledAmount ?? totalRevenue ?? 0);
+
   const cards = [
     {
-      id: 'ALL',
+      id: 'TOTAL_PATIENTS',
       title: 'Total Patients',
-      value: totalCount,
-      subtitle: "Today's registered queue",
+      value: patientCount.toLocaleString('en-IN'),
+      subtitle: 'Registered diagnostic patients',
       icon: Users,
       color: 'indigo',
       badgeBg: 'bg-indigo-50 text-indigo-700 border-indigo-100',
       iconBg: 'bg-indigo-50 text-indigo-600',
     },
     {
-      id: 'SAMPLE_PENDING',
-      title: 'Sample Pending',
-      value: samplePending,
-      subtitle: 'Awaiting blood/urine draw',
-      icon: Clock,
-      color: 'amber',
-      badgeBg: 'bg-amber-50 text-amber-700 border-amber-100',
-      iconBg: 'bg-amber-50 text-amber-600',
-    },
-    {
-      id: 'TESTING',
-      title: 'In Testing',
-      value: inTesting,
-      subtitle: 'On analyzers / technician entry',
-      icon: FlaskConical,
-      color: 'purple',
-      badgeBg: 'bg-purple-50 text-purple-700 border-purple-100',
-      iconBg: 'bg-purple-50 text-purple-600',
-    },
-    {
-      id: 'READY',
-      title: 'Ready to Print',
-      value: readyPrint,
-      subtitle: 'Verified & ready for release',
-      icon: CheckCircle2,
+      id: 'PAYMENT_RECEIVED',
+      title: 'Total Payment Received',
+      value: `₹${receivedAmount.toLocaleString('en-IN')}`,
+      subtitle: 'Total collections received',
+      icon: CreditCard,
       color: 'emerald',
       badgeBg: 'bg-emerald-50 text-emerald-700 border-emerald-100',
       iconBg: 'bg-emerald-50 text-emerald-600',
     },
     {
-      id: 'BILLING',
-      title: "Today's Billing",
-      value: `₹${Number(totalRevenue || 0).toLocaleString('en-IN')}`,
-      subtitle: 'Total diagnostics billed',
-      icon: DollarSign,
+      id: 'REPORTS_RELEASED',
+      title: 'Total Report Released',
+      value: releasedCount.toLocaleString('en-IN'),
+      subtitle: 'Verified & released reports',
+      icon: FileCheck2,
       color: 'blue',
       badgeBg: 'bg-blue-50 text-blue-700 border-blue-100',
       iconBg: 'bg-blue-50 text-blue-600',
     },
+    {
+      id: 'BILLED_AMOUNT',
+      title: 'Total Billed Amount',
+      value: `₹${billedAmount.toLocaleString('en-IN')}`,
+      subtitle: 'Gross diagnostic invoices',
+      icon: IndianRupee,
+      color: 'amber',
+      badgeBg: 'bg-amber-50 text-amber-700 border-amber-100',
+      iconBg: 'bg-amber-50 text-amber-600',
+    },
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
       {cards.map((card) => {
         const Icon = card.icon;
 
         return (
           <div
             key={card.id}
-            className="bg-white rounded-2xl border border-slate-200/90 p-4.5 shadow-xs transition-all duration-200 relative select-none"
+            className="bg-white rounded-2xl border border-slate-200/90 p-4.5 shadow-xs transition-all duration-200 relative select-none hover:border-slate-300"
           >
             {/* Header: Title and Icon */}
             <div className="flex items-center justify-between gap-2 mb-2.5">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
                 {card.title}
               </span>
-              <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${card.iconBg}`}>
+              <div
+                className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${card.iconBg}`}
+              >
                 <Icon className="w-4 h-4" />
               </div>
             </div>
@@ -93,7 +92,7 @@ export default function StatCards({
             </div>
 
             {/* Subtitle */}
-            <div className="mt-2 pt-2 border-t border-slate-100 text-[11px] text-slate-500 truncate">
+            <div className="mt-2 pt-2 border-t border-slate-100 text-[11px] text-slate-500 truncate font-medium">
               {card.subtitle}
             </div>
           </div>

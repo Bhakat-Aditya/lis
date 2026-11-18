@@ -1254,7 +1254,7 @@ export default function ResultsEntry({
             type="button"
             onClick={() => handleSyncAnalyzer({ silent: false })}
             disabled={isSyncing}
-            className="flex items-center gap-1.5 px-3 py-1 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-300 rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-300 rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer disabled:opacity-50 outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
             title={lastSyncedTime ? `Manual sync with lab analyzer (Last synced: ${lastSyncedTime})` : 'Sync results from analyzer machine'}
           >
             <RefreshCw className={`w-3.5 h-3.5 text-sky-700 ${isSyncing ? 'animate-spin' : ''}`} />
@@ -1274,7 +1274,7 @@ export default function ResultsEntry({
                 setSuccessMsg('Automated analyzer sync paused');
               }
             }}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent] ${
               rateLimitCooldownSec > 0
                 ? 'bg-amber-50 text-amber-800 border-amber-300 shadow-2xs'
                 : autoSyncEnabled
@@ -1311,33 +1311,11 @@ export default function ResultsEntry({
           <button
             type="button"
             onClick={() => setGuideModalOpen(true)}
-            className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold transition-all cursor-pointer"
+            className="flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
             title="Open Clinical Interpretations Guide"
           >
             <BookOpen className="w-3.5 h-3.5 text-slate-500" />
             <span className="hidden xl:inline">Guide</span>
-          </button>
-
-          {/* Auto-Fill Healthy Defaults */}
-          <button
-            type="button"
-            onClick={handleAutoFillHealthyDefaults}
-            className="flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs"
-            title="Auto-fill empty fields with safe normal baseline values"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Fill Baseline</span>
-          </button>
-
-          {/* Doctor Sign-off / Verification Modal Trigger */}
-          <button
-            type="button"
-            onClick={() => setApprovalModalOpen(true)}
-            className="flex items-center gap-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer"
-            title="Doctor verification & digital sign-off"
-          >
-            <FileCheck className="w-3.5 h-3.5" />
-            <span>Sign-Off</span>
           </button>
 
           {/* Official AWS Report PDF Button */}
@@ -1352,10 +1330,11 @@ export default function ResultsEntry({
               if (targetUrl) {
                 window.open(targetUrl, '_blank');
               } else {
-                window.open(`/api/reports/pdf?patientId=${cleanPid || rawPid}&addHeader=true`, '_blank');
+                const token = localStorage.getItem('lis_auth_token') || localStorage.getItem('token') || '';
+                window.open(`/api/reports/pdf?patientId=${encodeURIComponent(cleanPid || rawPid)}&addHeader=true${token ? `&token=${encodeURIComponent(token)}` : ''}`, '_blank');
               }
             }}
-            className="flex items-center gap-1.5 px-3 py-1 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
             title="Download / Print official AWS Diagnostic Report PDF"
           >
             <Printer className="w-3.5 h-3.5" />
@@ -1367,7 +1346,7 @@ export default function ResultsEntry({
             type="button"
             onClick={handleReceiveAllSamples}
             disabled={receivingAll}
-            className="flex items-center gap-1.5 px-3 py-1 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer disabled:opacity-50 outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
             title="Receive and accession all pending specimen tubes for this patient (RECEIVESAMPLE)"
           >
             <TestTube className={`w-3.5 h-3.5 ${receivingAll ? 'animate-spin' : ''}`} />
@@ -1378,7 +1357,7 @@ export default function ResultsEntry({
           <button
             type="button"
             onClick={handleReleaseReport}
-            className="flex items-center gap-1.5 px-3 py-1 bg-teal-700 hover:bg-teal-800 active:scale-95 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1 bg-teal-700 hover:bg-teal-800 active:scale-95 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
             title="Release finalized diagnostic report for collection & printing (RELEASEREPORT)"
           >
             <Send className="w-3.5 h-3.5" />
@@ -1389,35 +1368,11 @@ export default function ResultsEntry({
           <button
             type="button"
             onClick={handleRecallReport}
-            className="flex items-center gap-1.5 px-3 py-1 bg-rose-700 hover:bg-rose-800 active:scale-95 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1 bg-rose-700 hover:bg-rose-800 active:scale-95 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
             title="Recall report back to draft status for correction (RECALLPORT)"
           >
             <Undo2 className="w-3.5 h-3.5" />
             <span>Recall Report</span>
-          </button>
-
-          {/* WhatsApp Resend Button with Confirmation */}
-          <button
-            type="button"
-            onClick={handleSendWhatsApp}
-            className="flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer"
-            title="Dispatch report directly to patient WhatsApp (SENDWHATSAPP)"
-          >
-            <MessageSquare className="w-3.5 h-3.5" />
-            <span>WhatsApp Resend</span>
-          </button>
-
-
-          {/* Save All Results Button */}
-          <button
-            type="button"
-            onClick={handleSaveAll}
-            disabled={savingAll}
-            className="flex items-center gap-1.5 px-3.5 py-1 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer disabled:opacity-50"
-            title="Save all changes (Ctrl+S)"
-          >
-            <Save className={`w-3.5 h-3.5 ${savingAll ? 'animate-spin' : ''}`} />
-            <span>{savingAll ? 'Saving...' : 'Save All (Ctrl+S)'}</span>
           </button>
 
           {/* View Mode Toggle (Table / Cards) */}
@@ -1426,7 +1381,7 @@ export default function ResultsEntry({
               type="button"
               onClick={() => setViewMode('table')}
               title="Compact Tabular Grid (Recommended)"
-              className={`p-1 px-1.5 rounded transition-all cursor-pointer ${
+              className={`p-1 px-1.5 rounded transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent] ${
                 viewMode === 'table'
                   ? 'bg-white text-indigo-700 font-bold shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -1438,7 +1393,7 @@ export default function ResultsEntry({
               type="button"
               onClick={() => setViewMode('cards')}
               title="Diagnostic Card Grid"
-              className={`p-1 px-1.5 rounded transition-all cursor-pointer ${
+              className={`p-1 px-1.5 rounded transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent] ${
                 viewMode === 'cards'
                   ? 'bg-white text-indigo-700 font-bold shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'

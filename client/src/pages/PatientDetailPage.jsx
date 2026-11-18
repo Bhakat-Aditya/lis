@@ -65,6 +65,7 @@ export default function PatientDetailPage() {
   const [reportPdfUrl, setReportPdfUrl] = useState('');
   const [billPdfUrl, setBillPdfUrl] = useState('');
   const [billRefreshKey, setBillRefreshKey] = useState(0);
+  const [barcodeUrls, setBarcodeUrls] = useState([]);
 
   // Modals
   const [showApproval, setShowApproval] = useState(false);
@@ -215,8 +216,10 @@ export default function PatientDetailPage() {
 
       const awsReportUrl = res.data?.printPDFUrl || pt?.printPDFUrl || res.data?.reportUrl || '';
       const awsBillUrl = res.data?.billUrl || pt?.billUrl || '';
+      const bUrls = res.data?.printBarCodeUrls || pt?.printBarCodeUrls || [];
       if (awsReportUrl) setReportPdfUrl(awsReportUrl);
       if (awsBillUrl) setBillPdfUrl(awsBillUrl);
+      if (Array.isArray(bUrls) && bUrls.length > 0) setBarcodeUrls(bUrls);
 
       if (pt) {
         setPatient(pt);
@@ -255,8 +258,8 @@ export default function PatientDetailPage() {
     const cleanPid = rawPid
       ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
       : '';
-    const token = localStorage.getItem('token');
-    window.open(`/api/reports/pdf?patientId=${cleanPid || rawPid}&addHeader=${withHeader}${token ? `&token=${token}` : ''}`, '_blank');
+    const token = localStorage.getItem('lis_auth_token') || localStorage.getItem('token') || '';
+    window.open(`/api/reports/pdf?patientId=${encodeURIComponent(cleanPid || rawPid)}&addHeader=${withHeader}${token ? `&token=${encodeURIComponent(token)}` : ''}`, '_blank');
   };
 
   const handleOpenBillPdf = () => {
@@ -890,6 +893,7 @@ export default function PatientDetailPage() {
         isOpen={showBarcodeModal}
         onClose={() => setShowBarcodeModal(false)}
         patient={patient}
+        barcodeUrls={barcodeUrls.length > 0 ? barcodeUrls : patient?.printBarCodeUrls}
       />
 
       {/* Discount Modal */}
