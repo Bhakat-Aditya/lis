@@ -1,8 +1,20 @@
 import axios from 'axios';
 
-// The middleman backend URL.
-// When deployed on Vercel, set VITE_API_BASE_URL to your Render backend URL (e.g. https://lis-middleman-server.onrender.com)
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+// Helper to reliably get the API base URL across localhost and production (e.g. Vercel + Render)
+export const getApiBaseUrl = () => {
+  const envUrl = import.meta.env.VITE_API_BASE_URL;
+  if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
+    return envUrl.trim().replace(/\/+$/, '');
+  }
+  // If running in browser on localhost, default to local Express port
+  if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    return 'http://localhost:5000';
+  }
+  // Default fallback
+  return 'http://localhost:5000';
+};
+
+export const API_BASE_URL = getApiBaseUrl();
 
 const api = axios.create({
   baseURL: `${API_BASE_URL}/api`,
@@ -11,6 +23,72 @@ const api = axios.create({
   },
   timeout: 20000,
 });
+
+/**
+ * Constructs the fully-qualified URL for the official diagnostic report PDF endpoint.
+ */
+export const getReportPdfUrl = (patientId, { addHeader = true, download = false } = {}) => {
+  if (!patientId) return '';
+  const rawPid = String(patientId).trim();
+  const cleanPid = rawPid
+    ? (rawPid.toUpperCase().startsWith('P') ? `P${rawPid.replace(/^P+/i, '')}` : `P${rawPid}`)
+    : '';
+  const token = (typeof localStorage !== 'undefined' && (localStorage.getItem('lis_auth_token') || localStorage.getItem('token'))) || '';
+  const base = getApiBaseUrl();
+  const params = new URLSearchParams();
+  if (cleanPid) params.append('patientId', cleanPid);
+  params.append('addHeader', String(Boolean(addHeader)));
+  if (download) params.append('download', 'true');
+  if (token) params.append('token', token);
+  return `${base}/api/reports/pdf?${params.toString()}`;
+};
+
+/**
+ * Constructs the fully-qualified URL for the official billing/invoice PDF endpoint.
+ */
+export const getBillingPdfUrl = (patientId, { download = false, preview = false } = {}) => {
+  if (!patientId) return '';
+  const rawPid = String(patientId).trim();
+  const cleanPid = rawPid
+    ? (rawPid.toUpperCase().startsWith('P') ? `P${rawPid.replace(/^P+/i, '')}` : `P${rawPid}`)
+    : '';
+  const token = (typeof localStorage !== 'undefined' && (localStorage.getItem('lis_auth_token') || localStorage.getItem('token'))) || '';
+  const base = getApiBaseUrl();
+  const params = new URLSearchParams();
+  if (cleanPid) params.append('patientId', cleanPid);
+  if (download) params.append('download', 'true');
+  if (preview) params.append('preview', 'true');
+  if (token) params.append('token', token);
+  return `${base}/api/billing/pdf?${params.toString()}`;
+};
+
+/**
+ * Opens the official AWS report PDF in a new tab directly on the backend server.
+ */
+export const openReportPdf = (patientId, options = {}) => {
+  if (options?.targetUrl) {
+    window.open(options.targetUrl, '_blank');
+    return;
+  }
+  const url = getReportPdfUrl(patientId, options);
+  if (url) {
+    window.open(url, '_blank');
+  }
+};
+
+/**
+ * Opens the official AWS billing invoice PDF in a new tab directly on the backend server.
+ */
+export const openBillingPdf = (patientId, options = {}) => {
+  if (options?.targetUrl) {
+    window.open(options.targetUrl, '_blank');
+    return;
+  }
+  const url = getBillingPdfUrl(patientId, options);
+  if (url) {
+    window.open(url, '_blank');
+  }
+};
 
 // Request interceptor: attach middleman JWT token
 api.interceptors.request.use(

@@ -517,10 +517,23 @@ export default function PatientProfileView({
             <button
               onClick={onPrintInvoice}
               className="flex items-center justify-center gap-1.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
+              title="Open official AWS Invoice PDF in a new tab"
             >
               <Printer className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate">Print Invoice</span>
             </button>
+
+            {/* 2b. AWS Report PDF (Vibrant Teal) */}
+            {onPrintReport && (
+              <button
+                onClick={onPrintReport}
+                className="flex items-center justify-center gap-1.5 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
+                title="Open official AWS Diagnostic Report PDF in a new tab"
+              >
+                <FileText className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">AWS Report PDF</span>
+              </button>
+            )}
 
             {/* 3. Add Discount (Vibrant Rose) */}
             <button

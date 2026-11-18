@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../../services/api.js';
+import api, { openReportPdf } from '../../services/api.js';
 import {
   FileText,
   FileEdit,
@@ -364,8 +364,7 @@ export default function TemplateReportsEditor({
     if (targetUrl) {
       window.open(targetUrl, '_blank');
     } else if (cleanPid) {
-      const token = localStorage.getItem('lis_auth_token') || localStorage.getItem('token') || '';
-      window.open(`/api/reports/pdf?patientId=${encodeURIComponent(cleanPid)}&addHeader=true&download=true${token ? `&token=${encodeURIComponent(token)}` : ''}`, '_blank');
+      openReportPdf(cleanPid, { addHeader: true, download: true });
     } else {
       setGlobalError('No report PDF available for this patient yet.');
     }

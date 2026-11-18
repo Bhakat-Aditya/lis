@@ -35,7 +35,7 @@ import {
   FileText,
 } from 'lucide-react';
 
-import api from '../../services/api';
+import api, { openReportPdf } from '../../services/api';
 import ResultsPhaseTracker from './ResultsPhaseTracker.jsx';
 import ResultsTableView from './ResultsTableView.jsx';
 import ResultsCardView from './ResultsCardView.jsx';
@@ -1324,16 +1324,8 @@ export default function ResultsEntry({
             type="button"
             onClick={() => {
               const rawPid = patient?.patientId || patient?.slNo;
-              const cleanPid = rawPid
-                ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
-                : '';
               const targetUrl = patient?.printPDFUrl || patient?.reportUrl;
-              if (targetUrl) {
-                window.open(targetUrl, '_blank');
-              } else {
-                const token = localStorage.getItem('lis_auth_token') || localStorage.getItem('token') || '';
-                window.open(`/api/reports/pdf?patientId=${encodeURIComponent(cleanPid || rawPid)}&addHeader=true${token ? `&token=${encodeURIComponent(token)}` : ''}`, '_blank');
-              }
+              openReportPdf(rawPid, { addHeader: true, targetUrl });
             }}
             className="flex items-center gap-1.5 px-3 py-1 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
             title="Download / Print official AWS Diagnostic Report PDF"

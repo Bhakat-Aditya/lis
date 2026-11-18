@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/context.auth.jsx';
 import { usePatientContext } from '../../context/context.patient.jsx';
+import { openReportPdf, openBillingPdf } from '../../services/api.js';
 import {
   Home,
   UserPlus,
@@ -110,14 +111,12 @@ export default function Sidebar({ onOpenNewPatient }) {
 
   const handlePrintInvoice = () => {
     if (!cleanPid) return;
-    const token = localStorage.getItem('lis_auth_token') || localStorage.getItem('token') || '';
-    window.open(`/api/billing/pdf?patientId=${encodeURIComponent(cleanPid)}${token ? `&token=${encodeURIComponent(token)}` : ''}`, '_blank');
+    openBillingPdf(cleanPid);
   };
 
   const handleOpenAwsPdf = () => {
     if (!cleanPid) return;
-    const token = localStorage.getItem('lis_auth_token') || localStorage.getItem('token') || '';
-    window.open(`/api/reports/pdf?patientId=${encodeURIComponent(cleanPid)}&addHeader=true${token ? `&token=${encodeURIComponent(token)}` : ''}`, '_blank');
+    openReportPdf(cleanPid, { addHeader: true });
   };
 
   return (

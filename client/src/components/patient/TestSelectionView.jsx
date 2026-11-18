@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import Modal from '../common/Modal.jsx';
 import { useMaster } from '../../context/context.master.jsx';
-import api from '../../services/api';
+import api, { getBillingPdfUrl } from '../../services/api';
 import { groupInvestigationsIntoLots } from '../../utils/labTestUtils.js';
 import { formatAgeDisplay } from '../../utils/dateUtils.js';
 
@@ -794,9 +794,7 @@ export default function TestSelectionView({
           if (authenticBillUrl) {
             billWindow.location.href = authenticBillUrl;
           } else {
-            const token = localStorage.getItem('lis_auth_token') || '';
-            const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
-            billWindow.location.href = `${API_BASE}/api/billing/pdf?patientId=${encodeURIComponent(cleanPid || pid)}${token ? `&token=${encodeURIComponent(token)}` : ''}&preview=true&_t=${Date.now()}`;
+            billWindow.location.href = getBillingPdfUrl(cleanPid || pid, { preview: true });
           }
         }
 

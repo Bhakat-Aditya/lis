@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import api from '../services/api';
+import api, { openBillingPdf, openReportPdf } from '../services/api';
 import { usePatientContext } from '../context/context.patient.jsx';
 import {
   Search,
@@ -1207,11 +1207,7 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                                     type="button"
                                     onClick={() => {
                                       const rawPid = p.patientId || pid;
-                                      const cleanPid = rawPid
-                                        ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
-                                        : '';
-                                      const token = localStorage.getItem('lis_auth_token') || localStorage.getItem('token') || '';
-                                      window.open(`/api/billing/pdf?patientId=${encodeURIComponent(cleanPid || rawPid)}${token ? `&token=${encodeURIComponent(token)}` : ''}`, '_blank');
+                                      openBillingPdf(rawPid);
                                     }}
                                     className="flex items-center gap-1.5 bg-amber-50/80 hover:bg-amber-100/90 active:bg-amber-200/90 text-amber-800 border border-amber-200/90 text-[11px] font-bold py-2 px-2.5 rounded-xl shadow-2xs cursor-pointer transition-all outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
                                     title="Open official AWS Invoice PDF in a new tab"
@@ -1225,11 +1221,7 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                                     type="button"
                                     onClick={() => {
                                       const rawPid = p.patientId || pid;
-                                      const cleanPid = rawPid
-                                        ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
-                                        : '';
-                                      const token = localStorage.getItem('lis_auth_token') || localStorage.getItem('token') || '';
-                                      window.open(`/api/reports/pdf?patientId=${encodeURIComponent(cleanPid || rawPid)}&addHeader=true${token ? `&token=${encodeURIComponent(token)}` : ''}`, '_blank');
+                                      openReportPdf(rawPid, { addHeader: true });
                                     }}
                                     className="flex items-center gap-1.5 bg-teal-50/80 hover:bg-teal-100/90 active:bg-teal-200/90 text-teal-800 border border-teal-200/90 text-[11px] font-bold py-2 px-2.5 rounded-xl shadow-2xs cursor-pointer transition-all outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
                                     title="Open official AWS Diagnostic Report PDF"

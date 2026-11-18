@@ -8,7 +8,7 @@ import {
   AlertCircle,
   FileText,
 } from 'lucide-react';
-import api from '../../services/api';
+import api, { openBillingPdf } from '../../services/api';
 
 export default function AwsBillViewer({ patientId, onBack, title, refreshKey }) {
   const [blobUrl, setBlobUrl] = useState(null);
@@ -83,9 +83,7 @@ export default function AwsBillViewer({ patientId, onBack, title, refreshKey }) 
     if (blobUrl) {
       window.open(blobUrl, '_blank');
     } else {
-      const token = localStorage.getItem('lis_auth_token') || localStorage.getItem('token') || '';
-      const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
-      window.open(`${API_BASE}/api/billing/pdf?patientId=${cleanPid}${token ? `&token=${encodeURIComponent(token)}` : ''}&preview=true`, '_blank');
+      openBillingPdf(cleanPid, { preview: true });
     }
   };
 

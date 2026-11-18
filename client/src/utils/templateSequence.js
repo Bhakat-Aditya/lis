@@ -11,7 +11,7 @@
  * Inside individual array sequence and size as per array item.
  */
 
-import api from '../services/api.js';
+import api, { getApiBaseUrl } from '../services/api.js';
 
 export const CANONICAL_SECTION_ORDER = {
   // T1, T2: URINE EXAMINATION
@@ -537,7 +537,8 @@ export async function openUpstreamTemplateEditor({ patientId = 'P14', reportId =
   }
 
   // Fallback to server redirect route
-  const fallbackUrl = `/api/reports/edit-template?patientId=${encodeURIComponent(cleanPid)}&reportId=${encodeURIComponent(cleanRid)}${userSid ? `&sid=${encodeURIComponent(userSid)}` : ''}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
+  const apiBase = getApiBaseUrl();
+  const fallbackUrl = `${apiBase}/api/reports/edit-template?patientId=${encodeURIComponent(cleanPid)}&reportId=${encodeURIComponent(cleanRid)}${userSid ? `&sid=${encodeURIComponent(userSid)}` : ''}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
   if (targetWin && !targetWin.closed) {
     targetWin.location.replace(fallbackUrl);
   } else {

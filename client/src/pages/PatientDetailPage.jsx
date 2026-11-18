@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import api from '../services/api';
+import api, { openReportPdf, openBillingPdf } from '../services/api';
 import { usePatientContext } from '../context/context.patient.jsx';
 import PatientProfileView from '../components/patient/PatientProfileView.jsx';
 import PatientJourneyTimeline from '../components/patient/PatientJourneyTimeline.jsx';
@@ -255,20 +255,12 @@ export default function PatientDetailPage() {
 
   const handleOpenReportPdf = (withHeader = true) => {
     const rawPid = patient?.patientId || id;
-    const cleanPid = rawPid
-      ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
-      : '';
-    const token = localStorage.getItem('lis_auth_token') || localStorage.getItem('token') || '';
-    window.open(`/api/reports/pdf?patientId=${encodeURIComponent(cleanPid || rawPid)}&addHeader=${withHeader}${token ? `&token=${encodeURIComponent(token)}` : ''}`, '_blank');
+    openReportPdf(rawPid, { addHeader: withHeader });
   };
 
   const handleOpenBillPdf = () => {
     const rawPid = patient?.patientId || id;
-    const cleanPid = rawPid
-      ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
-      : '';
-    const token = localStorage.getItem('lis_auth_token') || localStorage.getItem('token') || '';
-    window.open(`/api/billing/pdf?patientId=${encodeURIComponent(cleanPid || rawPid)}${token ? `&token=${encodeURIComponent(token)}` : ''}`, '_blank');
+    openBillingPdf(rawPid);
   };
 
   const handleDeletePatient = () => {
