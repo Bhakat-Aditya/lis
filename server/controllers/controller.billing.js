@@ -815,6 +815,17 @@ export const streamInvoicePdf = async (req, res, next) => {
     }
 
     if (!billUrl) {
+      // Auto-trigger BILLGENERATE fallback if billUrl was not yet initialized on upstream AWS server
+      try {
+        await upstreamService.post('BILLGENERATE', { patientId: cleanPatientId, preview: 'true' }, null, req.user?.upstreamSid);
+        summary = await upstreamService.getBillingSummary(cleanPatientId, req.user?.upstreamSid);
+        billUrl = summary?.billUrl;
+      } catch (genErr) {
+        console.warn('[InvoicePDF] BILLGENERATE auto-generate note:', genErr.message);
+      }
+    }
+
+    if (!billUrl) {
       return res.status(404).json({ STATUS: 'FAILED', Message: 'Official bill PDF not found on upstream AWS server' });
     }
 

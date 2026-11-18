@@ -110,11 +110,8 @@ export default function Sidebar({ onOpenNewPatient }) {
 
   const handlePrintInvoice = () => {
     if (!cleanPid) return;
-    if (location.pathname.startsWith(`/patients/${cleanPid}`)) {
-      openModal('bill');
-    } else {
-      navigate(`/patients/${cleanPid}?modal=bill`);
-    }
+    const token = localStorage.getItem('lis_auth_token') || localStorage.getItem('token') || '';
+    window.open(`/api/billing/pdf?patientId=${encodeURIComponent(cleanPid)}${token ? `&token=${encodeURIComponent(token)}` : ''}`, '_blank');
   };
 
   const handleOpenAwsPdf = () => {
@@ -325,10 +322,14 @@ export default function Sidebar({ onOpenNewPatient }) {
                   {/* 4. Print Invoice */}
                   <button
                     onClick={handlePrintInvoice}
-                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                    className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                    title="Open official AWS Invoice PDF in a new tab"
                   >
-                    <Printer className="w-3.5 h-3.5 text-teal-500 shrink-0" />
-                    <span>Print Invoice</span>
+                    <span className="flex items-center gap-2.5">
+                      <Printer className="w-3.5 h-3.5 text-teal-500 shrink-0" />
+                      <span>Print Invoice</span>
+                    </span>
+                    <ExternalLink className="w-3 h-3 text-slate-400" />
                   </button>
 
                   {/* 5. Add Discount */}

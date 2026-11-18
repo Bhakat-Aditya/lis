@@ -1202,15 +1202,22 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                                     <span className="truncate">Order Tests</span>
                                   </button>
 
-                                  {/* 3. AWS Bill Preview */}
+                                  {/* 3. AWS Bill / Invoice PDF */}
                                   <button
                                     type="button"
-                                    onClick={() => setPreviewBillPatient(p)}
+                                    onClick={() => {
+                                      const rawPid = p.patientId || pid;
+                                      const cleanPid = rawPid
+                                        ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
+                                        : '';
+                                      const token = localStorage.getItem('lis_auth_token') || localStorage.getItem('token') || '';
+                                      window.open(`/api/billing/pdf?patientId=${encodeURIComponent(cleanPid || rawPid)}${token ? `&token=${encodeURIComponent(token)}` : ''}`, '_blank');
+                                    }}
                                     className="flex items-center gap-1.5 bg-amber-50/80 hover:bg-amber-100/90 active:bg-amber-200/90 text-amber-800 border border-amber-200/90 text-[11px] font-bold py-2 px-2.5 rounded-xl shadow-2xs cursor-pointer transition-all outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
-                                    title="Open official AWS Invoice Preview"
+                                    title="Open official AWS Invoice PDF in a new tab"
                                   >
                                     <FileText className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                                    <span className="truncate">Bill Preview</span>
+                                    <span className="truncate">Invoice PDF</span>
                                   </button>
 
                                   {/* 4. AWS Report PDF */}

@@ -263,7 +263,12 @@ export default function PatientDetailPage() {
   };
 
   const handleOpenBillPdf = () => {
-    setShowBillPreviewModal(true);
+    const rawPid = patient?.patientId || id;
+    const cleanPid = rawPid
+      ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
+      : '';
+    const token = localStorage.getItem('lis_auth_token') || localStorage.getItem('token') || '';
+    window.open(`/api/billing/pdf?patientId=${encodeURIComponent(cleanPid || rawPid)}${token ? `&token=${encodeURIComponent(token)}` : ''}`, '_blank');
   };
 
   const handleDeletePatient = () => {
@@ -768,7 +773,7 @@ export default function PatientDetailPage() {
           templates={templates}
           onAddTests={() => setSearchParams({ tab: 'tests' })}
           onFillResults={() => setSearchParams({ tab: 'results' })}
-          onPrintInvoice={() => setShowBillPreviewModal(true)}
+          onPrintInvoice={handleOpenBillPdf}
           onPrintReport={() => handleOpenReportPdf(true)}
           onReceiveSample={handleReceiveSample}
           onReleaseReport={handleReleaseReport}
