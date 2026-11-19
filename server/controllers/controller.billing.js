@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { upstreamService, UPSTREAM_ERROR_MAP } from '../services/service.upstream.js';
 import { invalidateReportCache, getCachedReport } from './controller.report.js';
-import { invalidatePatientListCache, fetchUpstreamPatientList } from './controller.patient.js';
+import { invalidatePatientListCache, fetchUpstreamPatientList, resolvePatientIdBySlNo } from './controller.patient.js';
 
 // In-flight deduplication and short-lived caching for billing list and bill JSON (15s TTL)
 const billListCache = new Map();
@@ -116,9 +116,16 @@ export const generateBill = async (req, res, next) => {
     }
 
     const rawPid = String(patientId).trim();
-    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+    let cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    if (!/^P\d{1,5}$/i.test(cleanPatientId)) {
+      const resolved = await resolvePatientIdBySlNo(rawPid, req.user?.upstreamSid);
+      if (resolved) {
+        cleanPatientId = resolved;
+      }
+    }
 
     // Determine amount to pay
     let amtToPay = Number(amount);
@@ -222,9 +229,16 @@ export const applyDiscount = async (req, res, next) => {
     }
 
     const rawPid = String(patientId).trim();
-    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+    let cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    if (!/^P\d{1,5}$/i.test(cleanPatientId)) {
+      const resolved = await resolvePatientIdBySlNo(rawPid, req.user?.upstreamSid);
+      if (resolved) {
+        cleanPatientId = resolved;
+      }
+    }
 
     // 1. Fetch current bill JSON
     let billJson = null;
@@ -421,9 +435,16 @@ export const updateBill = async (req, res, next) => {
     }
 
     const rawPid = String(patientId).trim();
-    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+    let cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    if (!/^P\d{1,5}$/i.test(cleanPatientId)) {
+      const resolved = await resolvePatientIdBySlNo(rawPid, req.user?.upstreamSid);
+      if (resolved) {
+        cleanPatientId = resolved;
+      }
+    }
 
     // Filter out completely blank rows
     const validItems = (items || []).filter(
@@ -565,9 +586,16 @@ export const getBillJson = async (req, res, next) => {
       return res.status(400).json({ STATUS: 'FAILED', Message: 'patientId is required' });
     }
     const rawPid = String(patientId).trim();
-    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+    let cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    if (!/^P\d{1,5}$/i.test(cleanPatientId)) {
+      const resolved = await resolvePatientIdBySlNo(rawPid, req.user?.upstreamSid);
+      if (resolved) {
+        cleanPatientId = resolved;
+      }
+    }
 
     const isFresh = req.query.fresh === 'true';
 
@@ -627,9 +655,16 @@ export const getInvoice = async (req, res, next) => {
     }
 
     const rawPid = String(patientId).trim();
-    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+    let cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    if (!/^P\d{1,5}$/i.test(cleanPatientId)) {
+      const resolved = await resolvePatientIdBySlNo(rawPid, req.user?.upstreamSid);
+      if (resolved) {
+        cleanPatientId = resolved;
+      }
+    }
 
     // 1. Get patient report & details - check cache first to avoid redundant upstream call
     let patient = null;
@@ -801,9 +836,16 @@ export const streamInvoicePdf = async (req, res, next) => {
     }
 
     const rawPid = String(patientId).trim();
-    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+    let cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    if (!/^P\d{1,5}$/i.test(cleanPatientId)) {
+      const resolved = await resolvePatientIdBySlNo(rawPid, req.user?.upstreamSid);
+      if (resolved) {
+        cleanPatientId = resolved;
+      }
+    }
 
     // Check cached billing summary first for existing billUrl
     let summary = upstreamService.getCachedBilling(cleanPatientId);

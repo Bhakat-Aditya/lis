@@ -81,11 +81,12 @@ export const openReportPdf = async (patientId, options = {}) => {
   const directUrl = getReportPdfUrl(cleanPid, options);
 
   // Synchronously open placeholder tab to prevent mobile popup blockers
-  let targetWin = null;
-  try {
-    targetWin = window.open('about:blank', '_blank');
-    if (targetWin) {
-      targetWin.document.write(`
+  let targetWin = options?.existingWindow || options?.targetWin || null;
+  if (!targetWin || targetWin.closed) {
+    try {
+      targetWin = window.open('about:blank', '_blank');
+      if (targetWin) {
+        targetWin.document.write(`
         <!DOCTYPE html>
         <html>
           <head>
@@ -135,8 +136,9 @@ export const openReportPdf = async (patientId, options = {}) => {
           </body>
         </html>
       `);
-    }
-  } catch {}
+      }
+    } catch {}
+  }
 
   try {
     const res = await api.get('/reports/pdf', {
@@ -189,14 +191,15 @@ export const openBillingPdf = async (patientId, options = {}) => {
     : '';
   if (!cleanPid) return;
 
-  const directUrl = getBillingPdfUrl(cleanPid, options);
+  const directUrl = getBillingPdfUrl(cleanPid, { preview: true, ...options });
 
   // Synchronously open placeholder tab to prevent mobile popup blockers
-  let targetWin = null;
-  try {
-    targetWin = window.open('about:blank', '_blank');
-    if (targetWin) {
-      targetWin.document.write(`
+  let targetWin = options?.existingWindow || options?.targetWin || null;
+  if (!targetWin || targetWin.closed) {
+    try {
+      targetWin = window.open('about:blank', '_blank');
+      if (targetWin) {
+        targetWin.document.write(`
         <!DOCTYPE html>
         <html>
           <head>
@@ -246,8 +249,9 @@ export const openBillingPdf = async (patientId, options = {}) => {
           </body>
         </html>
       `);
-    }
-  } catch {}
+      }
+    } catch {}
+  }
 
   try {
     const res = await api.get('/billing/pdf', {

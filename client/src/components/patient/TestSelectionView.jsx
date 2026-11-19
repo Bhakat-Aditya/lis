@@ -30,7 +30,7 @@ import {
 import Modal from '../common/Modal.jsx';
 import { useMaster } from '../../context/context.master.jsx';
 import { usePatientContext } from '../../context/context.patient.jsx';
-import api, { getBillingPdfUrl } from '../../services/api';
+import api, { getBillingPdfUrl, openBillingPdf } from '../../services/api';
 import { groupInvestigationsIntoLots } from '../../utils/labTestUtils.js';
 import { formatAgeDisplay } from '../../utils/dateUtils.js';
 
@@ -792,17 +792,14 @@ export default function TestSelectionView({
       });
 
       if (res.data?.STATUS === 'SUCCESS' || res.data?.StatusCode === '0000') {
-        // Direct the new tab to open the authentic AWS bill URL (not localhost:3000 SPA duplicate)
-        const authenticBillUrl = res.data?.billUrl || res.data?.upstreamBillUrl;
-        if (billWindow && !billWindow.closed) {
-          if (authenticBillUrl) {
-            billWindow.location.href = authenticBillUrl;
-          } else {
-            billWindow.location.href = getBillingPdfUrl(cleanPid || pid, { preview: true });
-          }
-        }
+        const targetPid = res.data?.patientId || cleanPid || pid;
+        // Open bill preview inline in the new tab via blob viewer (does NOT download to disk)
+        openBillingPdf(targetPid, {
+          existingWindow: billWindow,
+          preview: true,
+        });
 
-        setSaveSuccess(`Added ${newTests.length} investigation lot(s) successfully! Official AWS bill opened in a new tab.`);
+        setSaveSuccess(`Added ${newTests.length} investigation lot(s) successfully! Official AWS bill preview opened in a new tab.`);
         
         // Immediately mark newly added items as booked so they transition without duplicate or delete trash icon
         setSelectedTests((prev) =>
