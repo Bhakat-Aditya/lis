@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
 import api from '../services/api';
 import ResultsEntry from '../components/results/ResultsEntry.jsx';
@@ -19,6 +19,16 @@ import {
 import { StatusBadge } from '../components/common/Badge.jsx';
 import ClinicalGuideModal from '../components/common/ClinicalGuideModal.jsx';
 import { formatDisplayDate, sortPatientsByRecent, getLocalDateString, shiftDateDays } from '../utils/dateUtils.js';
+import {
+  STATUS_ENTRY,
+  STATUS_SAMPLE,
+  STATUS_DATA_PART,
+  STATUS_DATA_FULL,
+  STATUS_REPORT_PRINT,
+  STATUS_REPORT_RELEASED,
+  normalizePatientStatus,
+  PATIENT_STATUS_CONFIGS,
+} from './PatientsPage.jsx';
 
 const formatGender = (raw) => {
   const s = String(raw || '').trim().toLowerCase();
@@ -120,14 +130,34 @@ export default function ResultsPage() {
     fetchLabWorklist();
   }, [fromDate, toDate]);
 
+  // Live counts for the exact 6 official patient directory statuses + ALL
+  const statusCounts = useMemo(() => {
+    const counts = {
+      ALL: patients.length,
+      [STATUS_ENTRY]: 0,
+      [STATUS_SAMPLE]: 0,
+      [STATUS_DATA_PART]: 0,
+      [STATUS_DATA_FULL]: 0,
+      [STATUS_REPORT_PRINT]: 0,
+      [STATUS_REPORT_RELEASED]: 0,
+    };
+    patients.forEach((p) => {
+      const norm = normalizePatientStatus(p.status);
+      if (counts[norm] !== undefined) {
+        counts[norm]++;
+      } else {
+        counts[STATUS_ENTRY]++;
+      }
+    });
+    return counts;
+  }, [patients]);
+
   const filteredPatients = sortPatientsByRecent(
     patients.filter((p) => {
-      // 1. Phase Filter
+      // 1. Official Status Filter (ALL, ENTRY, SAMPLE, RESULT PARTLY, RESULT FULLY, PRINTING, RELEASED)
       if (queuePhaseFilter !== 'ALL') {
-        const s = String(p.status || '').toUpperCase();
-        if (queuePhaseFilter === 'SAMPLE' && s !== 'SAMPLE' && s !== 'PENDING') return false;
-        if (queuePhaseFilter === 'ENTRY' && s !== 'ENTRY' && s !== 'TESTING') return false;
-        if (queuePhaseFilter === 'READY' && s !== 'PRINTING' && s !== 'APPROVED' && s !== 'SAVED' && s !== 'VERIFIED') return false;
+        const norm = normalizePatientStatus(p.status);
+        if (norm !== queuePhaseFilter) return false;
       }
 
       // 2. Search match
@@ -343,52 +373,45 @@ export default function ResultsPage() {
             )}
           </div>
 
-          {/* Center: Phase Filter Pills */}
-          <div className="flex items-center gap-1 overflow-x-auto text-[11px] font-bold">
-            <button
-              type="button"
-              onClick={() => setQueuePhaseFilter('ALL')}
-              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent] ${
-                queuePhaseFilter === 'ALL'
-                  ? 'bg-slate-900 text-white shadow-2xs'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
-              }`}
-            >
-              All ({patients.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setQueuePhaseFilter('SAMPLE')}
-              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent] ${
-                queuePhaseFilter === 'SAMPLE'
-                  ? 'bg-amber-500 text-white shadow-2xs'
-                  : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
-              }`}
-            >
-              Pending
-            </button>
-            <button
-              type="button"
-              onClick={() => setQueuePhaseFilter('ENTRY')}
-              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent] ${
-                queuePhaseFilter === 'ENTRY'
-                  ? 'bg-violet-600 text-white shadow-2xs'
-                  : 'bg-violet-50 text-violet-800 hover:bg-violet-100 border border-violet-200'
-              }`}
-            >
-              Testing
-            </button>
-            <button
-              type="button"
-              onClick={() => setQueuePhaseFilter('READY')}
-              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent] ${
-                queuePhaseFilter === 'READY'
-                  ? 'bg-emerald-600 text-white shadow-2xs'
-                  : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
-              }`}
-            >
-              Ready
-            </button>
+          {/* Center: Official Pipeline Status Filter Pills (ALL, ENTRY, SAMPLE, RESULT PARTLY, RESULT FULLY, PRINTING, RELEASED) */}
+          <div className="flex items-center gap-1.5 overflow-x-auto text-xs font-bold scrollbar-none py-0.5">
+            {PATIENT_STATUS_CONFIGS.map((cfg) => {
+              const isActive = queuePhaseFilter === cfg.key;
+              const count = statusCounts[cfg.key] ?? 0;
+              return (
+                <button
+                  key={cfg.key}
+                  type="button"
+                  onClick={() => setQueuePhaseFilter(isActive && cfg.key !== 'ALL' ? 'ALL' : cfg.key)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer whitespace-nowrap shadow-2xs select-none [-webkit-tap-highlight-color:transparent] ${
+                    isActive
+                      ? cfg.key === 'ALL'
+                        ? 'bg-slate-900 text-white shadow-xs'
+                        : cfg.key === STATUS_ENTRY
+                        ? 'bg-[#f43f5e] text-white shadow-xs'
+                        : cfg.key === STATUS_SAMPLE
+                        ? 'bg-amber-500 text-white shadow-xs'
+                        : cfg.key === STATUS_DATA_PART
+                        ? 'bg-sky-500 text-white shadow-xs'
+                        : cfg.key === STATUS_DATA_FULL
+                        ? 'bg-purple-600 text-white shadow-xs'
+                        : cfg.key === STATUS_REPORT_PRINT
+                        ? 'bg-teal-600 text-white shadow-xs'
+                        : 'bg-[#10b981] text-white shadow-xs'
+                      : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <span>{cfg.label}</span>
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
+                      isActive ? 'bg-white/25 text-white' : 'bg-slate-200 text-slate-700'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
           {/* Right: Next / Prev Step Controls */}
