@@ -51,8 +51,8 @@ class UpstreamService {
     // 3. JSON error structures
     if (typeof d === 'object' && d !== null) {
       const code = String(d.StatusCode || d.statusCode || '');
-      // ONLY 1140 is Session Invalid / Session Timed Out
-      if (code === '1140') {
+      // 1140: Session Invalid / Session Timed Out, 1150: Auto logout
+      if (code === '1140' || code === '1150') {
         return true;
       }
       const msg = String(d.Message || d.message || '').toLowerCase();

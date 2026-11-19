@@ -323,18 +323,18 @@ api.get = function (url, config = {}) {
   return promise;
 };
 
-// Helper to detect if server response strictly indicates session timeout (StatusCode 1140)
+// Helper to detect if server response strictly indicates session timeout (StatusCode 1140 or 1150 Auto Logout)
 const isSessionTimeout = (data) => {
   if (!data) return false;
   if (typeof data === 'object') {
     const code = String(data.StatusCode ?? data.statusCode ?? data.code ?? '');
-    return code === '1140';
+    return code === '1140' || code === '1150' || data.isSessionExpired === true;
   }
   if (typeof data === 'string') {
     try {
       const parsed = JSON.parse(data);
       const code = String(parsed.StatusCode ?? parsed.statusCode ?? parsed.code ?? '');
-      return code === '1140';
+      return code === '1140' || code === '1150' || parsed.isSessionExpired === true;
     } catch {
       return false;
     }
