@@ -53,7 +53,7 @@ const ProtectedLayout = () => {
         isOpen={isRegisterOpen}
         onClose={() => setIsRegisterOpen(false)}
         onPatientAdded={(data) => {
-          const pid = data?.patientId || data?.patient?.patientId;
+          const pid = data?.patientId || data?.patient?.patientId || data?.patient?.slNo || data?.slNo;
           if (pid) {
             navigate(`/patients/${pid}?tab=tests`);
           } else {
@@ -116,7 +116,7 @@ function DashboardWrapper() {
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
         onPatientAdded={(data) => {
-          const pid = data?.patientId || data?.patient?.patientId;
+          const pid = data?.patientId || data?.patient?.patientId || data?.patient?.slNo || data?.slNo;
           if (pid) {
             navigate(`/patients/${pid}?tab=tests`);
           } else {
@@ -138,11 +138,11 @@ function PatientsWrapper() {
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
         onPatientAdded={(data) => {
-          const pid = data?.patientId || data?.patient?.patientId;
+          const pid = data?.patientId || data?.patient?.patientId || data?.patient?.slNo || data?.slNo;
           if (pid) {
             navigate(`/patients/${pid}?tab=tests`);
           } else {
-            navigate(0);
+            navigate('/patients');
           }
         }}
       />

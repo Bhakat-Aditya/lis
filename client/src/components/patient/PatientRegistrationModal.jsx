@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Modal from '../common/Modal.jsx';
 import api from '../../services/api';
 import { useMaster } from '../../context/context.master.jsx';
+import { usePatientContext } from '../../context/context.patient.jsx';
 import {
   UserPlus,
   Phone,
@@ -20,6 +21,7 @@ import { getLocalDateString } from '../../utils/dateUtils.js';
 export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdded }) {
   const navigate = useNavigate();
   const { doctors = [], branches = [], references = [] } = useMaster();
+  const { setActivePatient } = usePatientContext();
 
   const [formData, setFormData] = useState({
     slNo: '',
@@ -331,12 +333,22 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
 
       const res = await api.post('/patients/add', payload);
       if (res.data?.STATUS === 'SUCCESS' || res.data?.StatusCode === '0000') {
-        const pid = res.data?.patientId || res.data?.patient?.patientId || res.data?.patient?.slNo || payload.slNo;
-        if (onPatientAdded) onPatientAdded(res.data);
-        onClose();
-        if (pid) {
+        const rawPid = res.data?.patientId || res.data?.patient?.patientId;
+        const pid = rawPid || res.data?.patient?.slNo || payload.slNo;
+        const patientData = {
+          ...(res.data?.patient || {}),
+          ...payload,
+          patientId: pid,
+          slNo: res.data?.patient?.slNo || payload.slNo,
+          barcode: res.data?.patient?.barcode || res.data?.patient?.slNo || payload.slNo,
+        };
+        setActivePatient(patientData);
+        if (onPatientAdded) {
+          onPatientAdded(res.data);
+        } else if (pid) {
           navigate(`/patients/${pid}?tab=tests`);
         }
+        onClose();
       } else {
         setError(res.data?.Message || 'Failed to register patient');
       }

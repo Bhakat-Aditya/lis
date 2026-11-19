@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   Plus,
   Trash2,
@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import Modal from '../common/Modal.jsx';
 import { useMaster } from '../../context/context.master.jsx';
+import { usePatientContext } from '../../context/context.patient.jsx';
 import api, { getBillingPdfUrl } from '../../services/api';
 import { groupInvestigationsIntoLots } from '../../utils/labTestUtils.js';
 import { formatAgeDisplay } from '../../utils/dateUtils.js';
@@ -44,6 +45,9 @@ export default function TestSelectionView({
   onAddDiscount,
 }) {
   const navigate = useNavigate();
+  const { id: routeId } = useParams();
+  const { activePatient } = usePatientContext();
+  const effectivePatient = patient || activePatient;
   const {
     tests: catalogTests = [],
     profiles: catalogProfiles = [],
@@ -193,19 +197,19 @@ export default function TestSelectionView({
   const existingLots = useMemo(() => {
     return groupInvestigationsIntoLots(
       reports,
-      patient,
+      effectivePatient,
       catalogProfiles,
       catalogPackages,
       catalogTests,
       catalogTemplates,
       templates
     );
-  }, [reports, patient, catalogProfiles, catalogPackages, catalogTests, catalogTemplates, templates]);
+  }, [reports, effectivePatient, catalogProfiles, catalogPackages, catalogTests, catalogTemplates, templates]);
 
   // Combined selected investigations list: existing booked lots + newly added uncommitted lots
   const [selectedTests, setSelectedTests] = useState(existingLots);
 
-  const currentPid = String(patient?.patientId || patient?.slNo || '').trim();
+  const currentPid = String(effectivePatient?.patientId || effectivePatient?.slNo || (routeId && !routeId.includes('?') ? routeId : '') || '').trim();
   const previousPidRef = useRef(currentPid);
 
   // Sync when patient reports update from backend or when switching patients
@@ -311,7 +315,7 @@ export default function TestSelectionView({
     setRateError('');
 
     try {
-      const rawPid = patient?.patientId || patient?.id;
+      const rawPid = effectivePatient?.patientId || effectivePatient?.id || (routeId && !routeId.includes('?') ? routeId : '');
       const cleanPid = rawPid
         ? String(rawPid).toUpperCase().startsWith('P')
           ? `P${String(rawPid).replace(/^P+/i, '')}`
@@ -570,26 +574,26 @@ export default function TestSelectionView({
     if (bookedLots.length > 0) {
       return bookedLots.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
     }
-    const disc = Number(patient?.discount || 0);
-    const gross = Number(patient?.grossTotal || 0);
+    const disc = Number(effectivePatient?.discount || 0);
+    const gross = Number(effectivePatient?.grossTotal || 0);
     if (gross > 0) return gross;
-    const ptTotal = Number(patient?.totalBill || 0);
+    const ptTotal = Number(effectivePatient?.totalBill || 0);
     if (ptTotal > 0 && disc > 0) return ptTotal + disc;
     return ptTotal;
-  }, [bookedLots, patient]);
+  }, [bookedLots, effectivePatient]);
 
-  const discount = Number(patient?.discount || 0);
+  const discount = Number(effectivePatient?.discount || 0);
   const totalAmount = Math.max(0, subtotal - discount);
-  const totalDeposits = Number(patient?.paidBill || 0);
+  const totalDeposits = Number(effectivePatient?.paidBill || 0);
   const explicitDue =
-    patient?.dueAmount !== undefined && patient?.dueAmount !== null
-      ? Number(patient.dueAmount)
-      : (patient?.balance !== undefined && patient?.balance !== null
-          ? Number(patient.balance)
+    effectivePatient?.dueAmount !== undefined && effectivePatient?.dueAmount !== null
+      ? Number(effectivePatient.dueAmount)
+      : (effectivePatient?.balance !== undefined && effectivePatient?.balance !== null
+          ? Number(effectivePatient.balance)
           : null);
   const balanceDue =
     totalAmount > 0
-      ? (patient?.billPayStatus === 2 || patient?.billPayStatus === '2'
+      ? (effectivePatient?.billPayStatus === 2 || effectivePatient?.billPayStatus === '2'
           ? 0
           : (explicitDue !== null && !isNaN(explicitDue) ? Math.max(0, explicitDue) : Math.max(0, totalAmount - totalDeposits)))
       : 0;
@@ -709,11 +713,11 @@ export default function TestSelectionView({
     }));
   };
 
-  const rawPid = patient?.patientId || patient?.slNo || '';
+  const rawPid = effectivePatient?.patientId || effectivePatient?.slNo || (routeId && !routeId.includes('?') ? routeId : '') || '';
   const cleanPid = rawPid
     ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
     : '';
-  const pid = cleanPid || patient?.patientId || patient?.slNo || '';
+  const pid = cleanPid || effectivePatient?.patientId || effectivePatient?.slNo || (routeId && !routeId.includes('?') ? routeId : '') || '';
 
   const handleSaveTests = async () => {
     const newTests = selectedTests.filter((t) => t.isNew && t.testId);
@@ -825,20 +829,20 @@ export default function TestSelectionView({
       <div className="bg-white border border-slate-200/90 shadow-xs px-4 py-3 rounded-2xl flex flex-wrap items-center justify-between text-xs font-semibold gap-3">
         <div className="flex flex-wrap items-center gap-2.5 text-slate-700">
           <span className="font-bold text-blue-700 font-mono bg-blue-50 px-2.5 py-0.5 rounded-lg border border-blue-200">
-            Barcode: #{patient?.slNo || patient?.barcode || '-'}
+            Barcode: #{effectivePatient?.slNo || effectivePatient?.barcode || (routeId && !routeId.toUpperCase().startsWith('P') ? routeId : '-')}
           </span>
           <span className="text-slate-300">|</span>
           <span className="font-bold text-slate-900">
-            {patient?.title ? `${patient.title} ` : ''}
-            {patient?.name || 'Patient'}
+            {effectivePatient?.title ? `${effectivePatient.title} ` : ''}
+            {effectivePatient?.name || 'Patient'}
           </span>
           <span className="text-slate-300">|</span>
           <span className="text-slate-500">
-            Age: {formatAgeDisplay(patient?.age, patient?.age_unit)}
+            Age: {formatAgeDisplay(effectivePatient?.age, effectivePatient?.age_unit)}
           </span>
           <span className="text-slate-300">|</span>
           <span className="text-slate-500">
-            Ref: <strong className="text-slate-800">{patient?.referedDr || 'Self'}</strong>
+            Ref: <strong className="text-slate-800">{effectivePatient?.referedDr || 'Self'}</strong>
           </span>
         </div>
 

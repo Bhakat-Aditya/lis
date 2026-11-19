@@ -2,7 +2,7 @@ import axios from 'axios';
 import { config } from '../config/config.env.js';
 import { upstreamService } from '../services/service.upstream.js';
 import { reportOverrideService } from '../services/service.reportOverride.js';
-import { invalidatePatientListCache } from './controller.patient.js';
+import { invalidatePatientListCache, resolvePatientIdBySlNo } from './controller.patient.js';
 import { cacheService, CACHE_KEYS } from '../services/service.cache.js';
 import { orderExamObject } from '../services/service.templateSequence.js';
 import { templateStore } from '../services/service.templateStore.js';
@@ -139,9 +139,17 @@ export const getPatientReport = async (req, res, next) => {
     }
 
     const rawPid = String(patientId).trim();
-    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+    let cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    // Resolve barcode or slNo to real upstream sequential patientId
+    if (!/^P\d{1,5}$/i.test(cleanPatientId)) {
+      const resolved = await resolvePatientIdBySlNo(rawPid, req.user?.upstreamSid);
+      if (resolved) {
+        cleanPatientId = resolved;
+      }
+    }
 
     // Check if patient was deleted
     try {
@@ -795,9 +803,17 @@ export const updateReport = async (req, res, next) => {
     }
 
     const rawPid = String(patientId).trim();
-    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+    let cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    // Resolve barcode or slNo to real upstream sequential patientId
+    if (!/^P\d{1,5}$/i.test(cleanPatientId)) {
+      const resolved = await resolvePatientIdBySlNo(rawPid, req.user?.upstreamSid);
+      if (resolved) {
+        cleanPatientId = resolved;
+      }
+    }
 
     // Check if patient was deleted
     try {
@@ -971,9 +987,17 @@ export const receiveSample = async (req, res, next) => {
     }
 
     const rawPid = String(patientId).trim();
-    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+    let cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    // Resolve barcode or slNo to real upstream sequential patientId
+    if (!/^P\d{1,5}$/i.test(cleanPatientId)) {
+      const resolved = await resolvePatientIdBySlNo(rawPid, req.user?.upstreamSid);
+      if (resolved) {
+        cleanPatientId = resolved;
+      }
+    }
 
     // Check if patient was deleted
     try {
@@ -1011,9 +1035,17 @@ export const verifyReport = async (req, res, next) => {
     }
 
     const rawPid = String(patientId).trim();
-    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+    let cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    // Resolve barcode or slNo to real upstream sequential patientId
+    if (!/^P\d{1,5}$/i.test(cleanPatientId)) {
+      const resolved = await resolvePatientIdBySlNo(rawPid, req.user?.upstreamSid);
+      if (resolved) {
+        cleanPatientId = resolved;
+      }
+    }
 
     // Check if patient was deleted
     try {
@@ -1070,9 +1102,17 @@ export const approveReport = async (req, res, next) => {
     }
 
     const rawPid = String(patientId).trim();
-    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+    let cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    // Resolve barcode or slNo to real upstream sequential patientId
+    if (!/^P\d{1,5}$/i.test(cleanPatientId)) {
+      const resolved = await resolvePatientIdBySlNo(rawPid, req.user?.upstreamSid);
+      if (resolved) {
+        cleanPatientId = resolved;
+      }
+    }
 
     // Check if patient was deleted
     try {
@@ -1129,9 +1169,17 @@ export const rejectReport = async (req, res, next) => {
     }
 
     const rawPid = String(patientId).trim();
-    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+    let cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    // Resolve barcode or slNo to real upstream sequential patientId
+    if (!/^P\d{1,5}$/i.test(cleanPatientId)) {
+      const resolved = await resolvePatientIdBySlNo(rawPid, req.user?.upstreamSid);
+      if (resolved) {
+        cleanPatientId = resolved;
+      }
+    }
 
     // Check if patient was deleted
     try {
@@ -1177,9 +1225,17 @@ export const releaseReport = async (req, res, next) => {
     }
 
     const rawPid = String(patientId).trim();
-    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+    let cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    // Resolve barcode or slNo to real upstream sequential patientId
+    if (!/^P\d{1,5}$/i.test(cleanPatientId)) {
+      const resolved = await resolvePatientIdBySlNo(rawPid, req.user?.upstreamSid);
+      if (resolved) {
+        cleanPatientId = resolved;
+      }
+    }
 
     // Check if patient was deleted
     try {
@@ -1222,9 +1278,17 @@ export const recallReport = async (req, res, next) => {
     }
 
     const rawPid = String(patientId).trim();
-    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+    let cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    // Resolve barcode or slNo to real upstream sequential patientId
+    if (!/^P\d{1,5}$/i.test(cleanPatientId)) {
+      const resolved = await resolvePatientIdBySlNo(rawPid, req.user?.upstreamSid);
+      if (resolved) {
+        cleanPatientId = resolved;
+      }
+    }
 
     // Check if patient was deleted
     try {
@@ -1266,9 +1330,17 @@ export const calculateResult = async (req, res, next) => {
     }
 
     const rawPid = String(patientId).trim();
-    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+    let cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    // Resolve barcode or slNo to real upstream sequential patientId
+    if (!/^P\d{1,5}$/i.test(cleanPatientId)) {
+      const resolved = await resolvePatientIdBySlNo(rawPid, req.user?.upstreamSid);
+      if (resolved) {
+        cleanPatientId = resolved;
+      }
+    }
 
     // Check if patient was deleted
     try {
@@ -1322,9 +1394,17 @@ export const setDefaultResult = async (req, res, next) => {
     }
 
     const rawPid = String(patientId).trim();
-    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+    let cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    // Resolve barcode or slNo to real upstream sequential patientId
+    if (!/^P\d{1,5}$/i.test(cleanPatientId)) {
+      const resolved = await resolvePatientIdBySlNo(rawPid, req.user?.upstreamSid);
+      if (resolved) {
+        cleanPatientId = resolved;
+      }
+    }
 
     // Check if patient was deleted
     try {
@@ -1416,9 +1496,17 @@ export const downloadResult = async (req, res, next) => {
     }
 
     const rawPid = String(patientId).trim();
-    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+    let cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    // Resolve barcode or slNo to real upstream sequential patientId
+    if (!/^P\d{1,5}$/i.test(cleanPatientId)) {
+      const resolved = await resolvePatientIdBySlNo(rawPid, req.user?.upstreamSid);
+      if (resolved) {
+        cleanPatientId = resolved;
+      }
+    }
 
     // Check if patient was deleted
     try {
@@ -1479,9 +1567,17 @@ export const uploadOrder = async (req, res, next) => {
     }
 
     const rawPid = String(patientId).trim();
-    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+    let cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    // Resolve barcode or slNo to real upstream sequential patientId
+    if (!/^P\d{1,5}$/i.test(cleanPatientId)) {
+      const resolved = await resolvePatientIdBySlNo(rawPid, req.user?.upstreamSid);
+      if (resolved) {
+        cleanPatientId = resolved;
+      }
+    }
 
     // Check if patient was deleted
     try {
@@ -1535,9 +1631,17 @@ export const sendWhatsApp = async (req, res, next) => {
     }
 
     const rawPid = String(patientId).trim();
-    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+    let cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    // Resolve barcode or slNo to real upstream sequential patientId
+    if (!/^P\d{1,5}$/i.test(cleanPatientId)) {
+      const resolved = await resolvePatientIdBySlNo(rawPid, req.user?.upstreamSid);
+      if (resolved) {
+        cleanPatientId = resolved;
+      }
+    }
 
     // Check if patient was deleted
     try {
@@ -1629,9 +1733,17 @@ export const streamReportPdf = async (req, res, next) => {
     }
 
     const rawPid = String(patientId).trim();
-    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+    let cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    // Resolve barcode or slNo to real upstream sequential patientId
+    if (!/^P\d{1,5}$/i.test(cleanPatientId)) {
+      const resolved = await resolvePatientIdBySlNo(rawPid, req.user?.upstreamSid);
+      if (resolved) {
+        cleanPatientId = resolved;
+      }
+    }
 
     // Check if patient was deleted
     try {
@@ -1702,9 +1814,17 @@ export const deleteReport = async (req, res, next) => {
     }
 
     const rawPid = String(patientId).trim();
-    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+    let cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    // Resolve barcode or slNo to real upstream sequential patientId
+    if (!/^P\d{1,5}$/i.test(cleanPatientId)) {
+      const resolved = await resolvePatientIdBySlNo(rawPid, req.user?.upstreamSid);
+      if (resolved) {
+        cleanPatientId = resolved;
+      }
+    }
 
     // Check if patient was deleted
     try {
@@ -1800,9 +1920,17 @@ export const restoreReport = async (req, res, next) => {
     }
 
     const rawPid = String(patientId).trim();
-    const cleanPatientId = rawPid.toUpperCase().startsWith('P')
+    let cleanPatientId = rawPid.toUpperCase().startsWith('P')
       ? `P${rawPid.replace(/^P+/i, '')}`
       : `P${rawPid}`;
+
+    // Resolve barcode or slNo to real upstream sequential patientId
+    if (!/^P\d{1,5}$/i.test(cleanPatientId)) {
+      const resolved = await resolvePatientIdBySlNo(rawPid, req.user?.upstreamSid);
+      if (resolved) {
+        cleanPatientId = resolved;
+      }
+    }
 
     // Check if patient was deleted
     try {

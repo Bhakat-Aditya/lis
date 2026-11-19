@@ -58,7 +58,17 @@ export default function PatientDetailPage() {
   const activeTab = searchParams.get('tab') || 'profile'; // profile, tests, results, invoice
 
   const [loading, setLoading] = useState(true);
-  const [patient, setPatient] = useState(null);
+  const [patient, setPatient] = useState(() => {
+    if (activePatient && (
+      activePatient.patientId === id ||
+      activePatient.slNo === id ||
+      activePatient.barcode === id ||
+      String(activePatient.patientId || '').replace(/^P+/i, '') === String(id || '').replace(/^P+/i, '')
+    )) {
+      return activePatient;
+    }
+    return null;
+  });
   const [reports, setReports] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [invoiceData, setInvoiceData] = useState(null);
@@ -226,10 +236,25 @@ export default function PatientDetailPage() {
         setReports(Array.isArray(repList) ? repList : []);
         setTemplates(Array.isArray(res.data?.templates) ? res.data.templates : []);
         setActivePatient(pt);
+
+        // Seamlessly update route URL if URL was an slNo/barcode and upstream assigned a real P-ID (e.g. /patients/8769959959 -> /patients/P14)
+        if (pt.patientId && pt.patientId !== id && !id.toUpperCase().startsWith('P')) {
+          navigate(`/patients/${pt.patientId}?${searchParams.toString()}`, { replace: true });
+        }
       } else if (!isRateLimited) {
         // Only apply fallback patient if not rate-limited and no existing data
         setPatient((prev) => {
-          if (!prev) applyFallbackPatient();
+          if (!prev) {
+            if (activePatient && (
+              activePatient.patientId === id ||
+              activePatient.slNo === id ||
+              activePatient.barcode === id ||
+              String(activePatient.patientId || '').replace(/^P+/i, '') === String(id || '').replace(/^P+/i, '')
+            )) {
+              return activePatient;
+            }
+            return applyFallbackPatient();
+          }
           return prev;
         });
       }
@@ -298,28 +323,37 @@ export default function PatientDetailPage() {
 
 
   const applyFallbackPatient = () => {
-    const fallback =
-      activePatient || {
-        patientId: id,
-        slNo: id,
-        name: 'Patient',
-        gender: 'Male',
-        age: '30',
-        age_unit: 'Years',
-        referedDr: 'Self',
-        center: 'Main',
-        collectionDate: getLocalDateString(),
-        status: 'REGISTERED',
-        totalBill: 0,
-        paidBill: 0,
-        balance: 0,
-        billPayStatus: 1,
-      };
+    const isMatchingActive =
+      activePatient && (
+        activePatient.patientId === id ||
+        activePatient.slNo === id ||
+        activePatient.barcode === id ||
+        String(activePatient.patientId || '').replace(/^P+/i, '') === String(id || '').replace(/^P+/i, '')
+      );
+    const fallback = isMatchingActive
+      ? activePatient
+      : {
+          patientId: id,
+          slNo: id,
+          name: 'Patient',
+          gender: 'Male',
+          age: '30',
+          age_unit: 'Years',
+          referedDr: 'Self',
+          center: 'Main',
+          collectionDate: getLocalDateString(),
+          status: 'REGISTERED',
+          totalBill: 0,
+          paidBill: 0,
+          balance: 0,
+          billPayStatus: 1,
+        };
 
     setPatient(fallback);
     setReports([]);
     setActivePatient(fallback);
     setInvoiceData(generateDemoInvoice(fallback, []));
+    return fallback;
   };
 
   const generateDemoInvoice = (p, rList = []) => {
@@ -663,14 +697,15 @@ export default function PatientDetailPage() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-sm font-bold text-slate-900 leading-tight">
-                {patient?.title ? `${patient.title} ` : ''}{patient?.name || 'Patient'}
+                {(patient?.title || activePatient?.title) ? `${patient?.title || activePatient?.title} ` : ''}
+                {patient?.name || activePatient?.name || 'Patient'}
               </h1>
               <span className="font-mono text-xs font-bold bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-200">
-                Barcode: {patient?.slNo || patient?.barcode || '-'}
+                Barcode: {patient?.slNo || patient?.barcode || activePatient?.slNo || activePatient?.barcode || (id && !id.toUpperCase().startsWith('P') ? id : '-')}
               </span>
             </div>
             <span className="text-[11px] text-slate-500 font-medium">
-              Ref by: <strong className="text-slate-700">{patient?.referedDr || 'Self'}</strong> • Reg: {formatDisplayDate(patient?.regDate || patient?.collectionDate)}{patient?.sampleTime ? ` • Sample: ${patient.sampleTime}` : ''}
+              Ref by: <strong className="text-slate-700">{patient?.referedDr || activePatient?.referedDr || 'Self'}</strong> • Reg: {formatDisplayDate(patient?.regDate || patient?.collectionDate || activePatient?.regDate || activePatient?.collectionDate)}{patient?.sampleTime ? ` • Sample: ${patient.sampleTime}` : ''}
             </span>
           </div>
         </div>
@@ -805,8 +840,8 @@ export default function PatientDetailPage() {
 
       {activeTab === 'tests' && (
         <TestSelectionView
-          key={patient?.patientId || id}
-          patient={patient}
+          key={patient?.patientId || activePatient?.patientId || id}
+          patient={patient || activePatient}
           reports={reports}
           templates={templates}
           onRefresh={fetchPatientData}
