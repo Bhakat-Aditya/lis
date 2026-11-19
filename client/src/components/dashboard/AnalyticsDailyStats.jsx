@@ -241,8 +241,20 @@ export function BillAmountStats({ data }) {
  */
 export function TestResultStats({ data }) {
   const items = data?.breakdown || [];
-  const total = data?.totalTests || 384;
-  const autoRatio = data?.dailyStatistics?.autoCalculatedRatio || 17.2;
+  const total = Number(data?.totalTests) || 0;
+
+  // Find RECEIVED and CALCULATED items to calculate Automated Result (RECEIVED % + CALCULATED %)
+  const receivedItem = items.find((i) => String(i.label || '').toUpperCase() === 'RECEIVED');
+  const calculatedItem = items.find((i) => String(i.label || '').toUpperCase() === 'CALCULATED');
+
+  const recCount = Number(receivedItem?.count || 0);
+  const calcCount = Number(calculatedItem?.count || 0);
+  const recPct = Number(receivedItem?.percentage ?? (total > 0 ? (recCount / total) * 100 : 0));
+  const calcPct = Number(calculatedItem?.percentage ?? (total > 0 ? (calcCount / total) * 100 : 0));
+
+  const automatedRatio = (total > 0 && (recCount > 0 || calcCount > 0))
+    ? Number((((recCount + calcCount) / total) * 100).toFixed(1))
+    : Number((recPct + calcPct).toFixed(1)) || Number(data?.dailyStatistics?.autoCalculatedRatio || 0);
 
   return (
     <div className="space-y-3 text-xs">
@@ -257,10 +269,10 @@ export function TestResultStats({ data }) {
 
         <div className="p-3 bg-blue-50/70 rounded-xl border border-blue-100 shadow-2xs">
           <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 block mb-1">
-            Auto-Calculated
+            Automated Result
           </span>
-          <span className="text-xl font-extrabold text-blue-700">{autoRatio}%</span>
-          <span className="text-[10px] text-blue-600 block mt-0.5">Analyzer auto-calc</span>
+          <span className="text-xl font-extrabold text-blue-700">{automatedRatio}%</span>
+          <span className="text-[10px] text-blue-600 block mt-0.5">Received + Calculated</span>
         </div>
       </div>
 

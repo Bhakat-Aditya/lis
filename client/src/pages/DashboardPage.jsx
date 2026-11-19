@@ -318,6 +318,16 @@ export default function DashboardPage({ onOpenNewPatient }) {
     autoCalculatedRatio: 0,
   };
 
+  const testBreakdown = analyticsData?.testResultSummary?.breakdown || [];
+  const testTotalCount = Number(analyticsData?.testResultSummary?.totalTests) || 0;
+  const recItem = testBreakdown.find((i) => String(i.label || '').toUpperCase() === 'RECEIVED');
+  const calcItem = testBreakdown.find((i) => String(i.label || '').toUpperCase() === 'CALCULATED');
+  const recCount = Number(recItem?.count || 0);
+  const calcCount = Number(calcItem?.count || 0);
+  const automatedResultRatio = testTotalCount > 0 && (recCount > 0 || calcCount > 0)
+    ? Number((((recCount + calcCount) / testTotalCount) * 100).toFixed(1))
+    : Number(((Number(recItem?.percentage || 0) + Number(calcItem?.percentage || 0))).toFixed(1)) || testStats.autoCalculatedRatio;
+
   const deptStats = analyticsData?.departmentWiseReportCount?.dailyStatistics || {
     highestVolumeDept: 'Pathology',
     departmentsActive: 0,
@@ -524,7 +534,7 @@ export default function DashboardPage({ onOpenNewPatient }) {
             }
             highlights={[
               { label: 'Total Tests', value: `${testStats.totalTests}`, color: 'text-purple-700' },
-              { label: 'Auto Calculated', value: `${testStats.autoCalculatedRatio}%`, color: 'text-blue-600' },
+              { label: 'Automated Result', value: `${automatedResultRatio}%`, color: 'text-blue-600' },
               { label: 'Success Rate', value: `${testStats.completedRate}%`, color: 'text-emerald-600' },
             ]}
             onViewDetails={() => setSelectedDetailChart('testSummary')}
