@@ -871,30 +871,25 @@ export const streamInvoicePdf = async (req, res, next) => {
       return res.status(404).json({ STATUS: 'FAILED', Message: 'Official bill PDF not found on upstream AWS server' });
     }
 
-    // Bypass any intermediate proxy/CDN caching by appending cache-busting timestamp and preview=true
-    const separator = billUrl.includes('?') ? '&' : '?';
-    const freshBillUrl = `${billUrl}${separator}preview=true&_t=${Date.now()}`;
-
-    const pdfStream = await axios.get(freshBillUrl, {
-      responseType: 'stream',
-      timeout: 25000,
-      headers: {
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-      },
-    });
-
-    const isDownload = req.query.download === 'true';
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-    if (isDownload) {
-      res.setHeader('Content-Disposition', `attachment; filename="Bill_${cleanPatientId}.pdf"`);
-    } else {
-      res.setHeader('Content-Disposition', 'inline');
+    // Ensure &preview=true is appended directly to AWS URL so browser previews instead of downloading
+    let targetUrl = billUrl;
+    if (targetUrl.includes('preview=false')) {
+      targetUrl = targetUrl.replace('preview=false', 'preview=true');
+    } else if (!targetUrl.includes('preview=')) {
+      targetUrl = targetUrl + (targetUrl.includes('?') ? '&' : '?') + 'preview=true';
     }
-    pdfStream.data.pipe(res);
+
+    if (req.query.json === 'true' || req.headers.accept?.includes('application/json')) {
+      return res.json({
+        STATUS: 'SUCCESS',
+        StatusCode: '0000',
+        url: targetUrl,
+        billUrl: targetUrl,
+      });
+    }
+
+    // Direct browser 302 redirect straight to upstream AWS URL (zero server buffering or resource consumption)
+    return res.redirect(targetUrl);
   } catch (err) {
     console.error('[InvoicePDF] Stream error:', err.message);
     next(err);

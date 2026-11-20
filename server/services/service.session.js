@@ -14,7 +14,7 @@ class SessionService {
   /**
    * Create or replace an active session for a user.
    * If the user was already logged in on a different browser/device,
-   * the previous session is immediately invalidated and logged out upstream.
+   * the previous session is immediately invalidated.
    */
   async createSession({
     sessionId,
@@ -32,25 +32,25 @@ class SessionService {
 
     const normalizedLogin = loginId.toLowerCase().trim();
 
-    // 1. Invalidate and logout previous session if exists for this user
+    // 1. Invalidate previous session if exists for this user
     const previousSession = this.activeSessionsByLogin.get(normalizedLogin);
     if (previousSession && previousSession.sessionId !== sessionId) {
       console.log(
-        `[Session] Invalidating previous session (${previousSession.sessionId}) for '${normalizedLogin}'. New login from IP: ${ip}, UA: ${userAgent}`
+        `[Session] Invalidating previous session (${previousSession.sessionId}) for '${normalizedLogin}'. New login from IP: ${ip}`
       );
 
       previousSession.isActive = false;
-      previousSession.terminatedReason = 'Logged in from another browser or device';
+      previousSession.terminatedReason = 'Logged in from another device';
 
-      // Note: We deliberately do NOT call upstreamService.userLogout here,
-      // because upstream LIS session is shared and concurrent requests may still be using it.
+      if (previousSession.sessionId) {
+        this.sessionsById.delete(previousSession.sessionId);
+      }
 
-      // If MongoDB is connected, mark old sessions as inactive
       if (mongoose.connection.readyState === 1) {
         try {
           await Session.updateMany(
             { loginId: normalizedLogin, isActive: true },
-            { $set: { isActive: false, terminatedReason: 'Logged in from another browser or device' } }
+            { $set: { isActive: false, terminatedReason: 'Logged in from another device' } }
           );
         } catch (dbErr) {
           console.warn('[Session] MongoDB update error on invalidating previous session:', dbErr.message);
@@ -74,7 +74,7 @@ class SessionService {
       createdAt: new Date(),
     };
 
-    // 3. Store in memory maps
+    // 3. Store strictly in user's isolated session store
     this.activeSessionsByLogin.set(normalizedLogin, sessionRecord);
     this.sessionsById.set(sessionId, sessionRecord);
 
@@ -104,6 +104,7 @@ class SessionService {
   /**
    * Validate whether a session is the currently active one for this loginId.
    * Checks in-memory cache first, falling back to MongoDB if server restarted.
+   * Never falls back to a global masterSid or auto-creates dummy sessions.
    */
   async validateSession(loginId, sessionId) {
     if (!loginId || !sessionId) {
@@ -137,37 +138,31 @@ class SessionService {
           };
           this.activeSessionsByLogin.set(normalizedLogin, activeSession);
           this.sessionsById.set(dbSession.sessionId, activeSession);
-          if (activeSession.upstreamSid) {
-            upstreamService.masterSid = activeSession.upstreamSid;
-          }
         }
       } catch (dbErr) {
         console.warn('[Session] Hydration error from DB:', dbErr.message);
       }
     }
 
-    // If no active session found in memory or DB, re-hydrate from valid JWT token session
+    // 1. Reject if session is missing instead of auto-creating one with masterSid
     if (!activeSession) {
-      activeSession = {
-        sessionId,
-        loginId: normalizedLogin,
-        upstreamSid: upstreamService.masterSid || null,
-        isActive: true,
-        createdAt: new Date(),
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      return {
+        valid: false,
+        reason: 'SESSION_NOT_FOUND',
+        message: 'Session expired. Please login again.',
       };
-      this.activeSessionsByLogin.set(normalizedLogin, activeSession);
-      this.sessionsById.set(sessionId, activeSession);
-      return { valid: true, session: activeSession };
     }
 
-    // Multi-tab / multi-window concurrency support:
-    // If sessionId does not match activeSession.sessionId, allow it to continue
-    // as long as the JWT is cryptographically valid and not expired.
+    // 2. Reject if sessionId does not match active session
     if (activeSession.sessionId !== sessionId) {
-      return { valid: true, session: activeSession };
+      return {
+        valid: false,
+        reason: 'SESSION_REPLACED',
+        message: 'Logged in from another device.',
+      };
     }
 
+    // 3. Reject if marked inactive
     if (!activeSession.isActive) {
       return {
         valid: false,
@@ -176,7 +171,7 @@ class SessionService {
       };
     }
 
-    // Check expiry
+    // 4. Check expiry
     if (activeSession.expiresAt && new Date() > new Date(activeSession.expiresAt)) {
       this.terminateSession(sessionId, normalizedLogin, activeSession.upstreamSid);
       return {
@@ -194,7 +189,9 @@ class SessionService {
    */
   async terminateSession(sessionId, loginId, upstreamSid = null) {
     const normalizedLogin = loginId ? loginId.toLowerCase().trim() : null;
-    const session = sessionId ? this.sessionsById.get(sessionId) : (normalizedLogin ? this.activeSessionsByLogin.get(normalizedLogin) : null);
+    const session = sessionId
+      ? this.sessionsById.get(sessionId)
+      : (normalizedLogin ? this.activeSessionsByLogin.get(normalizedLogin) : null);
 
     const sidToLogout = upstreamSid || session?.upstreamSid;
 

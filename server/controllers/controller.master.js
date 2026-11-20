@@ -88,8 +88,11 @@ export const getAllMasterData = async (req, res, next) => {
         try {
           const result = await cacheService.getList(key, forceRefresh, req.user?.upstreamSid);
           results[key] = result.data;
-          const nId = result.nextId || computeNextIdForList(key, result.data);
-          if (nId) {
+          const nId =
+            result.nextId !== undefined && result.nextId !== null
+              ? result.nextId
+              : computeNextIdForList(key, result.data);
+          if (nId !== undefined && nId !== null && String(nId).trim() !== '') {
             nextIds[key] = String(nId);
           }
           if (Array.isArray(result.signList) && result.signList.length > 0) {
@@ -628,16 +631,6 @@ export const updateTemplate = async (req, res, next) => {
             sign: params.sign !== undefined ? params.sign : (list[idx].sign || ''),
           };
           cacheService.cache.set(CACHE_KEYS.TEMPLATE_LIST, list, 3600);
-          try {
-            const { Cache } = await import('../models/model.cache.js');
-            await Cache.findOneAndUpdate(
-              { key: CACHE_KEYS.TEMPLATE_LIST },
-              { data: list, updatedAt: new Date() },
-              { upsert: true }
-            );
-          } catch (dbErr) {
-            // ignore
-          }
         }
       }
     } catch (cacheErr) {

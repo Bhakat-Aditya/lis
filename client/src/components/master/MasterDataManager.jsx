@@ -249,22 +249,30 @@ export default function MasterDataManager() {
 
   const handleAddItem = () => {
     const cacheKey = tabCacheKeyMap[activeTab];
-    let autoId = (cacheKey && nextIds[cacheKey]) || nextIds[activeTab] || '';
-    if (!autoId || autoId === '0') {
-      const tabItems = {
-        tests,
-        samples,
-        departments,
-        units,
-        methods,
-        doctors,
-        references,
-        branches,
-        users,
-        profiles,
-        packages,
-      }[activeTab] || [];
-      autoId = computeFallbackNextId(tabItems);
+    let autoId = '';
+    if (activeTab === 'users' || cacheKey === 'USER_LIST') {
+      autoId =
+        nextIds['USER_LIST'] !== undefined && nextIds['USER_LIST'] !== null
+          ? String(nextIds['USER_LIST'])
+          : '0';
+    } else {
+      autoId = (cacheKey && nextIds[cacheKey]) || nextIds[activeTab] || '';
+      if (!autoId || autoId === '0') {
+        const tabItems = {
+          tests,
+          samples,
+          departments,
+          units,
+          methods,
+          doctors,
+          references,
+          branches,
+          users,
+          profiles,
+          packages,
+        }[activeTab] || [];
+        autoId = computeFallbackNextId(tabItems);
+      }
     }
     setSelectedItem({ isNew: true, nextId: autoId });
     setEditModalOpen(true);

@@ -9,7 +9,7 @@ import {
   AlertCircle,
   Edit,
 } from 'lucide-react';
-import api, { openBillingPdf } from '../../services/api';
+import api, { openBillingPdf, getBillingPdfUrl } from '../../services/api';
 
 export default function BillPreviewModal({
   isOpen,
@@ -18,7 +18,6 @@ export default function BillPreviewModal({
   patientName = '',
   onOpenEditBill,
 }) {
-  const [blobUrl, setBlobUrl] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const iframeRef = useRef(null);
@@ -29,48 +28,13 @@ export default function BillPreviewModal({
       : `P${String(patientId).trim()}`
     : '';
 
-  const loadBillPdf = async () => {
-    if (!cleanPid) return;
-    setLoading(true);
-    setError('');
-    try {
-      const res = await api.get('/billing/pdf', {
-        params: { patientId: cleanPid, preview: 'true', _t: Date.now() },
-        responseType: 'blob',
-      });
-
-      if (blobUrl) {
-        URL.revokeObjectURL(blobUrl);
-      }
-      const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
-      setBlobUrl(url);
-    } catch (err) {
-      console.error('Failed to load bill preview:', err);
-      setError(
-        err.response?.data?.Message ||
-          'Unable to load bill preview from AWS server. Please check if this patient has billed investigations.'
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+  const pdfUrl = cleanPid ? getBillingPdfUrl(cleanPid, { preview: true }) : '';
 
   useEffect(() => {
     if (isOpen && cleanPid) {
-      loadBillPdf();
-    } else {
-      if (blobUrl) {
-        URL.revokeObjectURL(blobUrl);
-        setBlobUrl(null);
-      }
+      setLoading(true);
       setError('');
     }
-
-    return () => {
-      if (blobUrl) {
-        URL.revokeObjectURL(blobUrl);
-      }
-    };
   }, [isOpen, cleanPid]);
 
   useEffect(() => {
@@ -95,27 +59,16 @@ export default function BillPreviewModal({
         console.warn('Iframe print fallback:', e);
       }
     }
-    if (blobUrl) {
-      window.open(blobUrl, '_blank');
-    }
+    openBillingPdf(cleanPid, { preview: true });
   };
 
   const handleDownload = () => {
-    if (!blobUrl) return;
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = `Bill_${cleanPid}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    if (!cleanPid) return;
+    window.open(getBillingPdfUrl(cleanPid, { download: true }), '_blank');
   };
 
   const handleOpenExternal = () => {
-    if (blobUrl) {
-      window.open(blobUrl, '_blank');
-    } else {
-      openBillingPdf(cleanPid, { preview: true });
-    }
+    openBillingPdf(cleanPid, { preview: true });
   };
 
   return (
@@ -167,9 +120,13 @@ export default function BillPreviewModal({
             )}
 
             <button
-              onClick={loadBillPdf}
-              disabled={loading}
-              className="p-2 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center"
+              onClick={() => {
+                if (iframeRef.current && pdfUrl) {
+                  setLoading(true);
+                  iframeRef.current.src = pdfUrl;
+                }
+              }}
+              className="p-2 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors cursor-pointer flex items-center justify-center"
               title="Reload Bill"
               aria-label="Refresh"
             >
@@ -178,9 +135,8 @@ export default function BillPreviewModal({
 
             <button
               onClick={handleOpenExternal}
-              disabled={!blobUrl}
-              className="p-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 active:scale-95 rounded-lg transition-all cursor-pointer shadow-xs disabled:opacity-50 flex items-center justify-center"
-              title="Open full page in browser tab"
+              className="p-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 active:scale-95 rounded-lg transition-all cursor-pointer shadow-xs flex items-center justify-center"
+              title="Open full page in new browser tab"
               aria-label="Open in Tab"
             >
               <ExternalLink className="w-4 h-4" />
@@ -189,8 +145,7 @@ export default function BillPreviewModal({
             {/* DOWNLOAD BUTTON */}
             <button
               onClick={handleDownload}
-              disabled={!blobUrl}
-              className="p-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 rounded-lg transition-all cursor-pointer shadow-xs disabled:opacity-50 flex items-center justify-center"
+              className="p-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 rounded-lg transition-all cursor-pointer shadow-xs flex items-center justify-center"
               title="Download PDF file"
               aria-label="Download PDF"
             >
@@ -200,8 +155,7 @@ export default function BillPreviewModal({
             {/* PRINT BUTTON */}
             <button
               onClick={handlePrint}
-              disabled={!blobUrl}
-              className="p-2 text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 active:scale-95 rounded-lg transition-all cursor-pointer shadow-xs disabled:opacity-50 flex items-center justify-center"
+              className="p-2 text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 active:scale-95 rounded-lg transition-all cursor-pointer shadow-xs flex items-center justify-center"
               title="Print Bill"
               aria-label="Print"
             >
@@ -241,17 +195,22 @@ export default function BillPreviewModal({
               </h3>
               <p className="text-xs text-slate-500 max-w-md mb-4">{error}</p>
               <button
-                onClick={loadBillPdf}
+                onClick={handleOpenExternal}
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
               >
-                Try Again
+                Open in New Tab Directly
               </button>
             </div>
-          ) : blobUrl ? (
+          ) : pdfUrl ? (
             <iframe
-              key={blobUrl}
+              key={pdfUrl}
               ref={iframeRef}
-              src={blobUrl}
+              src={pdfUrl}
+              onLoad={() => setLoading(false)}
+              onError={() => {
+                setLoading(false);
+                setError('Unable to embed bill preview inline. Click below to open in a new tab.');
+              }}
               title={`AWS Bill Preview - ${cleanPid}`}
               className="w-full h-full border-0 bg-white"
             />

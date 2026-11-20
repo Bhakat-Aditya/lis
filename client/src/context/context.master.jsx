@@ -104,7 +104,7 @@ export const MasterProvider = ({ children }) => {
           [cacheKey]: listData,
         }));
       }
-      if (res.data?.nextId) {
+      if (res.data?.nextId !== undefined && res.data?.nextId !== null) {
         setNextIds((prev) => ({
           ...prev,
           [cacheKey]: String(res.data.nextId),

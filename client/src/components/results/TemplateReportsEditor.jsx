@@ -361,10 +361,8 @@ export default function TemplateReportsEditor({
       ? (String(rawPid).toUpperCase().startsWith('P') ? `P${String(rawPid).replace(/^P+/i, '')}` : `P${rawPid}`)
       : '';
     const targetUrl = patient?.printPDFUrl || patient?.reportUrl;
-    if (targetUrl) {
-      window.open(targetUrl, '_blank');
-    } else if (cleanPid) {
-      openReportPdf(cleanPid, { addHeader: true, download: true });
+    if (targetUrl || cleanPid) {
+      openReportPdf(cleanPid, { addHeader: true, targetUrl });
     } else {
       setGlobalError('No report PDF available for this patient yet.');
     }
@@ -764,7 +762,6 @@ export default function TemplateReportsEditor({
           },
         }));
         setGlobalSuccess(`Template report "${item.testName}" (#${reportId}) saved successfully.`);
-        if (onRefresh) onRefresh(false);
       } else {
         throw new Error(res.data?.Message || 'Failed to save template report');
       }
@@ -842,7 +839,6 @@ export default function TemplateReportsEditor({
       });
 
       setGlobalSuccess(`Successfully saved ${successCount} template report(s) directly to server!`);
-      if (onRefresh) onRefresh(true);
     } catch (err) {
       setGlobalError(err.response?.data?.Message || err.message || 'Failed to save all template reports');
     } finally {

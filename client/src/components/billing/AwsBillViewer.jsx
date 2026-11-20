@@ -8,10 +8,9 @@ import {
   AlertCircle,
   FileText,
 } from 'lucide-react';
-import api, { openBillingPdf } from '../../services/api';
+import { openBillingPdf, getBillingPdfUrl } from '../../services/api';
 
 export default function AwsBillViewer({ patientId, onBack, title, refreshKey }) {
-  const [blobUrl, setBlobUrl] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const iframeRef = useRef(null);
@@ -22,38 +21,11 @@ export default function AwsBillViewer({ patientId, onBack, title, refreshKey }) 
       : `P${String(patientId).trim()}`
     : '';
 
-  const loadBill = async () => {
-    if (!cleanPid) return;
-    setLoading(true);
-    setError('');
-    try {
-      // Stream authentic PDF directly from AWS via backend endpoint with preview=true and cache buster
-      const res = await api.get('/billing/pdf', {
-        params: { patientId: cleanPid, preview: 'true', _t: Date.now() },
-        responseType: 'blob',
-      });
-
-      if (blobUrl) {
-        URL.revokeObjectURL(blobUrl);
-      }
-      const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
-      setBlobUrl(url);
-    } catch (err) {
-      console.error('Failed to load authentic AWS bill:', err);
-      setError(
-        err.response?.data?.Message ||
-          'Unable to load official bill directly from AWS server. Please ensure tests have been billed on upstream.'
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+  const billPdfUrl = cleanPid ? getBillingPdfUrl(cleanPid, { preview: true }) : '';
 
   useEffect(() => {
-    loadBill();
-    return () => {
-      if (blobUrl) URL.revokeObjectURL(blobUrl);
-    };
+    setLoading(true);
+    setError('');
   }, [cleanPid, refreshKey]);
 
   const handlePrint = () => {
@@ -61,30 +33,21 @@ export default function AwsBillViewer({ patientId, onBack, title, refreshKey }) 
       try {
         iframeRef.current.contentWindow?.focus();
         iframeRef.current.contentWindow?.print();
+        return;
       } catch {
-        if (blobUrl) window.open(blobUrl, '_blank');
+        // Fallback
       }
-    } else if (blobUrl) {
-      window.open(blobUrl, '_blank');
     }
+    openBillingPdf(cleanPid, { preview: true });
   };
 
   const handleDownload = () => {
-    if (!blobUrl) return;
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = `Bill_${cleanPid}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    if (!cleanPid) return;
+    window.open(getBillingPdfUrl(cleanPid, { download: true }), '_blank');
   };
 
   const handleOpenExternal = () => {
-    if (blobUrl) {
-      window.open(blobUrl, '_blank');
-    } else {
-      openBillingPdf(cleanPid, { preview: true });
-    }
+    openBillingPdf(cleanPid, { preview: true });
   };
 
   return (
@@ -111,9 +74,13 @@ export default function AwsBillViewer({ patientId, onBack, title, refreshKey }) 
 
         <div className="flex items-center gap-1.5">
           <button
-            onClick={loadBill}
-            disabled={loading}
-            className="p-2 text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors cursor-pointer disabled:opacity-50"
+            onClick={() => {
+              if (iframeRef.current && billPdfUrl) {
+                setLoading(true);
+                iframeRef.current.src = billPdfUrl;
+              }
+            }}
+            className="p-2 text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors cursor-pointer"
             title="Reload authentic bill from AWS server"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-amber-400' : ''}`} />
@@ -121,8 +88,7 @@ export default function AwsBillViewer({ patientId, onBack, title, refreshKey }) 
 
           <button
             onClick={handleOpenExternal}
-            disabled={!blobUrl}
-            className="p-2 text-white bg-blue-600 hover:bg-blue-700 active:scale-95 rounded-lg transition-all cursor-pointer shadow-xs disabled:opacity-50"
+            className="p-2 text-white bg-blue-600 hover:bg-blue-700 active:scale-95 rounded-lg transition-all cursor-pointer shadow-xs"
             title="Open official AWS Bill in a new tab"
           >
             <ExternalLink className="w-4 h-4" />
@@ -130,8 +96,7 @@ export default function AwsBillViewer({ patientId, onBack, title, refreshKey }) 
 
           <button
             onClick={handleDownload}
-            disabled={!blobUrl}
-            className="p-2 text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 rounded-lg transition-all cursor-pointer shadow-xs disabled:opacity-50"
+            className="p-2 text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 rounded-lg transition-all cursor-pointer shadow-xs"
             title={`Download official PDF as Bill_${cleanPid}.pdf`}
           >
             <Download className="w-4 h-4" />
@@ -139,8 +104,7 @@ export default function AwsBillViewer({ patientId, onBack, title, refreshKey }) 
 
           <button
             onClick={handlePrint}
-            disabled={!blobUrl}
-            className="p-2 text-white bg-amber-500 hover:bg-amber-600 active:scale-95 rounded-lg transition-all cursor-pointer shadow-xs disabled:opacity-50"
+            className="p-2 text-white bg-amber-500 hover:bg-amber-600 active:scale-95 rounded-lg transition-all cursor-pointer shadow-xs"
             title="Print official AWS Bill"
           >
             <Printer className="w-4 h-4" />
@@ -169,17 +133,22 @@ export default function AwsBillViewer({ patientId, onBack, title, refreshKey }) 
             </h3>
             <p className="text-xs text-slate-500 max-w-md mb-4">{error}</p>
             <button
-              onClick={loadBill}
+              onClick={handleOpenExternal}
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
             >
-              Try Again
+              Open in New Tab Directly
             </button>
           </div>
-        ) : blobUrl ? (
+        ) : billPdfUrl ? (
           <iframe
-            key={blobUrl}
+            key={billPdfUrl}
             ref={iframeRef}
-            src={blobUrl}
+            src={billPdfUrl}
+            onLoad={() => setLoading(false)}
+            onError={() => {
+              setLoading(false);
+              setError('Unable to embed bill preview inline. Click below to open in a new tab.');
+            }}
             title={`AWS Bill - ${cleanPid}`}
             className="w-full h-full border-0 bg-white"
           />

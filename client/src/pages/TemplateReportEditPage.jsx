@@ -451,13 +451,13 @@ export default function TemplateReportEditPage() {
     }
   };
 
-  // Download official diagnostic report PDF
+  // View / download official diagnostic report PDF
   const handleDownloadPdf = () => {
     const targetUrl = patient?.printPDFUrl || patient?.reportUrl;
     if (targetUrl) {
-      window.open(targetUrl, '_blank');
+      openReportPdf(cleanPid, { addHeader: true, targetUrl });
     } else if (cleanPid) {
-      openReportPdf(cleanPid, { addHeader: true, download: true });
+      openReportPdf(cleanPid, { addHeader: true });
     } else {
       setErrorMsg('No report PDF available for this patient yet.');
     }

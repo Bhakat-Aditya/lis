@@ -2,6 +2,7 @@ import axios from 'axios';
 import { config } from '../config/config.env.js';
 import { upstreamService } from '../services/service.upstream.js';
 import { reportOverrideService } from '../services/service.reportOverride.js';
+import { deletedPatientService } from '../services/service.deletedPatient.js';
 import { invalidatePatientListCache, resolvePatientIdBySlNo } from './controller.patient.js';
 import { cacheService, CACHE_KEYS } from '../services/service.cache.js';
 import { orderExamObject } from '../services/service.templateSequence.js';
@@ -153,8 +154,7 @@ export const getPatientReport = async (req, res, next) => {
 
     // Check if patient was deleted
     try {
-      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
-      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      const isDeleted = deletedPatientService.isDeleted(cleanPatientId);
       if (isDeleted) {
         return res.status(404).json({
           STATUS: 'FAILED',
@@ -232,7 +232,15 @@ export const getPatientReport = async (req, res, next) => {
     const payload = upstreamData?.payLoadJSON || {};
     const rawReports = payload.reports || [];
     const patient = payload.patient || null;
-    const printPDFUrl = payload.printPDFUrl || '';
+    const rawPrintPDFUrl = payload.printPDFUrl || '';
+    let printPDFUrl = rawPrintPDFUrl;
+    if (printPDFUrl) {
+      if (printPDFUrl.includes('preview=false')) {
+        printPDFUrl = printPDFUrl.replace('preview=false', 'preview=true');
+      } else if (!printPDFUrl.includes('preview=')) {
+        printPDFUrl = printPDFUrl + (printPDFUrl.includes('?') ? '&' : '?') + 'preview=true';
+      }
+    }
     const printPDFUrlWithHeader = printPDFUrl ? printPDFUrl.replace('addHeader=false', 'addHeader=true') : '';
     const printPDFUrlWithoutHeader = printPDFUrl ? printPDFUrl.replace('addHeader=true', 'addHeader=false') : '';
     const printBarCodeUrls = Array.isArray(payload.printBarCodeUrls) ? payload.printBarCodeUrls : [];
@@ -522,7 +530,14 @@ export const getPatientReport = async (req, res, next) => {
       }
     }
 
-    const billUrl = billing?.billUrl || '';
+    let billUrl = billing?.billUrl || '';
+    if (billUrl) {
+      if (billUrl.includes('preview=false')) {
+        billUrl = billUrl.replace('preview=false', 'preview=true');
+      } else if (!billUrl.includes('preview=')) {
+        billUrl = billUrl + (billUrl.includes('?') ? '&' : '?') + 'preview=true';
+      }
+    }
 
     const patientTotal = Number(patient?.totalBill || 0);
     const discountVal = Number(billing?.discount || patient?.discount || 0);
@@ -817,8 +832,7 @@ export const updateReport = async (req, res, next) => {
 
     // Check if patient was deleted
     try {
-      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
-      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      const isDeleted = deletedPatientService.isDeleted(cleanPatientId);
       if (isDeleted) {
         return res.status(404).json({
           STATUS: 'FAILED',
@@ -848,20 +862,16 @@ export const updateReport = async (req, res, next) => {
       }
     }
 
-    // Resolve Master IDs for method and unit
+    // Resolve Master IDs for method and unit using static / in-memory cache only (no extra upstream calls)
     let finalMethodId = String(method || '').trim();
     let finalUnitId = String(resolvedUnit || '').trim();
 
     try {
       if (finalMethodId || finalUnitId) {
-        const [methodListRes, unitListRes] = await Promise.all([
-          cacheService.getList(CACHE_KEYS.METHOD_LIST).catch(() => ({ data: [] })),
-          cacheService.getList(CACHE_KEYS.UNIT_LIST).catch(() => ({ data: [] })),
-        ]);
-        const masterMethods = methodListRes?.data || [];
-        const masterUnits = unitListRes?.data || [];
+        const masterMethods = cacheService.memoryStore?.get(CACHE_KEYS.METHOD_LIST)?.data || [];
+        const masterUnits = cacheService.memoryStore?.get(CACHE_KEYS.UNIT_LIST)?.data || [];
 
-        if (finalMethodId) {
+        if (finalMethodId && masterMethods.length > 0) {
           const cleanM = finalMethodId.toLowerCase();
           const matchById = masterMethods.find(
             (m) =>
@@ -882,32 +892,35 @@ export const updateReport = async (req, res, next) => {
 
         if (finalUnitId) {
           const cleanU = finalUnitId.toLowerCase();
-          const matchById = masterUnits.find(
-            (u) =>
-              String(u['Unit Id'] || u.id || '').trim().toLowerCase() === cleanU ||
-              String(u['Unit Id'] || u.id || '').replace(/^U/i, '').toLowerCase() === cleanU.replace(/^U/i, '')
-          );
-          if (matchById) {
-            finalUnitId = String(matchById['Unit Id'] || matchById.id || '').trim();
-          } else {
-            const matchByName = masterUnits.find(
-              (u) => String(u.Name || u.name || '').toLowerCase().trim() === cleanU
+          if (masterUnits.length > 0) {
+            const matchById = masterUnits.find(
+              (u) =>
+                String(u['Unit Id'] || u.id || '').trim().toLowerCase() === cleanU ||
+                String(u['Unit Id'] || u.id || '').replace(/^U/i, '').toLowerCase() === cleanU.replace(/^U/i, '')
             );
-            if (matchByName) {
-              finalUnitId = String(matchByName['Unit Id'] || matchByName.id || '').trim();
+            if (matchById) {
+              finalUnitId = String(matchById['Unit Id'] || matchById.id || '').trim();
             } else {
-              const invertedEntry = Object.entries(STATIC_UNIT_MAP).find(
-                ([, v]) => v.toLowerCase().trim() === cleanU
+              const matchByName = masterUnits.find(
+                (u) => String(u.Name || u.name || '').toLowerCase().trim() === cleanU
               );
-              if (invertedEntry) {
-                finalUnitId = invertedEntry[0].toUpperCase();
+              if (matchByName) {
+                finalUnitId = String(matchByName['Unit Id'] || matchByName.id || '').trim();
               }
+            }
+          }
+          if (!finalUnitId || finalUnitId === cleanU) {
+            const invertedEntry = Object.entries(STATIC_UNIT_MAP).find(
+              ([, v]) => v.toLowerCase().trim() === cleanU
+            );
+            if (invertedEntry) {
+              finalUnitId = invertedEntry[0].toUpperCase();
             }
           }
         }
       }
     } catch (e) {
-      console.warn('[UpdateReport] Master ID resolution note:', e.message);
+      // Non-blocking
     }
 
     let finalRate = rate !== undefined && rate !== null ? String(rate).trim() : '';
@@ -949,23 +962,19 @@ export const updateReport = async (req, res, next) => {
       comment: comment || '',
     };
 
+    // Execute single upstream UPDATEREPORT call
     const upstreamData = await upstreamService.post('UPDATEREPORT', params, null, req.user?.upstreamSid);
 
-    // If a rate was provided or changed, automatically sync the patient's bill (BILLUPDATE)
-    if (finalRate !== '' && !isNaN(Number(finalRate)) && Number(finalRate) > 0) {
-      await syncPatientBillFromReportRate(
-        cleanPatientId,
-        reportId,
-        testName,
-        finalRate,
-        profileName,
-        req.user?.upstreamSid
-      );
+    // Update in-memory report cache locally so no re-fetch is needed
+    const cachedEntry = reportCache.get(cleanPatientId);
+    if (cachedEntry?.data?.reports) {
+      const rep = cachedEntry.data.reports.find((r) => String(r.reportId).trim() === String(reportId).trim());
+      if (rep) {
+        rep.resultData = finalResultData;
+        rep.comment = comment || '';
+        rep.status = 'SAVED';
+      }
     }
-
-    invalidateReportCache(patientId);
-    invalidateReportCache(cleanPatientId);
-    invalidatePatientListCache();
 
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
@@ -1001,8 +1010,7 @@ export const receiveSample = async (req, res, next) => {
 
     // Check if patient was deleted
     try {
-      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
-      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      const isDeleted = deletedPatientService.isDeleted(cleanPatientId);
       if (isDeleted) {
         return res.status(404).json({
           STATUS: 'FAILED',
@@ -1049,8 +1057,7 @@ export const verifyReport = async (req, res, next) => {
 
     // Check if patient was deleted
     try {
-      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
-      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      const isDeleted = deletedPatientService.isDeleted(cleanPatientId);
       if (isDeleted) {
         return res.status(404).json({
           STATUS: 'FAILED',
@@ -1116,8 +1123,7 @@ export const approveReport = async (req, res, next) => {
 
     // Check if patient was deleted
     try {
-      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
-      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      const isDeleted = deletedPatientService.isDeleted(cleanPatientId);
       if (isDeleted) {
         return res.status(404).json({
           STATUS: 'FAILED',
@@ -1183,8 +1189,7 @@ export const rejectReport = async (req, res, next) => {
 
     // Check if patient was deleted
     try {
-      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
-      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      const isDeleted = deletedPatientService.isDeleted(cleanPatientId);
       if (isDeleted) {
         return res.status(404).json({
           STATUS: 'FAILED',
@@ -1239,8 +1244,7 @@ export const releaseReport = async (req, res, next) => {
 
     // Check if patient was deleted
     try {
-      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
-      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      const isDeleted = deletedPatientService.isDeleted(cleanPatientId);
       if (isDeleted) {
         return res.status(404).json({
           STATUS: 'FAILED',
@@ -1292,8 +1296,7 @@ export const recallReport = async (req, res, next) => {
 
     // Check if patient was deleted
     try {
-      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
-      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      const isDeleted = deletedPatientService.isDeleted(cleanPatientId);
       if (isDeleted) {
         return res.status(404).json({
           STATUS: 'FAILED',
@@ -1344,8 +1347,7 @@ export const calculateResult = async (req, res, next) => {
 
     // Check if patient was deleted
     try {
-      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
-      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      const isDeleted = deletedPatientService.isDeleted(cleanPatientId);
       if (isDeleted) {
         return res.status(404).json({
           STATUS: 'FAILED',
@@ -1408,8 +1410,7 @@ export const setDefaultResult = async (req, res, next) => {
 
     // Check if patient was deleted
     try {
-      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
-      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      const isDeleted = deletedPatientService.isDeleted(cleanPatientId);
       if (isDeleted) {
         return res.status(404).json({
           STATUS: 'FAILED',
@@ -1510,8 +1511,7 @@ export const downloadResult = async (req, res, next) => {
 
     // Check if patient was deleted
     try {
-      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
-      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      const isDeleted = deletedPatientService.isDeleted(cleanPatientId);
       if (isDeleted) {
         return res.status(404).json({
           STATUS: 'FAILED',
@@ -1581,8 +1581,7 @@ export const uploadOrder = async (req, res, next) => {
 
     // Check if patient was deleted
     try {
-      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
-      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      const isDeleted = deletedPatientService.isDeleted(cleanPatientId);
       if (isDeleted) {
         return res.status(404).json({
           STATUS: 'FAILED',
@@ -1645,8 +1644,7 @@ export const sendWhatsApp = async (req, res, next) => {
 
     // Check if patient was deleted
     try {
-      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
-      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      const isDeleted = deletedPatientService.isDeleted(cleanPatientId);
       if (isDeleted) {
         return res.status(404).json({
           STATUS: 'FAILED',
@@ -1747,8 +1745,7 @@ export const streamReportPdf = async (req, res, next) => {
 
     // Check if patient was deleted
     try {
-      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
-      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      const isDeleted = deletedPatientService.isDeleted(cleanPatientId);
       if (isDeleted) {
         return res.status(404).json({
           STATUS: 'FAILED',
@@ -1760,13 +1757,19 @@ export const streamReportPdf = async (req, res, next) => {
       // Continue
     }
 
-    const upstreamData = await upstreamService.get(
-      'GETPATIENTREPORT',
-      { patientId: cleanPatientId },
-      req.user?.upstreamSid
-    );
+    // Check cached report first for immediate 302 redirect
+    const cached = getCachedReport(cleanPatientId);
+    let pdfUrl = cached?.printPDFUrl || cached?.patient?.printPDFUrl || cached?.reportUrl || '';
 
-    let pdfUrl = upstreamData?.payLoadJSON?.printPDFUrl;
+    if (!pdfUrl) {
+      const upstreamData = await upstreamService.get(
+        'GETPATIENTREPORT',
+        { patientId: cleanPatientId },
+        req.user?.upstreamSid
+      );
+      pdfUrl = upstreamData?.payLoadJSON?.printPDFUrl;
+    }
+
     if (!pdfUrl) {
       return res.status(404).json({ STATUS: 'FAILED', Message: 'Report PDF URL not found on upstream AWS server' });
     }
@@ -1778,19 +1781,25 @@ export const streamReportPdf = async (req, res, next) => {
       pdfUrl = pdfUrl.replace('addHeader=true', 'addHeader=false');
     }
 
-    const pdfStream = await axios.get(pdfUrl, {
-      responseType: 'stream',
-      timeout: 25000,
-    });
-
-    const isDownload = req.query.download === 'true';
-    res.setHeader('Content-Type', 'application/pdf');
-    if (isDownload) {
-      res.setHeader('Content-Disposition', `attachment; filename="Report_${cleanPatientId}${wantsHeader ? '_Letterhead' : ''}.pdf"`);
-    } else {
-      res.setHeader('Content-Disposition', 'inline');
+    // Append &preview=true so browser previews PDF directly without downloading
+    if (pdfUrl.includes('preview=false')) {
+      pdfUrl = pdfUrl.replace('preview=false', 'preview=true');
+    } else if (!pdfUrl.includes('preview=')) {
+      pdfUrl = pdfUrl + (pdfUrl.includes('?') ? '&' : '?') + 'preview=true';
     }
-    pdfStream.data.pipe(res);
+
+    // If client requested JSON (e.g. frontend fetching AWS URL directly to navigate a tab)
+    if (req.query.json === 'true' || req.headers.accept?.includes('application/json')) {
+      return res.json({
+        STATUS: 'SUCCESS',
+        StatusCode: '0000',
+        url: pdfUrl,
+        printPDFUrl: pdfUrl,
+      });
+    }
+
+    // Direct browser 302 redirect straight to AWS URL (zero server buffering or resource consumption)
+    return res.redirect(pdfUrl);
   } catch (err) {
     console.error('[ReportPDF] Stream error:', err.message);
     next(err);
@@ -1828,8 +1837,7 @@ export const deleteReport = async (req, res, next) => {
 
     // Check if patient was deleted
     try {
-      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
-      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      const isDeleted = deletedPatientService.isDeleted(cleanPatientId);
       if (isDeleted) {
         return res.status(404).json({
           STATUS: 'FAILED',
@@ -1934,8 +1942,7 @@ export const restoreReport = async (req, res, next) => {
 
     // Check if patient was deleted
     try {
-      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
-      const isDeleted = await DeletedPatient.findOne({ patientId: cleanPatientId.toUpperCase() }).lean();
+      const isDeleted = deletedPatientService.isDeleted(cleanPatientId);
       if (isDeleted) {
         return res.status(404).json({
           STATUS: 'FAILED',
@@ -2603,8 +2610,8 @@ export const getTemplateEditUrl = async (req, res, next) => {
       rawRid = `P14R${tNum}`;
     }
 
-    // 1. Candidate session: client-supplied sid, user upstreamSid, or cached masterSid
-    let activeSid = req.query.sid || req.body?.sid || req.user?.upstreamSid || upstreamService.masterSid;
+    // 1. Candidate session: user upstreamSid or client-supplied sid
+    let activeSid = req.user?.upstreamSid || req.query.sid || req.body?.sid;
 
     // 2. Validate whether candidate session is live upstream (does not 302 to login.jsp)
     let isAlive = false;
@@ -2659,8 +2666,8 @@ export const redirectToTemplateEdit = async (req, res, next) => {
       rawRid = `P14R${tNum}`;
     }
 
-    // 1. Candidate session: client-supplied sid, user upstreamSid, or cached masterSid
-    let activeSid = req.query.sid || req.user?.upstreamSid || upstreamService.masterSid;
+    // 1. Candidate session: user upstreamSid or client-supplied sid
+    let activeSid = req.user?.upstreamSid || req.query.sid;
 
     // 2. Validate candidate session
     let isAlive = false;

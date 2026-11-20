@@ -1,9 +1,10 @@
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { config } from '../config/config.env.js';
 import { upstreamService } from '../services/service.upstream.js';
 import { cacheService, CACHE_KEYS } from '../services/service.cache.js';
-import { normalizeRole } from '../middleware/middleware.role.js';
 import { sessionService } from '../services/service.session.js';
+import { normalizeRole } from '../middleware/middleware.role.js';
 
 export const login = async (req, res, next) => {
   try {
@@ -39,7 +40,7 @@ export const login = async (req, res, next) => {
       });
     }
 
-    // Call upstream APIServlet LOGINV2 with compulsory IP and User-Agent
+    // Call upstream APIServlet LOGINV2 with compulsory IP and User-Agent in real time
     const upstreamRes = await upstreamService.userLogin(loginId, password, totp, ip, userAgent);
 
     if (upstreamRes?.STATUS !== 'SUCCESS' && !upstreamRes?.sid) {
@@ -52,11 +53,7 @@ export const login = async (req, res, next) => {
 
     const sid = upstreamRes.sid;
 
-    // Immediately register active sid with upstreamService for downstream queries and cache sync
-    upstreamService.masterSid = sid;
-    upstreamService.lastLoginTime = Date.now();
-
-    // Trigger async cache warm only if any cache is cold/empty
+    // Trigger async cache warm if any master list is cold
     const stats = cacheService.getCacheStats();
     const hasUncached = Object.values(stats).some((s) => !s.isCached || s.itemCount === 0);
     if (hasUncached) {
@@ -99,10 +96,10 @@ export const login = async (req, res, next) => {
 
     const role = normalizeRole(accessType);
 
-    // Generate unique session ID for this browser login instance
-    const sessionId = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    // Generate unique session ID bound strictly to this user
+    const sessionId = crypto.randomUUID();
 
-    // Invalidate any previous session for this user from another browser/IP
+    // Store in SessionService (Map caches and MongoDB Session collection)
     await sessionService.createSession({
       sessionId,
       userId: matchedUser?.userId || '1',
@@ -114,8 +111,10 @@ export const login = async (req, res, next) => {
       branchId,
     });
 
+    // Build user payload. The session ID belongs strictly to this user and is signed in their JWT.
     const userPayload = {
       userId: matchedUser?.userId || '1',
+      sessionId,
       loginId: loginId,
       name: matchedUser?.name || loginId,
       email: matchedUser?.email || '',
@@ -124,12 +123,9 @@ export const login = async (req, res, next) => {
       role: role,
       branchId: branchId,
       upstreamSid: sid,
-      sessionId,
-      ip,
-      userAgent,
     };
 
-    // Generate JWT token with sessionId embedded
+    // Generate JWT token carrying the user's isolated session ID
     const token = jwt.sign(userPayload, config.jwtSecret, {
       expiresIn: config.jwtExpiresIn,
     });
@@ -147,10 +143,7 @@ export const login = async (req, res, next) => {
       Message: 'Login successful',
       token,
       user: userPayload,
-      sessionId,
       sid,
-      ip,
-      userAgent,
     });
   } catch (err) {
     next(err);
@@ -163,12 +156,15 @@ export const logout = async (req, res, next) => {
     const sessionId = req.user?.sessionId;
     const loginId = req.user?.loginId;
 
-    // Safely terminate session (can be called multiple times idempotently)
-    if (sessionId || loginId) {
-      await sessionService.terminateSession(sessionId, loginId, sid);
-    } else if (sid) {
-      await upstreamService.userLogout(sid);
+    if (sessionId || loginId || sid) {
+      try {
+        await sessionService.terminateSession(sessionId, loginId, sid);
+      } catch (err) {
+        console.warn('[Auth] Session termination warning:', err.message);
+      }
     }
+
+    res.clearCookie('lis_auth_token');
 
     return res.json({
       STATUS: 'SUCCESS',
@@ -176,7 +172,6 @@ export const logout = async (req, res, next) => {
       Message: 'Logout successful',
     });
   } catch (err) {
-    // Never crash on logout even if called repeatedly
     return res.json({
       STATUS: 'SUCCESS',
       StatusCode: '0000',
@@ -187,14 +182,10 @@ export const logout = async (req, res, next) => {
 
 export const getMe = async (req, res, next) => {
   try {
-    const session = sessionService.getActiveSession(req.user?.loginId);
     return res.json({
       STATUS: 'SUCCESS',
       StatusCode: '0000',
-      user: {
-        ...req.user,
-        activeSession: session || null,
-      },
+      user: req.user || null,
     });
   } catch (err) {
     next(err);

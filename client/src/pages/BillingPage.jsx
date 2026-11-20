@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
-import api from '../services/api';
+import api, { openBillingPdf, openReportPdf } from '../services/api';
 import {
   Receipt,
   Printer,
@@ -275,12 +275,17 @@ export default function BillingPage() {
         }
 
         const upiPayment = offlineUpiPayment + onlineUpiPayment;
+        const bBillUrl = b.billUrl || b['Bill Url'] || b['billUrl'] || p.billUrl || p.invoiceUrl || '';
+        const pReportUrl = p.printPDFUrl || p.reportUrl || p.printPDFUrlWithHeader || '';
 
         return {
           ...p,
           sn: idx + 1,
           branch: String(p.branch ?? '0').trim(),
           bill: b,
+          billUrl: bBillUrl,
+          reportUrl: pReportUrl,
+          printPDFUrl: pReportUrl,
           grossAmount,
           discountAmount,
           roundOff,
@@ -1243,9 +1248,9 @@ export default function BillingPage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => setPreviewPatient(p)}
+                            onClick={() => openBillingPdf(p)}
                             className="p-1.5 bg-amber-50 hover:bg-amber-500 text-amber-600 hover:text-white border border-amber-200 hover:border-amber-500 rounded-lg shadow-2xs cursor-pointer transition-all active:scale-95"
-                            title="Preview Official AWS Bill"
+                            title="Preview Official AWS Bill (Open in new tab)"
                           >
                             <Printer className="w-3.5 h-3.5" />
                           </button>
@@ -1280,7 +1285,7 @@ export default function BillingPage() {
           const dueVal = Number(p.totalOutstanding || 0);
           setAmount(dueVal > 0 ? String(dueVal) : (p.totalBill ? String(p.totalBill) : '500'));
         }}
-        onOpenPreview={(p) => setPreviewPatient(p)}
+        onOpenPreview={(p) => openBillingPdf(p)}
       />
 
       {/* Deposit Modal */}
@@ -1391,7 +1396,7 @@ export default function BillingPage() {
             const dueVal = Number(p.totalOutstanding || 0);
             setAmount(dueVal > 0 ? String(dueVal) : (p.totalBill ? String(p.totalBill) : '500'));
           }}
-          onOpenPrint={(p) => setPreviewPatient(p)}
+          onOpenPrint={(p) => openBillingPdf(p)}
         />
       )}
     </section>

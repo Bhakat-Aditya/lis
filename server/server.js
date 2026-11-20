@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { config } from './config/config.env.js';
-import { connectDB } from './config/config.db.js';
 import { errorHandler } from './middleware/middleware.error.js';
 import { cacheService } from './services/service.cache.js';
 
@@ -44,6 +43,7 @@ app.get('/api/health', (req, res) => {
     upstreamTarget: config.lab.url,
     timestamp: new Date().toISOString(),
     cacheTtlSeconds: config.cacheTtlSeconds,
+    mode: 'Real-time Stateless Proxy',
   });
 });
 
@@ -71,14 +71,12 @@ process.on('uncaughtException', (err) => {
 // Start server
 const startServer = async () => {
   try {
-    await connectDB();
-
     const server = app.listen(config.port, () => {
       console.log(`=======================================================`);
       console.log(`🚀 LIS Middleman Server running on port ${config.port}`);
       console.log(`🏥 Clinic Upstream Target: ${config.lab.url}`);
-      console.log(`🔒 RBAC & JWT Authentication active`);
-      console.log(`⚡ 24-Hour Master Data Caching enabled`);
+      console.log(`🔒 RBAC & Real-time Stateless JWT Authentication active`);
+      console.log(`⚡ 24-Hour Master Data In-Memory Caching enabled`);
       console.log(`=======================================================`);
 
       // Pre-warm master cache in background

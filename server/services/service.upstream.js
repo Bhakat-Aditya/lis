@@ -20,9 +20,6 @@ export const UPSTREAM_ERROR_MAP = {
 class UpstreamService {
   constructor() {
     this.baseUrl = config.lab.url;
-    this.masterSid = null;
-    this.masterCookie = null;
-    this.lastLoginTime = null;
     this.billingCache = new Map();
   }
 
@@ -75,48 +72,19 @@ class UpstreamService {
   }
 
   /**
-   * Invalidate dead upstream session in memory and mark inactive in MongoDB
+   * Invalidate dead upstream session (real-time notification)
    */
-  async invalidateUpstreamSession(sid) {
+  invalidateUpstreamSession(sid) {
     if (!sid) return;
-    if (this.masterSid === sid) {
-      this.masterSid = null;
-    }
-    try {
-      const { Session } = await import('../models/model.session.js');
-      await Session.updateMany(
-        { upstreamSid: sid, isActive: true },
-        { $set: { isActive: false, terminatedReason: 'Upstream session timed out (1140)' } }
-      );
-    } catch {
-      // ignore
-    }
+    console.warn(`[Upstream] Session ${sid} invalidated by upstream response.`);
   }
 
   /**
-   * Resolve the active upstream session ID to use from the authenticated user.
-   * Never attempts background re-login using saved credentials.
+   * Resolve the active upstream session ID strictly from the authenticated request.
+   * Never falls back to a global singleton or database to prevent cross-user contamination.
    */
-  async resolveActiveSid(requestedSid = null) {
-    if (requestedSid) {
-      return requestedSid;
-    }
-    if (this.masterSid) {
-      return this.masterSid;
-    }
-    // Check if an active session exists in MongoDB
-    try {
-      const { Session } = await import('../models/model.session.js');
-      const latestActive = await Session.findOne({ isActive: true }).sort({ createdAt: -1 });
-      if (latestActive?.upstreamSid) {
-        this.masterSid = latestActive.upstreamSid;
-        this.lastLoginTime = Date.now();
-        return this.masterSid;
-      }
-    } catch (e) {
-      // ignore
-    }
-    return null;
+  resolveActiveSid(requestedSid = null) {
+    return requestedSid || null;
   }
 
   /**
@@ -164,17 +132,6 @@ class UpstreamService {
         console.warn(`[Upstream] userLogin for ${loginId} received 1130 rate limit. Waiting 1500ms before retry (attempt ${attempt}/2)...`);
         await new Promise((r) => setTimeout(r, 1500));
         return await this.userLogin(loginId, password, totp, ip, userAgent, attempt + 1);
-      }
-
-      if (res.data && (res.data.STATUS === 'SUCCESS' || res.data.sid)) {
-        this.masterSid = res.data.sid;
-        this.lastLoginTime = Date.now();
-        const setCookie = res.headers['set-cookie'];
-        if (setCookie && setCookie.length > 0) {
-          this.masterCookie = setCookie[0].split(';')[0];
-        } else {
-          this.masterCookie = `JSESSIONID=${this.masterSid}`;
-        }
       }
 
       return res.data;
@@ -518,7 +475,13 @@ class UpstreamService {
           due,
           paymentLines,
           testList: b['Test List'] || [],
-          billUrl: billData?.payLoadJSON?.billUrl || '',
+          billUrl: (() => {
+            let u = billData?.payLoadJSON?.billUrl || '';
+            if (!u) return '';
+            if (u.includes('preview=false')) return u.replace('preview=false', 'preview=true');
+            if (!u.includes('preview=')) return u + (u.includes('?') ? '&' : '?') + 'preview=true';
+            return u;
+          })(),
           timestamp: Date.now(),
         };
 

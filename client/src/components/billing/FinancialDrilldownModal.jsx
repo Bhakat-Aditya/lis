@@ -17,6 +17,7 @@ import {
   MoreHorizontal,
 } from 'lucide-react';
 import { formatDisplayDate } from '../../utils/dateUtils.js';
+import { openBillingPdf } from '../../services/api.js';
 
 export default function FinancialDrilldownModal({
   isOpen,
@@ -304,11 +305,14 @@ export default function FinancialDrilldownModal({
                               <button
                                 type="button"
                                 onClick={() => {
-                                  onClose();
-                                  if (onOpenPreview) onOpenPreview(p);
+                                  if (onOpenPreview) {
+                                    onOpenPreview(p);
+                                  } else {
+                                    openBillingPdf(p);
+                                  }
                                 }}
                                 className="p-1 text-amber-600 hover:text-amber-800 hover:bg-amber-50 rounded transition-colors cursor-pointer"
-                                title="Preview Bill"
+                                title="Preview Bill (Open official invoice PDF in new tab)"
                               >
                                 <Printer className="w-3.5 h-3.5" />
                               </button>

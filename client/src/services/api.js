@@ -25,9 +25,27 @@ const api = axios.create({
 });
 
 /**
+ * Ensures a PDF URL has preview=true attached so the browser renders it inline in a new tab
+ * rather than downloading it or buffering.
+ */
+export const ensurePreviewUrl = (url) => {
+  if (!url) return '';
+  let res = String(url).trim();
+  if (!res) return '';
+  if (res.includes('preview=false')) {
+    return res.replace('preview=false', 'preview=true');
+  }
+  if (!res.includes('preview=true')) {
+    const sep = res.includes('?') ? '&' : '?';
+    return `${res}${sep}preview=true`;
+  }
+  return res;
+};
+
+/**
  * Constructs the fully-qualified URL for the official diagnostic report PDF endpoint.
  */
-export const getReportPdfUrl = (patientId, { addHeader = true, download = false } = {}) => {
+export const getReportPdfUrl = (patientId, { addHeader = true, download = false, preview = true } = {}) => {
   if (!patientId) return '';
   const rawPid = String(patientId).trim();
   const cleanPid = rawPid
@@ -38,7 +56,11 @@ export const getReportPdfUrl = (patientId, { addHeader = true, download = false 
   const params = new URLSearchParams();
   if (cleanPid) params.append('patientId', cleanPid);
   params.append('addHeader', String(Boolean(addHeader)));
-  if (download) params.append('download', 'true');
+  if (download) {
+    params.append('download', 'true');
+  } else if (preview) {
+    params.append('preview', 'true');
+  }
   if (token) params.append('token', token);
   return `${base}/api/reports/pdf?${params.toString()}`;
 };
@@ -46,7 +68,7 @@ export const getReportPdfUrl = (patientId, { addHeader = true, download = false 
 /**
  * Constructs the fully-qualified URL for the official billing/invoice PDF endpoint.
  */
-export const getBillingPdfUrl = (patientId, { download = false, preview = false } = {}) => {
+export const getBillingPdfUrl = (patientId, { download = false, preview = true } = {}) => {
   if (!patientId) return '';
   const rawPid = String(patientId).trim();
   const cleanPid = rawPid
@@ -56,236 +78,111 @@ export const getBillingPdfUrl = (patientId, { download = false, preview = false 
   const base = getApiBaseUrl();
   const params = new URLSearchParams();
   if (cleanPid) params.append('patientId', cleanPid);
-  if (download) params.append('download', 'true');
-  if (preview) params.append('preview', 'true');
+  if (download) {
+    params.append('download', 'true');
+  } else if (preview) {
+    params.append('preview', 'true');
+  }
   if (token) params.append('token', token);
   return `${base}/api/billing/pdf?${params.toString()}`;
 };
 
 /**
- * Opens the official AWS report PDF in a new tab without routing through SPA.
- * Uses binary blob streaming with synchronous placeholder tab to avoid mobile popup blockers.
+ * Opens the official AWS report PDF in a new tab directly.
+ * Appends &preview=true so the browser opens and previews the PDF instantly without downloading or caching.
+ * If target URL comes in the API response, redirects directly to it in a new tab.
  */
-export const openReportPdf = async (patientId, options = {}) => {
-  if (options?.targetUrl) {
-    window.open(options.targetUrl, '_blank');
+export const openReportPdf = (patientIdOrObj, options = {}) => {
+  let target = '';
+  let cleanPid = '';
+  const wantsHeader = options?.addHeader !== false;
+
+  if (patientIdOrObj && typeof patientIdOrObj === 'object') {
+    target = (wantsHeader
+      ? (patientIdOrObj.printPDFUrlWithHeader || patientIdOrObj.printPDFUrl)
+      : (patientIdOrObj.printPDFUrlWithoutHeader || patientIdOrObj.printPDFUrl))
+      || patientIdOrObj.reportUrl
+      || patientIdOrObj.url
+      || options?.targetUrl
+      || '';
+
+    const rawPid = String(patientIdOrObj.patientId || patientIdOrObj.slNo || patientIdOrObj.id || '').trim();
+    cleanPid = rawPid
+      ? (rawPid.toUpperCase().startsWith('P') ? `P${rawPid.replace(/^P+/i, '')}` : `P${rawPid}`)
+      : '';
+  } else {
+    target = options?.targetUrl || options?.reportUrl || options?.printPDFUrl || '';
+    const rawPid = String(patientIdOrObj || '').trim();
+    cleanPid = rawPid
+      ? (rawPid.toUpperCase().startsWith('P') ? `P${rawPid.replace(/^P+/i, '')}` : `P${rawPid}`)
+      : '';
+  }
+
+  // If URL already comes from the API response, immediately open that in a new tab with preview=true
+  if (target) {
+    let directAwsUrl = ensurePreviewUrl(target);
+    if (wantsHeader) {
+      directAwsUrl = directAwsUrl.replace('addHeader=false', 'addHeader=true');
+    } else {
+      directAwsUrl = directAwsUrl.replace('addHeader=true', 'addHeader=false');
+    }
+    window.open(directAwsUrl, '_blank', 'noopener,noreferrer');
     return;
   }
 
-  const rawPid = String(patientId || '').trim();
-  const cleanPid = rawPid
-    ? (rawPid.toUpperCase().startsWith('P') ? `P${rawPid.replace(/^P+/i, '')}` : `P${rawPid}`)
-    : '';
   if (!cleanPid) return;
 
-  const directUrl = getReportPdfUrl(cleanPid, options);
-
-  // Synchronously open placeholder tab to prevent mobile popup blockers
-  let targetWin = options?.existingWindow || options?.targetWin || null;
-  if (!targetWin || targetWin.closed) {
-    try {
-      targetWin = window.open('about:blank', '_blank');
-      if (targetWin) {
-        targetWin.document.write(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Loading Diagnostic Report PDF...</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <style>
-              body {
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                background-color: #0f172a;
-                color: #f8fafc;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                min-height: 100vh;
-                margin: 0;
-              }
-              .box {
-                background: #1e293b;
-                padding: 32px 36px;
-                border-radius: 16px;
-                text-align: center;
-                max-width: 400px;
-                width: 90%;
-                border: 1px solid #334155;
-                box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-              }
-              .spinner {
-                width: 44px;
-                height: 44px;
-                border: 4px solid #334155;
-                border-top: 4px solid #38bdf8;
-                border-radius: 50%;
-                animation: spin 0.8s linear infinite;
-                margin: 0 auto 16px;
-              }
-              @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-              h3 { margin: 0 0 8px; font-size: 16px; font-weight: 700; color: #f8fafc; }
-              p { margin: 0; font-size: 12px; color: #94a3b8; }
-            </style>
-          </head>
-          <body>
-            <div class="box">
-              <div class="spinner"></div>
-              <h3>Opening AWS Report PDF</h3>
-              <p>Fetching official diagnostic document...</p>
-            </div>
-          </body>
-        </html>
-      `);
-      }
-    } catch {}
-  }
-
-  try {
-    const res = await api.get('/reports/pdf', {
-      params: {
-        patientId: cleanPid,
-        addHeader: String(Boolean(options?.addHeader ?? true)),
-        download: options?.download ? 'true' : undefined,
-        _t: Date.now(),
-      },
-      responseType: 'blob',
-      timeout: 25000,
-    });
-
-    const contentType = res.headers?.['content-type'] || res.data?.type || '';
-    if (contentType.includes('html') || res.data?.type === 'text/html') {
-      throw new Error('Received HTML document instead of PDF stream.');
-    }
-
-    const blob = new Blob([res.data], { type: 'application/pdf' });
-    const blobUrl = URL.createObjectURL(blob);
-
-    if (targetWin && !targetWin.closed) {
-      targetWin.location.replace(blobUrl);
-    } else {
-      window.open(blobUrl, '_blank');
-    }
-  } catch (err) {
-    console.warn('[openReportPdf] Blob fetch note, navigating directly:', err.message);
-    if (targetWin && !targetWin.closed) {
-      targetWin.location.replace(directUrl);
-    } else {
-      window.open(directUrl, '_blank');
-    }
-  }
+  // Direct server 302 redirect endpoint with preview=true in a new tab (instant, zero buffering)
+  const fallbackUrl = getReportPdfUrl(cleanPid, {
+    addHeader: wantsHeader,
+    preview: true,
+    ...options,
+  });
+  window.open(fallbackUrl, '_blank', 'noopener,noreferrer');
 };
 
 /**
- * Opens the official AWS billing invoice PDF in a new tab without routing through SPA.
- * Uses binary blob streaming with synchronous placeholder tab to avoid mobile popup blockers.
+ * Opens the official AWS billing invoice PDF in a new tab directly.
+ * Appends &preview=true so the browser opens and previews the invoice instantly without downloading or caching.
+ * If target URL comes in the API response, redirects directly to it in a new tab.
  */
-export const openBillingPdf = async (patientId, options = {}) => {
-  if (options?.targetUrl) {
-    window.open(options.targetUrl, '_blank');
+export const openBillingPdf = (patientIdOrObj, options = {}) => {
+  let target = '';
+  let cleanPid = '';
+
+  if (patientIdOrObj && typeof patientIdOrObj === 'object') {
+    target = patientIdOrObj.billUrl
+      || patientIdOrObj.invoiceUrl
+      || patientIdOrObj.bill?.billUrl
+      || patientIdOrObj.bill?.url
+      || patientIdOrObj.url
+      || options?.targetUrl
+      || '';
+
+    const rawPid = String(patientIdOrObj.patientId || patientIdOrObj.slNo || patientIdOrObj.id || '').trim();
+    cleanPid = rawPid
+      ? (rawPid.toUpperCase().startsWith('P') ? `P${rawPid.replace(/^P+/i, '')}` : `P${rawPid}`)
+      : '';
+  } else {
+    target = options?.targetUrl || options?.billUrl || options?.invoiceUrl || '';
+    const rawPid = String(patientIdOrObj || '').trim();
+    cleanPid = rawPid
+      ? (rawPid.toUpperCase().startsWith('P') ? `P${rawPid.replace(/^P+/i, '')}` : `P${rawPid}`)
+      : '';
+  }
+
+  // If URL already comes from the API response, immediately open that in a new tab with preview=true
+  if (target) {
+    const directAwsUrl = ensurePreviewUrl(target);
+    window.open(directAwsUrl, '_blank', 'noopener,noreferrer');
     return;
   }
 
-  const rawPid = String(patientId || '').trim();
-  const cleanPid = rawPid
-    ? (rawPid.toUpperCase().startsWith('P') ? `P${rawPid.replace(/^P+/i, '')}` : `P${rawPid}`)
-    : '';
   if (!cleanPid) return;
 
-  const directUrl = getBillingPdfUrl(cleanPid, { preview: true, ...options });
-
-  // Synchronously open placeholder tab to prevent mobile popup blockers
-  let targetWin = options?.existingWindow || options?.targetWin || null;
-  if (!targetWin || targetWin.closed) {
-    try {
-      targetWin = window.open('about:blank', '_blank');
-      if (targetWin) {
-        targetWin.document.write(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Loading Invoice PDF...</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <style>
-              body {
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                background-color: #0f172a;
-                color: #f8fafc;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                min-height: 100vh;
-                margin: 0;
-              }
-              .box {
-                background: #1e293b;
-                padding: 32px 36px;
-                border-radius: 16px;
-                text-align: center;
-                max-width: 400px;
-                width: 90%;
-                border: 1px solid #334155;
-                box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-              }
-              .spinner {
-                width: 44px;
-                height: 44px;
-                border: 4px solid #334155;
-                border-top: 4px solid #f59e0b;
-                border-radius: 50%;
-                animation: spin 0.8s linear infinite;
-                margin: 0 auto 16px;
-              }
-              @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-              h3 { margin: 0 0 8px; font-size: 16px; font-weight: 700; color: #f8fafc; }
-              p { margin: 0; font-size: 12px; color: #94a3b8; }
-            </style>
-          </head>
-          <body>
-            <div class="box">
-              <div class="spinner"></div>
-              <h3>Opening Invoice PDF</h3>
-              <p>Fetching official clinic bill...</p>
-            </div>
-          </body>
-        </html>
-      `);
-      }
-    } catch {}
-  }
-
-  try {
-    const res = await api.get('/billing/pdf', {
-      params: {
-        patientId: cleanPid,
-        preview: options?.preview ? 'true' : undefined,
-        download: options?.download ? 'true' : undefined,
-        _t: Date.now(),
-      },
-      responseType: 'blob',
-      timeout: 25000,
-    });
-
-    const contentType = res.headers?.['content-type'] || res.data?.type || '';
-    if (contentType.includes('html') || res.data?.type === 'text/html') {
-      throw new Error('Received HTML document instead of PDF stream.');
-    }
-
-    const blob = new Blob([res.data], { type: 'application/pdf' });
-    const blobUrl = URL.createObjectURL(blob);
-
-    if (targetWin && !targetWin.closed) {
-      targetWin.location.replace(blobUrl);
-    } else {
-      window.open(blobUrl, '_blank');
-    }
-  } catch (err) {
-    console.warn('[openBillingPdf] Blob fetch note, navigating directly:', err.message);
-    if (targetWin && !targetWin.closed) {
-      targetWin.location.replace(directUrl);
-    } else {
-      window.open(directUrl, '_blank');
-    }
-  }
+  // Direct server 302 redirect endpoint with preview=true in a new tab (instant, zero buffering)
+  const fallbackUrl = getBillingPdfUrl(cleanPid, { preview: true, ...options });
+  window.open(fallbackUrl, '_blank', 'noopener,noreferrer');
 };
 
 // Request interceptor: attach middleman JWT token

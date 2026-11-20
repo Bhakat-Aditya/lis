@@ -359,6 +359,15 @@ export default function MasterEditModal({
 
     // Intelligent next ID resolver ensuring next ID is prefilled by default
     const resolveNextId = (cacheKeyName, fallbackList = []) => {
+      if (cacheKeyName === 'USER_LIST' || category === 'users') {
+        if (item?.nextId !== undefined && item?.nextId !== null && String(item.nextId).trim() !== '') {
+          return String(item.nextId);
+        }
+        if (nextIds[cacheKeyName] !== undefined && nextIds[cacheKeyName] !== null && String(nextIds[cacheKeyName]).trim() !== '') {
+          return String(nextIds[cacheKeyName]);
+        }
+        return '0';
+      }
       if (item?.nextId && String(item.nextId).trim() !== '' && String(item.nextId) !== '0') {
         return String(item.nextId);
       }
@@ -1960,9 +1969,9 @@ export default function MasterEditModal({
                   type="text"
                   required
                   disabled={isEditing}
-                  value={formData.id || ''}
+                  value={formData.id !== undefined && formData.id !== null ? formData.id : ''}
                   onChange={(e) => handleChange('id', e.target.value)}
-                  placeholder="e.g. 2, 7"
+                  placeholder="e.g. 0, 2"
                   className={`w-full px-3 py-1.5 text-xs border rounded-lg font-mono ${
                     isEditing ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-white border-slate-300'
                   }`}

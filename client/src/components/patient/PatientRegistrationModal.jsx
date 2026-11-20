@@ -323,7 +323,7 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
         gender: cleanGender,
         mobile: cleanMobile,
         regDate: cleanRegDate,
-        slNo: formData.slNo.trim() || `${Date.now()}`.slice(-9),
+        slNo: formData.slNo.trim(),
         referedDr: trimmedReferedDr,
         referDr: cleanReferDr,
         refagent: cleanRefAgent,

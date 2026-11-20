@@ -14,6 +14,7 @@ import {
 import { StatusBadge, PaymentBadge } from '../common/Badge.jsx';
 import ClinicalGuideModal from '../common/ClinicalGuideModal.jsx';
 import BillPreviewModal from '../billing/BillPreviewModal.jsx';
+import { openBillingPdf } from '../../services/api.js';
 
 const formatGender = (raw) => {
   const s = String(raw || '').trim().toLowerCase();
@@ -307,8 +308,8 @@ export default function RecentWorklistTable({
                             <FileEdit className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={() => setPreviewPatient(p)}
-                            title="Preview Bill"
+                            onClick={() => openBillingPdf(p)}
+                            title="Preview Bill (Open official invoice PDF in new tab)"
                             className="p-1.5 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-600 hover:text-white transition-all cursor-pointer"
                           >
                             <Printer className="w-3.5 h-3.5" />

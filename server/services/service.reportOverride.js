@@ -1,8 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import mongoose from 'mongoose';
-import { ReportOverride } from '../models/model.report.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -40,6 +38,7 @@ const loadFromFile = () => {
       }
       console.log(`[ReportOverride] Loaded persisted overrides from local store for ${memoryStore.size} patient(s).`);
     }
+    isInitialized = true;
   } catch (err) {
     console.warn('[ReportOverride] Error loading from local file:', err.message);
   }
@@ -65,45 +64,14 @@ const saveToFile = () => {
   }
 };
 
-/**
- * Synchronize with MongoDB if connected
- */
-const syncFromMongoDB = async () => {
-  try {
-    if (mongoose.connection?.readyState === 1) {
-      const records = await ReportOverride.find({}).lean();
-      for (const rec of records) {
-        const normPid = normalizePid(rec.patientId);
-        if (!memoryStore.has(normPid)) {
-          memoryStore.set(normPid, new Map());
-        }
-        memoryStore.get(normPid).set(String(rec.reportId).trim(), {
-          status: rec.status || 'DELETED',
-          testName: rec.testName || '',
-          profileName: rec.profileName || '',
-          deptName: rec.deptName || '',
-          rate: rec.rate || '',
-          deletedAt: rec.deletedAt || rec.createdAt || new Date(),
-        });
-      }
-      if (records && records.length > 0) {
-        saveToFile();
-      }
-    }
-  } catch (err) {
-    console.warn('[ReportOverride] MongoDB sync warning:', err.message);
-  }
-};
-
-const ensureInitialized = async () => {
+const ensureInitialized = () => {
   if (!isInitialized) {
     loadFromFile();
-    await syncFromMongoDB();
     isInitialized = true;
   }
 };
 
-// Initial load
+// Initial load on import
 loadFromFile();
 
 export const reportOverrideService = {
@@ -111,7 +79,7 @@ export const reportOverrideService = {
    * Mark a test report as DELETED for a patient
    */
   async markDeleted(patientId, reportId, meta = {}) {
-    await ensureInitialized();
+    ensureInitialized();
     const normPid = normalizePid(patientId);
     const cleanRid = String(reportId).trim();
     if (!normPid || !cleanRid) return;
@@ -126,33 +94,11 @@ export const reportOverrideService = {
       profileName: meta.profileName || '',
       deptName: meta.deptName || '',
       rate: meta.rate || '',
-      deletedAt: new Date(),
+      deletedAt: new Date().toISOString(),
     };
 
     memoryStore.get(normPid).set(cleanRid, overrideData);
     saveToFile();
-
-    // Persist to MongoDB if connected
-    if (mongoose.connection?.readyState === 1) {
-      try {
-        await ReportOverride.findOneAndUpdate(
-          { patientId: normPid, reportId: cleanRid },
-          {
-            patientId: normPid,
-            reportId: cleanRid,
-            status: 'DELETED',
-            testName: meta.testName || '',
-            profileName: meta.profileName || '',
-            deptName: meta.deptName || '',
-            rate: meta.rate || '',
-            deletedAt: new Date(),
-          },
-          { upsert: true, new: true }
-        );
-      } catch (err) {
-        console.warn(`[ReportOverride] MongoDB update failed for ${cleanRid}:`, err.message);
-      }
-    }
     console.log(`[ReportOverride] Report ${cleanRid} marked as DELETED for patient ${normPid}`);
   },
 
@@ -160,7 +106,7 @@ export const reportOverrideService = {
    * Restore a deleted test report back to active for a patient
    */
   async restoreDeleted(patientId, reportId) {
-    await ensureInitialized();
+    ensureInitialized();
     const normPid = normalizePid(patientId);
     const cleanRid = String(reportId).trim();
     if (!normPid || !cleanRid) return;
@@ -172,18 +118,6 @@ export const reportOverrideService = {
       }
       saveToFile();
     }
-
-    // Remove from MongoDB if connected
-    if (mongoose.connection?.readyState === 1) {
-      try {
-        await ReportOverride.deleteOne({
-          patientId: normPid,
-          reportId: cleanRid,
-        });
-      } catch (err) {
-        console.warn(`[ReportOverride] MongoDB delete failed for ${cleanRid}:`, err.message);
-      }
-    }
     console.log(`[ReportOverride] Report ${cleanRid} restored for patient ${normPid}`);
   },
 
@@ -192,44 +126,16 @@ export const reportOverrideService = {
    * Returns: { [reportId]: { status: 'DELETED', ... } }
    */
   async getOverrides(patientId) {
-    await ensureInitialized();
+    ensureInitialized();
     const normPid = normalizePid(patientId);
     const altPid = normPid.startsWith('P') ? normPid.slice(1) : normPid;
 
     const result = {};
 
-    // 1. Check in-memory store (primary, high-speed)
     const map = memoryStore.get(normPid) || memoryStore.get(altPid);
     if (map) {
       for (const [rid, data] of map.entries()) {
         result[rid] = data;
-      }
-    }
-
-    // 2. Fallback to MongoDB if empty and connected
-    if (Object.keys(result).length === 0 && mongoose.connection?.readyState === 1) {
-      try {
-        const records = await ReportOverride.find({
-          patientId: { $in: [normPid, altPid] },
-        }).lean();
-
-        if (records.length > 0) {
-          if (!memoryStore.has(normPid)) memoryStore.set(normPid, new Map());
-          for (const rec of records) {
-            const data = {
-              status: rec.status || 'DELETED',
-              testName: rec.testName || '',
-              profileName: rec.profileName || '',
-              deptName: rec.deptName || '',
-              rate: rec.rate || '',
-            };
-            result[rec.reportId] = data;
-            memoryStore.get(normPid).set(String(rec.reportId).trim(), data);
-          }
-          saveToFile();
-        }
-      } catch (err) {
-        console.warn('[ReportOverride] MongoDB query failed:', err.message);
       }
     }
 

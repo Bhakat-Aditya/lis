@@ -95,19 +95,23 @@ export default function ResultsEntry({
     return 'ENTRY';
   };
 
-  // Retain previously loaded reports so rate-limit / network hiccups NEVER wipe the UI!
+  // Retain previously loaded reports and manage local reports state for instant local update
   const persistedReportsRef = useRef(reports);
+  const [localReports, setLocalReports] = useState(reports || []);
+
   useEffect(() => {
     if (reports && reports.length > 0) {
       persistedReportsRef.current = reports;
+      setLocalReports(reports);
     }
   }, [reports]);
 
   const activeReports = useMemo(() => {
+    if (localReports && localReports.length > 0) return localReports;
     if (reports && reports.length > 0) return reports;
     if (persistedReportsRef.current && persistedReportsRef.current.length > 0) return persistedReportsRef.current;
-    return reports || [];
-  }, [reports]);
+    return [];
+  }, [localReports, reports]);
 
   // Rate-limiting (8887) and sync cooldown state
   const [rateLimitWarning, setRateLimitWarning] = useState(null);
@@ -397,7 +401,7 @@ export default function ResultsEntry({
 
       // Real-time status progression when technician edits analyzer or calculated reading
       if (field === 'resultData') {
-        const rep = reports.find((r) => r.reportId === reportId);
+        const rep = activeReports.find((r) => r.reportId === reportId);
         const origStatus = String(rep?.status || cur.status || '').toUpperCase().trim();
         if (origStatus === 'RECEIVED') {
           nextStatus = 'RECEIVED_EDITED';
@@ -435,9 +439,11 @@ export default function ResultsEntry({
     setErrorMsg('');
 
     const current = resultsState[report.reportId] || {};
+    const valToSave = current.resultData !== undefined ? current.resultData : (report.resultData || '');
+    const commentToSave = current.comment !== undefined ? current.comment : (report.comment || '');
 
     try {
-      await api.post('/reports/update', {
+      const res = await api.post('/reports/update', {
         reportId: report.reportId,
         patientId: patient.patientId,
         sampleId: report.sampleId || patient.slNo,
@@ -447,30 +453,45 @@ export default function ResultsEntry({
         method: report.method || '',
         refRange: report.refRange,
         unitref: report.unit,
-        resultData: current.resultData !== undefined ? current.resultData : (report.resultData || ''),
+        resultData: valToSave,
         unit: report.unit,
-        comment: current.comment !== undefined ? current.comment : (report.comment || ''),
+        comment: commentToSave,
         profileName: report.profileName || '',
         deptName: report.deptName || 'D1',
       });
 
-      setSuccessMsg(`Test "${report.testName}" saved successfully.`);
-      if (onRefresh) {
-        const freshData = await onRefresh();
-        if (freshData?.reports) {
-          const fresh = {};
-          freshData.reports.forEach((r) => {
-            fresh[r.reportId] = {
-              resultData: r.resultData || '',
-              comment: r.comment || '',
-              status: r.status || 'SAVED',
-            };
-          });
-          setResultsState(fresh);
-        }
+      if (res.data?.STATUS === 'FAILED' || (res.data?.StatusCode && res.data.StatusCode !== '0000')) {
+        setErrorMsg(res.data?.Message || 'Failed to update test result');
+        return;
       }
+
+      // Update test result data locally - no refresh, zero extra API calls
+      setLocalReports((prev) =>
+        prev.map((r) =>
+          r.reportId === report.reportId
+            ? {
+                ...r,
+                resultData: valToSave,
+                comment: commentToSave,
+                status: 'SAVED',
+              }
+            : r
+        )
+      );
+
+      setResultsState((prev) => ({
+        ...prev,
+        [report.reportId]: {
+          ...prev[report.reportId],
+          resultData: valToSave,
+          comment: commentToSave,
+          status: 'SAVED',
+        },
+      }));
+
+      setSuccessMsg(`Test "${report.testName}" saved successfully.`);
     } catch (err) {
-      setErrorMsg(err.response?.data?.Message || 'Failed to update test result');
+      setErrorMsg(err.response?.data?.Message || err.message || 'Failed to update test result');
     } finally {
       setSavingId(null);
     }
@@ -478,7 +499,7 @@ export default function ResultsEntry({
 
   const handleSaveAll = async () => {
     // Only call for modified parameters, NOT all reports!
-    const changedReports = reports.filter((r) => dirtyReportIds.includes(r.reportId));
+    const changedReports = activeReports.filter((r) => dirtyReportIds.includes(r.reportId));
 
     if (changedReports.length === 0) {
       setSuccessMsg('No unsaved parameter modifications.');
@@ -490,9 +511,13 @@ export default function ResultsEntry({
     setErrorMsg('');
 
     try {
+      const savedIds = new Set();
       for (const report of changedReports) {
         const current = resultsState[report.reportId] || {};
-        await api.post('/reports/update', {
+        const valToSave = current.resultData !== undefined ? current.resultData : (report.resultData || '');
+        const commentToSave = current.comment !== undefined ? current.comment : (report.comment || '');
+
+        const res = await api.post('/reports/update', {
           reportId: report.reportId,
           patientId: patient.patientId,
           sampleId: report.sampleId || patient.slNo,
@@ -502,33 +527,51 @@ export default function ResultsEntry({
           method: report.method || '',
           refRange: report.refRange,
           unitref: report.unit,
-          resultData: current.resultData !== undefined ? current.resultData : (report.resultData || ''),
+          resultData: valToSave,
           unit: report.unit,
-          comment: current.comment !== undefined ? current.comment : (report.comment || ''),
+          comment: commentToSave,
           profileName: report.profileName || '',
           deptName: report.deptName || 'D1',
         });
-      }
 
-      setSuccessMsg(`Successfully saved ${changedReports.length} test ${changedReports.length === 1 ? 'parameter' : 'parameters'}! Synchronizing...`);
-
-      // After saving, call GETPATIENTREPORT API for sync of data
-      if (onRefresh) {
-        const freshData = await onRefresh();
-        if (freshData?.reports) {
-          const fresh = {};
-          freshData.reports.forEach((r) => {
-            fresh[r.reportId] = {
-              resultData: r.resultData || '',
-              comment: r.comment || '',
-              status: r.status || 'SAVED',
-            };
-          });
-          setResultsState(fresh);
+        if (res.data?.STATUS === 'FAILED' || (res.data?.StatusCode && res.data.StatusCode !== '0000')) {
+          throw new Error(res.data?.Message || `Failed to save ${report.testName}`);
         }
+        savedIds.add(report.reportId);
       }
+
+      // Update all saved reports locally - no refresh, zero extra API calls
+      setLocalReports((prev) =>
+        prev.map((r) => {
+          if (savedIds.has(r.reportId)) {
+            const current = resultsState[r.reportId] || {};
+            return {
+              ...r,
+              resultData: current.resultData !== undefined ? current.resultData : r.resultData,
+              comment: current.comment !== undefined ? current.comment : r.comment,
+              status: 'SAVED',
+            };
+          }
+          return r;
+        })
+      );
+
+      setResultsState((prev) => {
+        const next = { ...prev };
+        savedIds.forEach((id) => {
+          if (next[id]) {
+            next[id] = {
+              ...next[id],
+              status: 'SAVED',
+            };
+          }
+        });
+        return next;
+      });
+
+      setSuccessMsg(`Successfully saved ${savedIds.size} test ${savedIds.size === 1 ? 'parameter' : 'parameters'}!`);
     } catch (err) {
-      setErrorMsg(err.response?.data?.Message || 'Failed to save test results');
+      setErrorMsg(err.response?.data?.Message || err.message || 'Failed to save test results');
     } finally {
       setSavingAll(false);
     }
@@ -1732,23 +1775,29 @@ export default function ResultsEntry({
               : editingReport.comment,
           }}
           patient={patient}
-          onSaveSuccess={async (updatedReport) => {
+          onSaveSuccess={(updatedReport) => {
             setSuccessMsg(`Test parameter "${updatedReport.testName || editingReport.testName}" updated successfully!`);
             setEditingReport(null);
-            if (onRefresh) {
-              const freshData = await onRefresh();
-              if (freshData?.reports) {
-                const fresh = {};
-                freshData.reports.forEach((r) => {
-                  fresh[r.reportId] = {
-                    resultData: r.resultData || '',
-                    comment: r.comment || '',
-                    status: r.status || 'SAVED',
-                  };
-                });
-                setResultsState(fresh);
-              }
-            }
+            setLocalReports((prev) =>
+              prev.map((r) =>
+                r.reportId === updatedReport.reportId
+                  ? {
+                      ...r,
+                      ...updatedReport,
+                      status: 'SAVED',
+                    }
+                  : r
+              )
+            );
+            setResultsState((prev) => ({
+              ...prev,
+              [updatedReport.reportId]: {
+                ...prev[updatedReport.reportId],
+                resultData: updatedReport.resultData !== undefined ? updatedReport.resultData : (prev[updatedReport.reportId]?.resultData || ''),
+                comment: updatedReport.comment !== undefined ? updatedReport.comment : (prev[updatedReport.reportId]?.comment || ''),
+                status: 'SAVED',
+              },
+            }));
           }}
         />
       )}

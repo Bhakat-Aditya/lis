@@ -2,6 +2,7 @@ import { config } from '../config/config.env.js';
 import { upstreamService, API_GET_JOURNEY_STAGES } from '../services/service.upstream.js';
 import { cacheService, CACHE_KEYS } from '../services/service.cache.js';
 import { invalidateReportCache, getCachedReport } from './controller.report.js';
+import { deletedPatientService } from '../services/service.deletedPatient.js';
 
 /**
  * Format date to YYYY-MM-DD
@@ -172,15 +173,9 @@ export const getPatients = async (req, res, next) => {
     }
 
     // Filter out deleted patients
-    try {
-      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
-      const deletedDocs = await DeletedPatient.find({}, 'patientId').lean();
-      if (deletedDocs && deletedDocs.length > 0) {
-        const deletedSet = new Set(deletedDocs.map((d) => String(d.patientId).toUpperCase().trim()));
-        patients = patients.filter((p) => !deletedSet.has(String(p.patientId || '').toUpperCase().trim()));
-      }
-    } catch (dbErr) {
-      // Continue even if MongoDB is not connected
+    const deletedIds = deletedPatientService.getAllDeletedIds();
+    if (deletedIds.size > 0) {
+      patients = patients.filter((p) => !deletedIds.has(String(p.patientId || '').toUpperCase().trim()));
     }
 
     // Official Upstream Patient Directory Status Constants:
@@ -346,7 +341,7 @@ export const resolvePatientIdBySlNo = async (slNoOrBarcode, sid, targetDate = nu
 export const addPatient = async (req, res, next) => {
   try {
     const {
-      slNo = `${Date.now()}`.slice(-9),
+      slNo = '',
       mobile = '',
       regDate = formatDate(),
       title = 'Mr',
@@ -441,7 +436,7 @@ export const addPatient = async (req, res, next) => {
         let match = list.find((p) => {
           const pSlNo = String(p.slNo || p.barcode || '').trim();
           const targetSlNo = String(params.slNo).trim();
-          if (pSlNo && targetSlNo && pSlNo === targetSlNo) return true;
+          if (targetSlNo && pSlNo && pSlNo === targetSlNo) return true;
           const pMobile = String(p.mobile || '').replace(/\D/g, '').slice(-10);
           const targetMobile = String(params.mobile).replace(/\D/g, '').slice(-10);
           const pName = String(p.name || '').trim().toLowerCase();
@@ -461,7 +456,7 @@ export const addPatient = async (req, res, next) => {
           match = list.find((p) => {
             const pSlNo = String(p.slNo || p.barcode || '').trim();
             const targetSlNo = String(params.slNo).trim();
-            if (pSlNo && targetSlNo && pSlNo === targetSlNo) return true;
+            if (targetSlNo && pSlNo && pSlNo === targetSlNo) return true;
             const pMobile = String(p.mobile || '').replace(/\D/g, '').slice(-10);
             const targetMobile = String(params.mobile).replace(/\D/g, '').slice(-10);
             const pName = String(p.name || '').trim().toLowerCase();
@@ -484,6 +479,8 @@ export const addPatient = async (req, res, next) => {
       patientId = strPid.toUpperCase().startsWith('P') ? `P${strPid.replace(/^P+/i, '')}` : `P${strPid}`;
     }
 
+    const finalSlNo = resolvedPatientRecord?.slNo || resolvedPatientRecord?.barcode || params.slNo || '';
+
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
       StatusCode: upstreamData?.StatusCode || '0000',
@@ -494,9 +491,9 @@ export const addPatient = async (req, res, next) => {
       patient: {
         ...(resolvedPatientRecord || {}),
         ...params,
-        patientId: patientId || params.slNo,
-        slNo: params.slNo,
-        barcode: params.slNo,
+        patientId: patientId || finalSlNo,
+        slNo: finalSlNo,
+        barcode: resolvedPatientRecord?.barcode || finalSlNo,
       },
     });
   } catch (err) {
@@ -640,51 +637,22 @@ export const deletePatient = async (req, res, next) => {
       console.warn(`[deletePatient] Upstream DELETEPATIENT warning for ${cleanPatientId}:`, upErr.message);
     }
 
-    // 2. Persist deletion in MongoDB DeletedPatient collection
-    try {
-      const { DeletedPatient } = await import('../models/model.deletedPatient.js');
-      await DeletedPatient.findOneAndUpdate(
-        { patientId: cleanPatientId.toUpperCase() },
-        {
-          patientId: cleanPatientId.toUpperCase(),
-          patientName: req.body.patientName || req.body.name || '',
-          slNo: req.body.slNo || '',
-          mobile: req.body.mobile || '',
-          deletedBy: {
-            userId: req.user?.id || req.user?.userId || '',
-            loginId: req.user?.loginId || req.user?.login || '',
-            name: req.user?.name || '',
-            role: req.user?.role || req.user?.accessType || '',
-          },
-          reason: reason || 'Deleted by user',
-          upstreamResult: upstreamData,
-        },
-        { upsert: true, new: true }
-      );
-    } catch (dbErr) {
-      console.warn('[deletePatient] MongoDB record warning:', dbErr.message);
-    }
+    // 2. Persist deletion in lightweight local deleted patients store
+    deletedPatientService.markDeleted(cleanPatientId, {
+      patientName: req.body.patientName || req.body.name || '',
+      slNo: req.body.slNo || '',
+      mobile: req.body.mobile || '',
+      deletedBy: {
+        userId: req.user?.id || req.user?.userId || '',
+        loginId: req.user?.loginId || req.user?.login || '',
+        name: req.user?.name || '',
+        role: req.user?.role || req.user?.accessType || '',
+      },
+      reason: reason || 'Deleted by user',
+      upstreamResult: upstreamData,
+    });
 
-    // 3. Log Audit trail
-    try {
-      const { Audit } = await import('../models/model.audit.js');
-      await Audit.create({
-        action: 'DELETE_PATIENT',
-        entity: 'PATIENT',
-        entityId: cleanPatientId,
-        performedBy: {
-          userId: req.user?.id || req.user?.userId || '',
-          loginId: req.user?.loginId || req.user?.login || '',
-          name: req.user?.name || '',
-          role: req.user?.role || '',
-        },
-        ipAddress: req.ip || '',
-        details: { patientId: cleanPatientId, reason, upstreamData },
-        status: 'SUCCESS',
-      });
-    } catch (auditErr) {
-      // Non-fatal
-    }
+    console.log(`[Audit] DELETE_PATIENT: Patient ${cleanPatientId} deleted by ${req.user?.loginId || 'user'}`);
 
     // 4. Invalidate patient cache
     invalidatePatientListCache();
@@ -1156,7 +1124,7 @@ export const addMultipleTests = async (req, res, next) => {
     invalidatePatientListCache();
 
     // Construct authentic upstream AWS billing URL
-    const sidToUse = req.user?.upstreamSid || upstreamService.masterSid || '';
+    const sidToUse = req.user?.upstreamSid || '';
     const labBaseUrl = upstreamService.baseUrl || config?.lab?.url || 'https://lis.newlifecaremidnapore.com/lifecare';
     let upstreamBillUrl = '';
     if (upstreamData?.redirectURL) {

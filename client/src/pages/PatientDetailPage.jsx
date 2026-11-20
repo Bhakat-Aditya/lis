@@ -280,12 +280,17 @@ export default function PatientDetailPage() {
 
   const handleOpenReportPdf = (withHeader = true) => {
     const rawPid = patient?.patientId || id;
-    openReportPdf(rawPid, { addHeader: withHeader });
+    let target = withHeader
+      ? (patient?.printPDFUrlWithHeader || patient?.printPDFUrl)
+      : (patient?.printPDFUrlWithoutHeader || patient?.printPDFUrl);
+    if (!target) target = patient?.reportUrl || reportPdfUrl;
+    openReportPdf(rawPid, { addHeader: withHeader, targetUrl: target });
   };
 
   const handleOpenBillPdf = () => {
     const rawPid = patient?.patientId || id;
-    openBillingPdf(rawPid);
+    const target = patient?.billUrl || billPdfUrl;
+    openBillingPdf(rawPid, { targetUrl: target });
   };
 
   const handleDeletePatient = () => {

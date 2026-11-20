@@ -1,4 +1,3 @@
-import mongoose from 'mongoose';
 import { upstreamService } from '../services/service.upstream.js';
 import { normalizeDateToYYYYMMDD } from './controller.patient.js';
 
@@ -61,15 +60,15 @@ export const getDashboardAnalytics = async (req, res, next) => {
     const branch = req.query.branch || '';
     const forceFresh = req.query.fresh === 'true' || req.query.refresh === 'true';
 
-    // Retrieve active upstream session ID (from authenticated user or MongoDB active session)
-    let activeSid = req.user?.upstreamSid;
-    if (!activeSid && mongoose.connection.readyState === 1) {
-      try {
-        const lastSession = await mongoose.connection.collection('sessions').findOne({}, { sort: { _id: -1 } });
-        activeSid = lastSession?.session?.user?.upstreamSid || lastSession?.upstreamSid;
-      } catch (sessErr) {
-        console.warn('[Analytics] Session lookup note:', sessErr.message);
-      }
+    // Retrieve active upstream session ID strictly from authenticated user
+    const activeSid = req.user?.upstreamSid;
+    if (!activeSid) {
+      return res.status(401).json({
+        STATUS: 'FAILED',
+        StatusCode: '1140',
+        Message: 'Authentication required. No active session found.',
+        isSessionExpired: true,
+      });
     }
 
     const cacheKey = `${fromDate}_${toDate}_${branch}_${activeSid || 'session'}`;
