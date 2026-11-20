@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://lis-middleman-server.onrender.com/api/:path*"
+      "destination": "https://newlifecaremdnserver.onrender.com/api/:path*"
     },
     {
       "source": "/betterstack-api/:path*",

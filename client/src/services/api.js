@@ -11,7 +11,7 @@ export const getApiBaseUrl = () => {
     return 'http://localhost:5000';
   }
   // Production fallback: live backend server on Render
-  return 'https://lis-middleman-server.onrender.com';
+  return 'https://newlifecaremdnserver.onrender.com';
 };
 
 export const API_BASE_URL = getApiBaseUrl();
