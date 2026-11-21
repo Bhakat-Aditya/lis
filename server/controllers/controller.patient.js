@@ -422,10 +422,37 @@ export const addPatient = async (req, res, next) => {
       if (match) patientId = match[0];
     }
 
+    let cleanPid = patientId
+      ? (String(patientId).toUpperCase().startsWith('P')
+          ? `P${String(patientId).replace(/^P+/i, '')}`
+          : `P${patientId}`)
+      : null;
+
     invalidatePatientListCache();
 
     let resolvedPatientRecord = null;
-    if (!patientId || !String(patientId).toUpperCase().startsWith('P')) {
+
+    // Fetch newly created patient record directly from AWS to retrieve the AWS auto-generated slNo and barcode
+    if (cleanPid) {
+      try {
+        const reportRes = await upstreamService.get(
+          'GETPATIENTREPORT',
+          { patientId: cleanPid },
+          req.user?.upstreamSid
+        );
+        if (reportRes?.payLoadJSON?.patient) {
+          resolvedPatientRecord = {
+            ...reportRes.payLoadJSON.patient,
+            printBarCodeUrls: reportRes.payLoadJSON.printBarCodeUrls || [],
+          };
+        }
+      } catch (lookupErr) {
+        console.warn('[AddPatient] GETPATIENTREPORT direct lookup note:', lookupErr.message);
+      }
+    }
+
+    // Fallback: look up in GETPATIENTLIST if GETPATIENTREPORT did not return slNo/barcode
+    if (!resolvedPatientRecord?.slNo && !resolvedPatientRecord?.barcode) {
       try {
         let freshListRes = await upstreamService.get(
           'GETPATIENTLIST',
@@ -434,6 +461,7 @@ export const addPatient = async (req, res, next) => {
         );
         let list = freshListRes?.payLoadJSON?.patients || [];
         let match = list.find((p) => {
+          if (cleanPid && p.patientId === cleanPid) return true;
           const pSlNo = String(p.slNo || p.barcode || '').trim();
           const targetSlNo = String(params.slNo).trim();
           if (targetSlNo && pSlNo && pSlNo === targetSlNo) return true;
@@ -444,7 +472,7 @@ export const addPatient = async (req, res, next) => {
           return pName === targetName && (!targetMobile || pMobile === targetMobile);
         });
 
-        // If not found in single day window, check broad 2026 window
+        // If not found in single day window, check broad current year window
         if (!match) {
           const currentYear = new Date().getFullYear();
           freshListRes = await upstreamService.get(
@@ -454,6 +482,7 @@ export const addPatient = async (req, res, next) => {
           );
           list = freshListRes?.payLoadJSON?.patients || [];
           match = list.find((p) => {
+            if (cleanPid && p.patientId === cleanPid) return true;
             const pSlNo = String(p.slNo || p.barcode || '').trim();
             const targetSlNo = String(params.slNo).trim();
             if (targetSlNo && pSlNo && pSlNo === targetSlNo) return true;
@@ -465,35 +494,39 @@ export const addPatient = async (req, res, next) => {
           });
         }
 
-        if (match && match.patientId) {
-          patientId = match.patientId;
-          resolvedPatientRecord = match;
+        if (match) {
+          resolvedPatientRecord = {
+            ...(resolvedPatientRecord || {}),
+            ...match,
+          };
+          if (!cleanPid && match.patientId) {
+            cleanPid = String(match.patientId).toUpperCase().startsWith('P')
+              ? `P${String(match.patientId).replace(/^P+/i, '')}`
+              : `P${match.patientId}`;
+          }
         }
       } catch (lookupErr) {
         console.warn('[AddPatient] Patient list lookup fallback note:', lookupErr.message);
       }
     }
 
-    if (patientId) {
-      const strPid = String(patientId).trim();
-      patientId = strPid.toUpperCase().startsWith('P') ? `P${strPid.replace(/^P+/i, '')}` : `P${strPid}`;
-    }
-
     const finalSlNo = resolvedPatientRecord?.slNo || resolvedPatientRecord?.barcode || params.slNo || '';
+    const finalBarcode = resolvedPatientRecord?.barcode || resolvedPatientRecord?.slNo || params.slNo || '';
 
     return res.json({
       STATUS: upstreamData?.STATUS || 'SUCCESS',
       StatusCode: upstreamData?.StatusCode || '0000',
       Message: upstreamData?.Message || 'Patient registered successfully',
       redirectURL: upstreamData?.redirectURL,
-      patientId: patientId || null,
+      patientId: cleanPid || null,
       sid: upstreamData?.sid,
       patient: {
         ...(resolvedPatientRecord || {}),
         ...params,
-        patientId: patientId || finalSlNo,
+        patientId: cleanPid || finalSlNo,
         slNo: finalSlNo,
-        barcode: resolvedPatientRecord?.barcode || finalSlNo,
+        barcode: finalBarcode,
+        printBarCodeUrls: resolvedPatientRecord?.printBarCodeUrls || [],
       },
     });
   } catch (err) {
@@ -544,7 +577,7 @@ export const updatePatient = async (req, res, next) => {
     const cleanRegDate = normalizeDateToYYYYMMDD(regDate);
     const cleanAge = String(age || '30').replace(/\D/g, '') || '30';
     const cleanMobile = String(mobile || '').replace(/\D/g, '').slice(-10);
-    const cleanSlNo = String(slNo || cleanPatientId || '').trim();
+    const cleanSlNo = String(slNo || '').trim();
 
     const {
       finalReferedDr,

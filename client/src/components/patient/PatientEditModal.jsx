@@ -107,7 +107,7 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
 
       setFormData({
         patientId: pid,
-        slNo: patient.slNo || pid,
+        slNo: patient.slNo || '',
         title: initialTitle,
         name: patient.name || '',
         mobile: patient.mobile || patient.phone || '',
@@ -380,7 +380,7 @@ export default function PatientEditModal({ isOpen, onClose, patient, onPatientUp
       const payload = {
         ...formData,
         patientId: formData.patientId || patient.patientId || patient.slNo,
-        slNo: formData.slNo.trim() || patient.slNo || formData.patientId,
+        slNo: formData.slNo.trim() || patient.slNo || '',
         gender: cleanGender,
         mobile: cleanMobile,
         regDate: cleanRegDate,

@@ -826,7 +826,7 @@ export default function TestSelectionView({
       <div className="bg-white border border-slate-200/90 shadow-xs px-4 py-3 rounded-2xl flex flex-wrap items-center justify-between text-xs font-semibold gap-3">
         <div className="flex flex-wrap items-center gap-2.5 text-slate-700">
           <span className="font-bold text-blue-700 font-mono bg-blue-50 px-2.5 py-0.5 rounded-lg border border-blue-200">
-            Barcode: #{effectivePatient?.slNo || effectivePatient?.barcode || (routeId && !routeId.toUpperCase().startsWith('P') ? routeId : '-')}
+            Barcode: #{effectivePatient?.slNo || effectivePatient?.barcode || '-'}
           </span>
           <span className="text-slate-300">|</span>
           <span className="font-bold text-slate-900">

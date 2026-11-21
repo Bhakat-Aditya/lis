@@ -340,7 +340,8 @@ export default function PatientDetailPage() {
       ? activePatient
       : {
           patientId: id,
-          slNo: id,
+          slNo: activePatient?.slNo || '',
+          barcode: activePatient?.barcode || activePatient?.slNo || '',
           name: 'Patient',
           gender: 'Male',
           age: '30',
@@ -707,7 +708,7 @@ export default function PatientDetailPage() {
                 {patient?.name || activePatient?.name || 'Patient'}
               </h1>
               <span className="font-mono text-xs font-bold bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-200">
-                Barcode: {patient?.slNo || patient?.barcode || activePatient?.slNo || activePatient?.barcode || (id && !id.toUpperCase().startsWith('P') ? id : '-')}
+                Barcode: {patient?.slNo || patient?.barcode || activePatient?.slNo || activePatient?.barcode || '-'}
               </span>
             </div>
             <span className="text-[11px] text-slate-500 font-medium">

@@ -652,7 +652,7 @@ export default function PatientJourneyTimeline({
                             Billed: ₹{metadata.billedAmount} {metadata.currency || 'INR'}
                           </span>
                           <span className="text-[11px] font-mono bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md">
-                            Barcode: #{metadata.patientId || cleanPatientId}
+                            Barcode: #{metadata.barcode || metadata.slNo || '-'}
                           </span>
                         </div>
                       )}

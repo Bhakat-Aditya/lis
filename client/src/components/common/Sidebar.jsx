@@ -84,7 +84,7 @@ export default function Sidebar({ onOpenNewPatient }) {
     : '';
 
   const fullName = [activePatient?.title, activePatient?.name].filter(Boolean).join(' ') || 'Active Patient';
-  const barcodeText = activePatient?.slNo || activePatient?.barcode || cleanPid || '-';
+  const barcodeText = activePatient?.slNo || activePatient?.barcode || '-';
 
   const handleAction = (modalName, tabName) => {
     if (!cleanPid) return;
