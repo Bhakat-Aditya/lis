@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/context.auth.jsx';
 import { usePatientContext } from '../../context/context.patient.jsx';
 import { openReportPdf, openBillingPdf } from '../../services/api.js';
@@ -8,11 +8,9 @@ import {
   Home,
   UserPlus,
   Users,
-  Search,
   Receipt,
   LogOut,
   ChevronDown,
-  ChevronUp,
   PanelLeftClose,
   PanelLeft,
   FlaskConical,
@@ -36,7 +34,54 @@ import {
   User,
   Activity,
   KeyRound,
+  Layers,
+  FileSpreadsheet,
+  Building,
+  Ruler,
+  BookOpen,
+  Stethoscope,
+  MapPin,
 } from 'lucide-react';
+
+const MASTER_SIDEBAR_GROUPS = [
+  {
+    id: 'test_catalog',
+    label: 'Test Catalog',
+    tabs: [
+      { id: 'tests', label: 'Tests', icon: FlaskConical },
+      { id: 'profiles', label: 'Profiles', icon: Layers },
+      { id: 'packages', label: 'Packages', icon: FileSpreadsheet },
+      { id: 'templates', label: 'Templates', icon: FileText },
+    ],
+  },
+  {
+    id: 'report_setup',
+    label: 'Report Setup',
+    tabs: [
+      { id: 'departments', label: 'Departments', icon: Building },
+      { id: 'methods', label: 'Methods', icon: Ruler },
+      { id: 'samples', label: 'Sample Types', icon: TestTube },
+      { id: 'units', label: 'Units', icon: Ruler },
+      { id: 'interpretations', label: 'Interpretations', icon: BookOpen },
+    ],
+  },
+  {
+    id: 'partnership',
+    label: 'Partnership',
+    tabs: [
+      { id: 'doctors', label: 'Doctors', icon: Stethoscope },
+      { id: 'references', label: 'Referring Agents', icon: Users },
+    ],
+  },
+  {
+    id: 'administration',
+    label: 'Administration',
+    tabs: [
+      { id: 'branches', label: 'Branches', icon: MapPin },
+      { id: 'users', label: 'Users & Roles', icon: Users },
+    ],
+  },
+];
 
 export default function Sidebar({ onOpenNewPatient }) {
   const { user, logout } = useAuth();
@@ -61,6 +106,13 @@ export default function Sidebar({ onOpenNewPatient }) {
 
   const [dropdownOpenLocal, setDropdownOpenLocal] = useState(true);
   const [sidebarReportMenuOpen, setSidebarReportMenuOpen] = useState(false);
+
+  const [searchParams] = useSearchParams();
+  const isMasterRoute = location.pathname.startsWith('/master');
+  const currentMasterTab = isMasterRoute ? (searchParams.get('tab') || 'tests') : '';
+  const [masterMenuOpen, setMasterMenuOpen] = useState(null);
+  const showMasterDropdown = masterMenuOpen !== null ? masterMenuOpen : isMasterRoute;
+  const toggleMasterDropdown = () => setMasterMenuOpen((prev) => (prev !== null ? !prev : !isMasterRoute));
   const dropdownOpen = setActivePatientMenuOpen ? activePatientMenuOpen : dropdownOpenLocal;
   const setDropdownOpen = setActivePatientMenuOpen || setDropdownOpenLocal;
 
@@ -490,17 +542,84 @@ export default function Sidebar({ onOpenNewPatient }) {
             {!collapsed && <span>Billing & Invoices</span>}
           </NavLink>
 
-          {/* Master Catalogs */}
-          <NavLink
-            to="/master"
-            className={({ isActive }) =>
-              navItemClass(isActive, 'bg-slate-100 text-slate-900 font-bold')
-            }
-            title="Master Catalogs & 24h Cache"
-          >
-            <Database className="w-4 h-4 text-slate-500 shrink-0" />
-            {!collapsed && <span>Master Catalogs</span>}
-          </NavLink>
+          {/* Master Catalogs with Interactive Category Dropdown */}
+          <div className="space-y-0.5">
+            <div className="flex items-center justify-between">
+              <NavLink
+                to="/master"
+                className={({ isActive }) =>
+                  `${navItemClass(isActive, 'bg-slate-100 text-slate-900 font-bold')} flex-1`
+                }
+                title="Master Catalogs & 24h Cache"
+              >
+                <Database className="w-4 h-4 text-slate-500 shrink-0" />
+                {!collapsed && (
+                  <div className="flex items-center justify-between flex-1">
+                    <span>Master Catalogs</span>
+                    {isMasterRoute && (
+                      <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0 animate-pulse" title="Master Catalog Active" />
+                    )}
+                  </div>
+                )}
+              </NavLink>
+
+              {!collapsed && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    toggleMasterDropdown();
+                  }}
+                  className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer mr-1 shrink-0"
+                  title="Toggle Master Categories"
+                >
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                      showMasterDropdown ? '' : '-rotate-90'
+                    }`}
+                  />
+                </button>
+              )}
+            </div>
+
+            {/* Clean Dropdown Under Master Catalogs */}
+            {!collapsed && showMasterDropdown && (
+              <div className="ml-2 pl-2 border-l-2 border-slate-200 my-1 space-y-2">
+                {MASTER_SIDEBAR_GROUPS.map((group) => (
+                  <div key={group.id} className="space-y-0.5">
+                    <div className="text-[9.5px] font-extrabold uppercase tracking-wider text-slate-400 px-2 pt-1 pb-0.5">
+                      {group.label}
+                    </div>
+                    {group.tabs.map((tab) => {
+                      const TabIcon = tab.icon;
+                      const isSelected = isMasterRoute && currentMasterTab === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => navigate(`/master?tab=${tab.id}`)}
+                          className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs font-semibold transition-colors text-left cursor-pointer ${
+                            isSelected
+                              ? 'bg-blue-50 text-blue-700 font-bold shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                          }`}
+                        >
+                          <span className="flex items-center gap-2 min-w-0">
+                            <TabIcon className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-blue-600' : 'text-slate-400'}`} />
+                            <span className="truncate">{tab.label}</span>
+                          </span>
+                          {isSelected && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </nav>
       </div>
 
