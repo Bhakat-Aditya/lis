@@ -3,6 +3,7 @@ import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/context.auth.jsx';
 import { usePatientContext } from '../../context/context.patient.jsx';
 import { openReportPdf, openBillingPdf } from '../../services/api.js';
+import PasswordUpdateModal from '../auth/PasswordUpdateModal.jsx';
 import {
   Home,
   UserPlus,
@@ -34,12 +35,14 @@ import {
   X,
   User,
   Activity,
+  KeyRound,
 } from 'lucide-react';
 
 export default function Sidebar({ onOpenNewPatient }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -518,16 +521,33 @@ export default function Sidebar({ onOpenNewPatient }) {
         )}
 
         <button
+          onClick={() => setShowPasswordModal(true)}
+          className={`w-full ${navItemClass(
+            false
+          )} text-slate-600 hover:text-blue-600 hover:bg-blue-50 cursor-pointer`}
+          title="Change Password"
+        >
+          <KeyRound className="w-4 h-4 shrink-0 text-slate-400 group-hover:text-blue-600" />
+          {!collapsed && <span>Change Password</span>}
+        </button>
+
+        <button
           onClick={logout}
           className={`w-full ${navItemClass(
             false
-          )} text-slate-500 hover:text-rose-600 hover:bg-rose-50`}
+          )} text-slate-500 hover:text-rose-600 hover:bg-rose-50 cursor-pointer`}
           title="Sign out of portal"
         >
           <LogOut className="w-4 h-4 shrink-0 text-slate-400 group-hover:text-rose-600" />
           {!collapsed && <span>Sign Out</span>}
         </button>
       </div>
+
+      {/* Password Update Modal */}
+      <PasswordUpdateModal
+        isOpen={showPasswordModal}
+        onClose={() => setShowPasswordModal(false)}
+      />
     </aside>
   );
 }

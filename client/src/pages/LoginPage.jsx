@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useAuth } from '../context/context.auth.jsx';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import api from '../services/api.js';
 import {
   ShieldCheck,
   Lock,
@@ -11,14 +12,12 @@ import {
   Eye,
   EyeOff,
   Activity,
-  Sparkles,
   FlaskConical,
   Building2,
   CheckCircle2,
   ArrowRight,
+  ArrowLeft,
   Headphones,
-  FileCheck2,
-  Stethoscope,
 } from 'lucide-react';
 
 export default function LoginPage() {
@@ -26,6 +25,9 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const sessionLogoutReason = searchParams.get('reason') || '';
+
+  // Auth Modes: 'login' | 'forget' | 'reset'
+  const [authMode, setAuthMode] = useState('login');
 
   // Clean, normal login state - ZERO auto-filled credentials
   const [loginId, setLoginId] = useState('');
@@ -35,6 +37,14 @@ export default function LoginPage() {
   const [showTotp, setShowTotp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+
+  // Password Reset Specific States
+  const [resetOtp, setResetOtp] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Track page load time to block any automated password-manager instant auto-submits
   const [mountTime] = useState(() => Date.now());
@@ -71,6 +81,111 @@ export default function LoginPage() {
     } catch (err) {
       setLoading(false);
       setError(err.message || 'Unable to connect to authentication server. Please check your network.');
+    }
+  };
+
+  /**
+   * 2. API_PASSWORD_FORGET = "PASSWORDFORGET"
+   * Request OTP for password recovery
+   */
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    if (!loginId.trim()) {
+      setError('Please provide your Operator ID / Username.');
+      return;
+    }
+
+    setError('');
+    setSuccessMsg('');
+    setLoading(true);
+
+    try {
+      const res = await api.post('/auth/password/forget', {
+        loginid: loginId.trim(),
+      });
+
+      setLoading(false);
+
+      if (res.data?.STATUS === 'SUCCESS' || res.data?.StatusCode === '0000') {
+        setSuccessMsg(
+          res.data?.Message ||
+          'Verification OTP sent successfully! Please enter the code below to reset password.'
+        );
+        setAuthMode('reset');
+      } else {
+        setError(res.data?.Message || 'Failed to send OTP.');
+      }
+    } catch (err) {
+      setLoading(false);
+      setError(
+        err.response?.data?.Message ||
+        err.message ||
+        'Unable to reach authentication server. Please check your network.'
+      );
+    }
+  };
+
+  /**
+   * 3. API_PASSWORD_RESET = "PASSWORDRESET"
+   * Submit OTP and set new password
+   */
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    if (!loginId.trim()) {
+      setError('Please provide your Operator ID.');
+      return;
+    }
+    if (!resetOtp.trim()) {
+      setError('Please enter the verification OTP.');
+      return;
+    }
+    if (!newPassword) {
+      setError('Please enter your new password.');
+      return;
+    }
+    if (newPassword.length < 4) {
+      setError('New password must be at least 4 characters long.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match. Please verify both password fields.');
+      return;
+    }
+
+    setError('');
+    setSuccessMsg('');
+    setLoading(true);
+
+    try {
+      const res = await api.post('/auth/password/reset', {
+        loginid: loginId.trim(),
+        otp: resetOtp.trim(),
+        password: newPassword.trim(),
+        confirmPassword: confirmPassword.trim(),
+      });
+
+      setLoading(false);
+
+      if (res.data?.STATUS === 'SUCCESS' || res.data?.StatusCode === '0000') {
+        setSuccessMsg(
+          res.data?.Message ||
+          'Password reset successfully! Please sign in with your new password.'
+        );
+        setAuthMode('login');
+        setPassword('');
+        setResetOtp('');
+        setNewPassword('');
+        setConfirmPassword('');
+      } else {
+        setError(res.data?.Message || 'Failed to reset password.');
+      }
+    } catch (err) {
+      setLoading(false);
+      setError(
+        err.response?.data?.Message ||
+        err.message ||
+        'Unable to reset password. Please check your OTP and try again.'
+      );
     }
   };
 
@@ -201,124 +316,391 @@ export default function LoginPage() {
               </div>
             )}
 
-            <form onSubmit={handleSubmit} autoComplete="off" className="space-y-4">
-              {/* Username Input */}
-              <div className="space-y-1.5">
-                <label
-                  htmlFor="loginId"
-                  className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider"
-                >
-                  Operator ID / Username
-                </label>
-                <div className="relative">
-                  <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-                    <User className="w-4 h-4" />
-                  </div>
-                  <input
-                    id="loginId"
-                    type="text"
-                    placeholder="Enter staff login ID"
-                    value={loginId}
-                    onChange={(e) => {
-                      setLoginId(e.target.value);
-                      if (error) setError('');
-                    }}
-                    autoComplete="off"
-                    data-lpignore="true"
-                    autoFocus
-                    required
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 text-xs font-semibold transition-all focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-600 focus:bg-white dark:focus:bg-slate-800 shadow-2xs"
-                  />
+            {successMsg && (
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 rounded-xl text-xs flex items-center justify-between gap-2 font-medium shadow-xs animate-in fade-in duration-200">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{successMsg}</span>
                 </div>
-              </div>
-
-              {/* Password Input with Show/Hide Toggle */}
-              <div className="space-y-1.5">
-                <label
-                  htmlFor="password"
-                  className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider"
+                <button
+                  type="button"
+                  onClick={() => setSuccessMsg('')}
+                  className="text-emerald-600 hover:text-emerald-800 text-xs font-bold cursor-pointer ml-1"
                 >
-                  Access Password
-                </label>
-                <div className="relative">
-                  <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-                    <Lock className="w-4 h-4" />
-                  </div>
-                  <input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Enter access password"
-                    value={password}
-                    onChange={(e) => {
-                      setPassword(e.target.value);
-                      if (error) setError('');
-                    }}
-                    autoComplete="new-password"
-                    data-lpignore="true"
-                    required
-                    className="w-full pl-10 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 text-xs font-semibold transition-all focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-600 focus:bg-white dark:focus:bg-slate-800 shadow-2xs"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((prev) => !prev)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg cursor-pointer transition-colors"
-                    title={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showPassword ? (
-                      <EyeOff className="w-4 h-4" />
-                    ) : (
-                      <Eye className="w-4 h-4" />
-                    )}
-                  </button>
-                </div>
+                  ✕
+                </button>
               </div>
+            )}
 
-              {/* Dynamic 2FA TOTP (Shows only if prompted by backend security) */}
-              {showTotp && (
-                <div className="p-3.5 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-2xl space-y-2 animate-in fade-in duration-200">
+            {/* View 1: Standard Login Form */}
+            {authMode === 'login' && (
+              <form onSubmit={handleSubmit} autoComplete="off" className="space-y-4">
+                {/* Username Input */}
+                <div className="space-y-1.5">
                   <label
-                    htmlFor="totp"
-                    className="block text-[10.5px] font-extrabold text-blue-950 dark:text-blue-300 uppercase tracking-wider"
+                    htmlFor="loginId"
+                    className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider"
                   >
-                    Two-Factor Authentication (2FA TOTP)
+                    Operator ID / Username
                   </label>
                   <div className="relative">
-                    <KeyRound className="w-4 h-4 text-blue-600 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                      <User className="w-4 h-4" />
+                    </div>
                     <input
-                      id="totp"
+                      id="loginId"
                       type="text"
-                      maxLength={6}
-                      placeholder="Enter 6-digit authenticator code"
-                      value={totp}
-                      onChange={(e) => setTotp(e.target.value.replace(/\D/g, ''))}
-                      className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-700 rounded-xl text-center font-mono text-sm font-bold tracking-widest text-blue-900 dark:text-blue-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                      placeholder="Enter staff login ID"
+                      value={loginId}
+                      onChange={(e) => {
+                        setLoginId(e.target.value);
+                        if (error) setError('');
+                      }}
+                      autoComplete="off"
+                      data-lpignore="true"
+                      autoFocus
+                      required
+                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 text-xs font-semibold transition-all focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-600 focus:bg-white dark:focus:bg-slate-800 shadow-2xs"
                     />
                   </div>
-                  <p className="text-[10px] text-blue-700 dark:text-blue-300">
-                    Open your Google Authenticator or registered 2FA app to provide the current verification code.
+                </div>
+
+                {/* Password Input with Show/Hide Toggle */}
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="password"
+                    className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider"
+                  >
+                    Access Password
+                  </label>
+                  <div className="relative">
+                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                    <input
+                      id="password"
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="Enter access password"
+                      value={password}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        if (error) setError('');
+                      }}
+                      autoComplete="new-password"
+                      data-lpignore="true"
+                      required
+                      className="w-full pl-10 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 text-xs font-semibold transition-all focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-600 focus:bg-white dark:focus:bg-slate-800 shadow-2xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg cursor-pointer transition-colors"
+                      title={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Forgot Password Link */}
+                <div className="flex items-center justify-end -mt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthMode('forget');
+                      setError('');
+                      setSuccessMsg('');
+                    }}
+                    className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors cursor-pointer"
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
+
+                {/* Dynamic 2FA TOTP (Shows only if prompted by backend security) */}
+                {showTotp && (
+                  <div className="p-3.5 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-2xl space-y-2 animate-in fade-in duration-200">
+                    <label
+                      htmlFor="totp"
+                      className="block text-[10.5px] font-extrabold text-blue-950 dark:text-blue-300 uppercase tracking-wider"
+                    >
+                      Two-Factor Authentication (2FA TOTP)
+                    </label>
+                    <div className="relative">
+                      <KeyRound className="w-4 h-4 text-blue-600 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        id="totp"
+                        type="text"
+                        maxLength={6}
+                        placeholder="Enter 6-digit authenticator code"
+                        value={totp}
+                        onChange={(e) => setTotp(e.target.value.replace(/\D/g, ''))}
+                        className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-700 rounded-xl text-center font-mono text-sm font-bold tracking-widest text-blue-900 dark:text-blue-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <p className="text-[10px] text-blue-700 dark:text-blue-300">
+                      Open your Google Authenticator or registered 2FA app to provide the current verification code.
+                    </p>
+                  </div>
+                )}
+
+                {/* Submit Action Button */}
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full mt-2 py-3 px-4 rounded-xl font-extrabold text-xs text-white bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:via-indigo-700 hover:to-blue-800 shadow-md shadow-blue-600/30 hover:shadow-lg hover:shadow-blue-600/40 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Verifying Clinical Credentials...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Sign In to Clinical Portal</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+
+            {/* View 2: Forgot Password - Request OTP (API_PASSWORD_FORGET) */}
+            {authMode === 'forget' && (
+              <form onSubmit={handleForgotPassword} autoComplete="off" className="space-y-4">
+                <div className="p-3 bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800 rounded-xl space-y-1">
+                  <div className="flex items-center gap-2 text-blue-900 dark:text-blue-200 font-bold text-xs">
+                    <KeyRound className="w-4 h-4 text-blue-600" />
+                    <span>Password Recovery</span>
+                  </div>
+                  <p className="text-[11px] text-blue-700 dark:text-blue-300">
+                    Enter your Operator ID to request a verification OTP.
                   </p>
                 </div>
-              )}
 
-              {/* Submit Action Button */}
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full mt-2 py-3 px-4 rounded-xl font-extrabold text-xs text-white bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:via-indigo-700 hover:to-blue-800 shadow-md shadow-blue-600/30 hover:shadow-lg hover:shadow-blue-600/40 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Verifying Clinical Credentials...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Sign In to Clinical Portal</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </form>
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="forgetLoginId"
+                    className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider"
+                  >
+                    Operator ID / Username
+                  </label>
+                  <div className="relative">
+                    <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                      <User className="w-4 h-4" />
+                    </div>
+                    <input
+                      id="forgetLoginId"
+                      type="text"
+                      placeholder="Enter staff login ID (e.g. exsuper3)"
+                      value={loginId}
+                      onChange={(e) => {
+                        setLoginId(e.target.value);
+                        if (error) setError('');
+                      }}
+                      autoFocus
+                      required
+                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-600"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full mt-2 py-3 px-4 rounded-xl font-extrabold text-xs text-white bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:via-indigo-700 hover:to-blue-800 shadow-md shadow-blue-600/30 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Sending Verification OTP...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Send Verification OTP</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+
+                <div className="flex items-center justify-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthMode('login');
+                      setError('');
+                      setSuccessMsg('');
+                    }}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>Back to Sign In</span>
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* View 3: Reset Password - Enter OTP & New Password (API_PASSWORD_RESET) */}
+            {authMode === 'reset' && (
+              <form onSubmit={handleResetPassword} autoComplete="off" className="space-y-3.5">
+                <div className="p-3 bg-purple-50/70 dark:bg-purple-950/40 border border-purple-200/80 dark:border-purple-800 rounded-xl space-y-1">
+                  <div className="flex items-center gap-2 text-purple-900 dark:text-purple-200 font-bold text-xs">
+                    <KeyRound className="w-4 h-4 text-purple-600" />
+                    <span>Set New Password</span>
+                  </div>
+                  <p className="text-[11px] text-purple-700 dark:text-purple-300">
+                    Resetting password for Operator: <strong className="font-bold">{loginId}</strong>
+                  </p>
+                </div>
+
+                {/* Verification OTP */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label
+                      htmlFor="resetOtp"
+                      className="block text-[10.5px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider"
+                    >
+                      Verification OTP
+                    </label>
+                    {loginId.toLowerCase() === 'exsuper3' && (
+                      <span className="text-[10px] font-bold text-amber-700 bg-amber-50 dark:bg-amber-950/50 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800">
+                        Test Hint: Current time HHMM (e.g. 0446)
+                      </span>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      id="resetOtp"
+                      type="text"
+                      placeholder="Enter verification OTP"
+                      value={resetOtp}
+                      onChange={(e) => {
+                        setResetOtp(e.target.value);
+                        if (error) setError('');
+                      }}
+                      autoFocus
+                      required
+                      className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-purple-500/25 focus:border-purple-600"
+                    />
+                  </div>
+                </div>
+
+                {/* New Password */}
+                <div className="space-y-1">
+                  <label
+                    htmlFor="newPassword"
+                    className="block text-[10.5px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider"
+                  >
+                    New Access Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      id="newPassword"
+                      type={showNewPassword ? 'text' : 'password'}
+                      placeholder="Enter new access password"
+                      value={newPassword}
+                      onChange={(e) => {
+                        setNewPassword(e.target.value);
+                        if (error) setError('');
+                      }}
+                      required
+                      className="w-full pl-10 pr-10 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-purple-500/25 focus:border-purple-600"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword((p) => !p)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg cursor-pointer transition-colors"
+                      title={showNewPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Confirm New Password */}
+                <div className="space-y-1">
+                  <label
+                    htmlFor="confirmPassword"
+                    className="block text-[10.5px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider"
+                  >
+                    Confirm New Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      id="confirmPassword"
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      placeholder="Re-enter new access password"
+                      value={confirmPassword}
+                      onChange={(e) => {
+                        setConfirmPassword(e.target.value);
+                        if (error) setError('');
+                      }}
+                      required
+                      className="w-full pl-10 pr-10 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-purple-500/25 focus:border-purple-600"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword((p) => !p)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg cursor-pointer transition-colors"
+                      title={showConfirmPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Submit Reset Button */}
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full mt-2 py-3 px-4 rounded-xl font-extrabold text-xs text-white bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-700 hover:via-indigo-700 hover:to-purple-800 shadow-md shadow-purple-600/30 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Resetting Password...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Reset Password</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+
+                <div className="flex items-center justify-between pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthMode('forget');
+                      setError('');
+                    }}
+                    className="text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 cursor-pointer"
+                  >
+                    Resend OTP
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthMode('login');
+                      setError('');
+                      setSuccessMsg('');
+                    }}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>Back to Sign In</span>
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
 
           {/* Card Footer: Clinical Credentials Notice */}
