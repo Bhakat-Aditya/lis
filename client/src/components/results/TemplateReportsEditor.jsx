@@ -362,7 +362,7 @@ export default function TemplateReportsEditor({
       : '';
     const targetUrl = patient?.printPDFUrl || patient?.reportUrl;
     if (targetUrl || cleanPid) {
-      openReportPdf(cleanPid, { addHeader: true, targetUrl });
+      openReportPdf(cleanPid, { targetUrl });
     } else {
       setGlobalError('No report PDF available for this patient yet.');
     }

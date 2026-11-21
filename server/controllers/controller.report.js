@@ -1725,7 +1725,7 @@ export const sendWhatsApp = async (req, res, next) => {
  */
 export const streamReportPdf = async (req, res, next) => {
   try {
-    const { patientId, addHeader = 'false' } = req.query;
+    const { patientId } = req.query;
     if (!patientId) {
       return res.status(400).json({ STATUS: 'FAILED', Message: 'patientId is required' });
     }
@@ -1774,11 +1774,13 @@ export const streamReportPdf = async (req, res, next) => {
       return res.status(404).json({ STATUS: 'FAILED', Message: 'Report PDF URL not found on upstream AWS server' });
     }
 
-    const wantsHeader = String(addHeader) === 'true';
-    if (wantsHeader) {
-      pdfUrl = pdfUrl.replace('addHeader=false', 'addHeader=true');
-    } else {
-      pdfUrl = pdfUrl.replace('addHeader=true', 'addHeader=false');
+    if (req.query.addHeader !== undefined && req.query.addHeader !== '') {
+      const wantsHeader = String(req.query.addHeader) === 'true';
+      if (wantsHeader) {
+        pdfUrl = pdfUrl.replace('addHeader=false', 'addHeader=true');
+      } else {
+        pdfUrl = pdfUrl.replace('addHeader=true', 'addHeader=false');
+      }
     }
 
     // Append &preview=true so browser previews PDF directly without downloading

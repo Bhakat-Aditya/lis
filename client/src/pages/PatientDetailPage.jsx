@@ -279,13 +279,10 @@ export default function PatientDetailPage() {
     }
   };
 
-  const handleOpenReportPdf = (withHeader = true) => {
+  const handleOpenReportPdf = () => {
     const rawPid = patient?.patientId || id;
-    let target = withHeader
-      ? (patient?.printPDFUrlWithHeader || patient?.printPDFUrl)
-      : (patient?.printPDFUrlWithoutHeader || patient?.printPDFUrl);
-    if (!target) target = patient?.reportUrl || reportPdfUrl;
-    openReportPdf(rawPid, { addHeader: withHeader, targetUrl: target });
+    const target = patient?.printPDFUrl || patient?.reportUrl || reportPdfUrl;
+    openReportPdf(rawPid, { targetUrl: target });
   };
 
   const handleOpenBillPdf = () => {
@@ -808,7 +805,7 @@ export default function PatientDetailPage() {
           onAddTests={() => setSearchParams({ tab: 'tests' })}
           onFillResults={() => setSearchParams({ tab: 'results' })}
           onPrintInvoice={handleOpenBillPdf}
-          onPrintReport={() => handleOpenReportPdf(true)}
+          onPrintReport={handleOpenReportPdf}
           onReceiveSample={handleReceiveSample}
           onReleaseReport={handleReleaseReport}
           onRecallReport={handleRecallReport}

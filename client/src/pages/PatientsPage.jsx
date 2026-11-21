@@ -1221,7 +1221,7 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                                     type="button"
                                     onClick={() => {
                                       const rawPid = p.patientId || pid;
-                                      openReportPdf(rawPid, { addHeader: true, targetUrl: p.printPDFUrl || p.reportUrl });
+                                      openReportPdf(rawPid, { targetUrl: p.printPDFUrl || p.reportUrl });
                                     }}
                                     className="flex items-center gap-1.5 bg-teal-50/80 hover:bg-teal-100/90 active:bg-teal-200/90 text-teal-800 border border-teal-200/90 text-[11px] font-bold py-2 px-2.5 rounded-xl shadow-2xs cursor-pointer transition-all outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
                                     title="Open official AWS Diagnostic Report PDF"

@@ -455,9 +455,9 @@ export default function TemplateReportEditPage() {
   const handleDownloadPdf = () => {
     const targetUrl = patient?.printPDFUrl || patient?.reportUrl;
     if (targetUrl) {
-      openReportPdf(cleanPid, { addHeader: true, targetUrl });
+      openReportPdf(cleanPid, { targetUrl });
     } else if (cleanPid) {
-      openReportPdf(cleanPid, { addHeader: true });
+      openReportPdf(cleanPid);
     } else {
       setErrorMsg('No report PDF available for this patient yet.');
     }
