@@ -157,6 +157,7 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
   const [fromDate, setFromDate] = useState(todayStr);
   const [toDate, setToDate] = useState(todayStr);
   const [previewBillPatient, setPreviewBillPatient] = useState(null);
+  const [openReportMenuPid, setOpenReportMenuPid] = useState(null);
   const [editingPatient, setEditingPatient] = useState(null);
   const [deletingPatient, setDeletingPatient] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -184,6 +185,18 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
       setSearchTerm(urlSearch);
     }
   }, [urlSearch]);
+
+  useEffect(() => {
+    const handleCloseReportMenu = () => {
+      setOpenReportMenuPid(null);
+    };
+    if (openReportMenuPid) {
+      document.addEventListener('click', handleCloseReportMenu);
+    }
+    return () => {
+      document.removeEventListener('click', handleCloseReportMenu);
+    };
+  }, [openReportMenuPid]);
 
   const fetchPatients = async () => {
     if (fetchAbortRef.current) {
@@ -1202,33 +1215,79 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                                     <span className="truncate">Order Tests</span>
                                   </button>
 
-                                  {/* 3. AWS Bill / Invoice PDF */}
+                                  {/* 3. View Invoice - Opens billing/invoice panel directly */}
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      const rawPid = p.patientId || pid;
-                                      openBillingPdf(rawPid, { targetUrl: p.billUrl });
+                                      setActivePatient(p);
+                                      navigate(`/patients/${pid}?tab=billing`);
                                     }}
                                     className="flex items-center gap-1.5 bg-amber-50/80 hover:bg-amber-100/90 active:bg-amber-200/90 text-amber-800 border border-amber-200/90 text-[11px] font-bold py-2 px-2.5 rounded-xl shadow-2xs cursor-pointer transition-all outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
-                                    title="Open official AWS Invoice PDF in a new tab"
+                                    title="View official Billing & Invoice panel"
                                   >
                                     <FileText className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                                    <span className="truncate">Invoice PDF</span>
+                                    <span className="truncate">View Invoice</span>
                                   </button>
 
-                                  {/* 4. AWS Report PDF */}
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const rawPid = p.patientId || pid;
-                                      openReportPdf(rawPid, { addHeader: true, targetUrl: p.printPDFUrl || p.reportUrl });
-                                    }}
-                                    className="flex items-center gap-1.5 bg-teal-50/80 hover:bg-teal-100/90 active:bg-teal-200/90 text-teal-800 border border-teal-200/90 text-[11px] font-bold py-2 px-2.5 rounded-xl shadow-2xs cursor-pointer transition-all outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
-                                    title="Open official AWS Diagnostic Report PDF"
-                                  >
-                                    <Printer className="w-3.5 h-3.5 text-teal-600 shrink-0" />
-                                    <span className="truncate">Report PDF</span>
-                                  </button>
+                                  {/* 4. View Report with With Header / Without Header options */}
+                                  <div className="relative">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenReportMenuPid(openReportMenuPid === pid ? null : pid);
+                                      }}
+                                      className="w-full flex items-center justify-between gap-1 bg-teal-50/80 hover:bg-teal-100/90 active:bg-teal-200/90 text-teal-800 border border-teal-200/90 text-[11px] font-bold py-2 px-2.5 rounded-xl shadow-2xs cursor-pointer transition-all outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
+                                      title="Choose header option and view Report panel"
+                                    >
+                                      <div className="flex items-center gap-1.5 truncate">
+                                        <Printer className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                                        <span className="truncate">View Report</span>
+                                      </div>
+                                      <ChevronDown className={`w-3 h-3 text-teal-600 shrink-0 transition-transform ${openReportMenuPid === pid ? 'rotate-180' : ''}`} />
+                                    </button>
+
+                                    {openReportMenuPid === pid && (
+                                      <div
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="absolute z-30 left-0 right-0 top-full mt-1 bg-white border border-teal-200 rounded-xl shadow-xl py-1 animate-in fade-in zoom-in-95 duration-150 min-w-[155px]"
+                                      >
+                                        <div className="px-2.5 py-1 text-[9px] font-bold text-teal-800 uppercase tracking-wider bg-teal-50 border-b border-teal-100">
+                                          Choose Header Option
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setOpenReportMenuPid(null);
+                                            setActivePatient(p);
+                                            navigate(`/patients/${pid}?tab=report&header=true`);
+                                          }}
+                                          className="w-full px-2.5 py-1.5 text-left text-[11px] font-semibold text-slate-700 hover:bg-teal-50 hover:text-teal-900 flex items-center gap-1.5 transition-colors cursor-pointer"
+                                        >
+                                          <FileCheck className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                                          <div>
+                                            <div className="font-bold">With Header</div>
+                                            <div className="text-[9px] text-slate-400 font-normal">Header: true</div>
+                                          </div>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setOpenReportMenuPid(null);
+                                            setActivePatient(p);
+                                            navigate(`/patients/${pid}?tab=report&header=false`);
+                                          }}
+                                          className="w-full px-2.5 py-1.5 text-left text-[11px] font-semibold text-slate-700 hover:bg-teal-50 hover:text-teal-900 flex items-center gap-1.5 transition-colors cursor-pointer"
+                                        >
+                                          <FileText className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                                          <div>
+                                            <div className="font-bold">Without Header</div>
+                                            <div className="text-[9px] text-slate-400 font-normal">Header: false</div>
+                                          </div>
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
 
                                 {/* 5. Delete Patient Record Action */}

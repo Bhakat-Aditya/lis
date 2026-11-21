@@ -1376,7 +1376,7 @@ export default function ResultsEntry({
             title="Download / Print official AWS Diagnostic Report PDF"
           >
             <Printer className="w-3.5 h-3.5" />
-            <span>AWS Report PDF</span>
+            <span>View Report</span>
           </button>
 
           {/* Receive Pending Samples Button with Confirmation */}

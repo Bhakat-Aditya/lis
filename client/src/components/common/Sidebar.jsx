@@ -57,6 +57,7 @@ export default function Sidebar({ onOpenNewPatient }) {
   } = usePatientContext();
 
   const [dropdownOpenLocal, setDropdownOpenLocal] = useState(true);
+  const [sidebarReportMenuOpen, setSidebarReportMenuOpen] = useState(false);
   const dropdownOpen = setActivePatientMenuOpen ? activePatientMenuOpen : dropdownOpenLocal;
   const setDropdownOpen = setActivePatientMenuOpen || setDropdownOpenLocal;
 
@@ -114,9 +115,9 @@ export default function Sidebar({ onOpenNewPatient }) {
     openBillingPdf(cleanPid);
   };
 
-  const handleOpenAwsPdf = () => {
+  const handleOpenAwsPdf = (wantsHeader = true) => {
     if (!cleanPid) return;
-    openReportPdf(cleanPid, { addHeader: true });
+    openReportPdf(cleanPid, { addHeader: wantsHeader });
   };
 
   return (
@@ -345,7 +346,7 @@ export default function Sidebar({ onOpenNewPatient }) {
                     <span>Add Discount</span>
                   </button>
 
-                  {/* 8. Print Invoice */}
+                  {/* 8. View Invoice */}
                   <button
                     onClick={handlePrintInvoice}
                     className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
@@ -353,7 +354,7 @@ export default function Sidebar({ onOpenNewPatient }) {
                   >
                     <span className="flex items-center gap-2.5">
                       <Printer className="w-3.5 h-3.5 text-teal-500 shrink-0" />
-                      <span>Print Invoice</span>
+                      <span>View Invoice</span>
                     </span>
                     <ExternalLink className="w-3 h-3 text-slate-400" />
                   </button>
@@ -367,18 +368,47 @@ export default function Sidebar({ onOpenNewPatient }) {
                     <span>Fill Results</span>
                   </button>
 
-                  {/* 10. AWS Report PDF */}
-                  <button
-                    onClick={handleOpenAwsPdf}
-                    className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
-                    title="Open official AWS Report PDF in a new tab"
-                  >
-                    <span className="flex items-center gap-2.5">
-                      <FileText className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                      <span>AWS Report PDF</span>
-                    </span>
-                    <ExternalLink className="w-3 h-3 text-slate-400" />
-                  </button>
+                  {/* 10. View Report (Opens in new tab from the left panel) */}
+                  <div className="space-y-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setSidebarReportMenuOpen(!sidebarReportMenuOpen)}
+                      className="w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                      title="Choose header and open official AWS Report PDF in a new tab"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <FileText className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                        <span>View Report</span>
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <ExternalLink className="w-3 h-3 text-slate-400" />
+                        <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${sidebarReportMenuOpen ? 'rotate-180' : ''}`} />
+                      </div>
+                    </button>
+
+                    {sidebarReportMenuOpen && (
+                      <div className="pl-6 pr-1 space-y-0.5 py-1 bg-slate-50/80 rounded-lg border border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenAwsPdf(true)}
+                          className="w-full flex items-center justify-between px-2 py-1 rounded text-[11px] font-medium text-slate-600 hover:text-teal-700 hover:bg-teal-50 transition-colors text-left cursor-pointer"
+                          title="Open official AWS Report with header in new tab"
+                        >
+                          <span>With Header (Header: true)</span>
+                          <ExternalLink className="w-2.5 h-2.5 text-slate-400" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenAwsPdf(false)}
+                          className="w-full flex items-center justify-between px-2 py-1 rounded text-[11px] font-medium text-slate-600 hover:text-teal-700 hover:bg-teal-50 transition-colors text-left cursor-pointer"
+                          title="Open official AWS Report without header in new tab"
+                        >
+                          <span>Without Header (Header: false)</span>
+                          <ExternalLink className="w-2.5 h-2.5 text-slate-400" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
 
                   {/* 11. Release Report */}
                   <button
