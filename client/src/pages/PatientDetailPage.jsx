@@ -239,7 +239,8 @@ export default function PatientDetailPage() {
 
         // Seamlessly update route URL if URL was an slNo/barcode and upstream assigned a real P-ID (e.g. /patients/8769959959 -> /patients/P14)
         if (pt.patientId && pt.patientId !== id && !id.toUpperCase().startsWith('P')) {
-          navigate(`/patients/${pt.patientId}?${searchParams.toString()}`, { replace: true });
+          const queryString = searchParams.toString();
+          navigate(`/patients/${pt.patientId}${queryString ? `?${queryString}` : ''}`, { replace: true });
         }
       } else if (!isRateLimited) {
         // Only apply fallback patient if not rate-limited and no existing data
