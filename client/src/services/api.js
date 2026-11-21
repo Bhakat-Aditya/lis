@@ -45,7 +45,7 @@ export const ensurePreviewUrl = (url) => {
 /**
  * Constructs the fully-qualified URL for the official diagnostic report PDF endpoint.
  */
-export const getReportPdfUrl = (patientId, options = {}) => {
+export const getReportPdfUrl = (patientId, { addHeader = true, download = false, preview = true } = {}) => {
   if (!patientId) return '';
   const rawPid = String(patientId).trim();
   const cleanPid = rawPid
@@ -55,11 +55,11 @@ export const getReportPdfUrl = (patientId, options = {}) => {
   const base = getApiBaseUrl();
   const params = new URLSearchParams();
   if (cleanPid) params.append('patientId', cleanPid);
-  if (options?.addHeader !== undefined) {
-    params.append('addHeader', String(options.addHeader));
-  }
-  if (options?.download) {
+  params.append('addHeader', String(Boolean(addHeader)));
+  if (download) {
     params.append('download', 'true');
+  } else if (preview) {
+    params.append('preview', 'true');
   }
   if (token) params.append('token', token);
   return `${base}/api/reports/pdf?${params.toString()}`;
@@ -89,14 +89,18 @@ export const getBillingPdfUrl = (patientId, { download = false, preview = true }
 
 /**
  * Opens the official AWS report PDF in a new tab directly.
- * Preserves the upstream AWS URL exactly as returned by the server (never modifies addHeader).
+ * Appends &preview=true so the browser opens and previews the PDF instantly without downloading or caching.
+ * If target URL comes in the API response, redirects directly to it in a new tab.
  */
 export const openReportPdf = (patientIdOrObj, options = {}) => {
   let target = '';
   let cleanPid = '';
+  const wantsHeader = options?.addHeader !== false;
 
   if (patientIdOrObj && typeof patientIdOrObj === 'object') {
-    target = patientIdOrObj.printPDFUrl
+    target = (wantsHeader
+      ? (patientIdOrObj.printPDFUrlWithHeader || patientIdOrObj.printPDFUrl)
+      : (patientIdOrObj.printPDFUrlWithoutHeader || patientIdOrObj.printPDFUrl))
       || patientIdOrObj.reportUrl
       || patientIdOrObj.url
       || options?.targetUrl
@@ -114,16 +118,26 @@ export const openReportPdf = (patientIdOrObj, options = {}) => {
       : '';
   }
 
-  // If URL already comes from upstream AWS, open that exact URL directly without modifying any parameters
+  // If URL already comes from the API response, immediately open that in a new tab with preview=true
   if (target) {
-    window.open(target, '_blank', 'noopener,noreferrer');
+    let directAwsUrl = ensurePreviewUrl(target);
+    if (wantsHeader) {
+      directAwsUrl = directAwsUrl.replace('addHeader=false', 'addHeader=true');
+    } else {
+      directAwsUrl = directAwsUrl.replace('addHeader=true', 'addHeader=false');
+    }
+    window.open(directAwsUrl, '_blank', 'noopener,noreferrer');
     return;
   }
 
   if (!cleanPid) return;
 
-  // Direct server 302 redirect endpoint fallback
-  const fallbackUrl = getReportPdfUrl(cleanPid, options);
+  // Direct server 302 redirect endpoint with preview=true in a new tab (instant, zero buffering)
+  const fallbackUrl = getReportPdfUrl(cleanPid, {
+    addHeader: wantsHeader,
+    preview: true,
+    ...options,
+  });
   window.open(fallbackUrl, '_blank', 'noopener,noreferrer');
 };
 
