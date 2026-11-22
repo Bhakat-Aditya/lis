@@ -732,39 +732,6 @@ export default function TestSelectionView({
       return;
     }
 
-    // Pre-open the new tab synchronously during user click to guarantee popup blockers do not intercept it
-    let billWindow = null;
-    try {
-      billWindow = window.open('', '_blank');
-      if (billWindow) {
-        billWindow.document.write(`
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <title>Opening Diagnostic Bill - ${cleanPid || pid}</title>
-              <style>
-                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f8fafc; color: #1e293b; text-align: center; }
-                .card { background: white; padding: 32px 48px; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
-                .spinner { width: 36px; height: 36px; border: 3px solid #e2e8f0; border-top-color: #059669; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
-                @keyframes spin { to { transform: rotate(360deg); } }
-                h2 { margin: 0 0 8px; font-size: 18px; color: #0f172a; }
-                p { margin: 0; font-size: 13px; color: #64748b; }
-              </style>
-            </head>
-            <body>
-              <div class="card">
-                <div class="spinner"></div>
-                <h2>Recording Order & Loading Bill...</h2>
-                <p>Please wait while investigations are synchronized with AWS.</p>
-              </div>
-            </body>
-          </html>
-        `);
-      }
-    } catch (e) {
-      console.warn('Popup tab note:', e);
-    }
-
     setSaving(true);
     setSaveError('');
     setSaveSuccess('');
@@ -793,27 +760,21 @@ export default function TestSelectionView({
 
       if (res.data?.STATUS === 'SUCCESS' || res.data?.StatusCode === '0000') {
         const targetPid = res.data?.patientId || cleanPid || pid;
-        // Open bill preview inline in the new tab via blob viewer (does NOT download to disk)
-        openBillingPdf(targetPid, {
-          existingWindow: billWindow,
-          preview: true,
-        });
-
-        setSaveSuccess(`Added ${newTests.length} investigation lot(s) successfully! Official AWS bill preview opened in a new tab.`);
         
         // Immediately mark newly added items as booked so they transition without duplicate or delete trash icon
         setSelectedTests((prev) =>
           prev.map((t) => (t.isNew ? { ...t, isNew: false, isRepeat: false } : t))
         );
 
-        // Refresh patient data in the background without switching portal tabs
+        // Refresh patient data in the background
         if (onRefresh) await onRefresh();
+
+        // Redirect directly to Patient Overview (not to billing section)
+        navigate(`/patients/${targetPid}`);
       } else {
-        if (billWindow && !billWindow.closed) billWindow.close();
         setSaveError(res.data?.Message || 'Failed to order tests');
       }
     } catch (err) {
-      if (billWindow && !billWindow.closed) billWindow.close();
       setSaveError(err.response?.data?.Message || 'Server error while ordering tests');
     } finally {
       setSaving(false);

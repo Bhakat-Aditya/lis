@@ -346,7 +346,7 @@ export default function PatientRegistrationModal({ isOpen, onClose, onPatientAdd
         if (onPatientAdded) {
           onPatientAdded(res.data);
         } else if (pid) {
-          navigate(`/patients/${pid}`);
+          navigate(`/patients/${pid}?tab=tests`);
         }
         onClose();
       } else {
