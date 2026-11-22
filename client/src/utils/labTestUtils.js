@@ -1460,3 +1460,78 @@ export function getDepartmentDisplayName(rawDept, tubeDept = '', masterDepartmen
   // 4. Fallback to tube department or default
   return tubeDept || 'Haematology';
 }
+
+/**
+ * Resolves a branch code (e.g. '0', '1', '01', 0, 1) or patient record
+ * to its human-readable branch name from the master catalog (BRANCH_LIST).
+ *
+ * @param {Object|string|number} patientOrBranch - Patient object or raw branch code/name
+ * @param {Array} branches - Array of branches from useMaster() (BRANCH_LIST)
+ * @returns {string} Human-readable branch name (e.g. 'Main Diagnostic Lab (Central)', 'New Life Care Diagnostic Branch 1')
+ */
+export function getBranchDisplayName(patientOrBranch, branches = []) {
+  if (patientOrBranch === null || patientOrBranch === undefined) {
+    return 'Main Diagnostic Lab (Central)';
+  }
+
+  let raw = '';
+  if (typeof patientOrBranch === 'object') {
+    raw = String(
+      patientOrBranch.branch !== undefined && patientOrBranch.branch !== null && patientOrBranch.branch !== ''
+        ? patientOrBranch.branch
+        : patientOrBranch.center !== undefined && patientOrBranch.center !== null && patientOrBranch.center !== ''
+        ? patientOrBranch.center
+        : patientOrBranch.branchId || patientOrBranch['Branch Id'] || patientOrBranch['Branch'] || patientOrBranch['Center'] || patientOrBranch.accessBranch || ''
+    ).trim();
+  } else {
+    raw = String(patientOrBranch).trim();
+  }
+
+  // If already a long descriptive name (not a code like '0', '1', '01', 'B1')
+  if (raw && raw.length > 3 && isNaN(Number(raw)) && !/^b\d+$/i.test(raw)) {
+    return raw;
+  }
+
+  // 1. Match from master catalog branches array by exact string
+  if (Array.isArray(branches) && branches.length > 0) {
+    let matched = branches.find((b) => {
+      const bId = String(b.branchId ?? b['Branch Id'] ?? b.id ?? '').trim();
+      return bId.toLowerCase() === raw.toLowerCase();
+    });
+
+    // 2. Try numeric match (e.g. '01' === 1, '0' === 0, '1' === 1)
+    if (!matched && raw !== '') {
+      const rawNum = parseInt(raw, 10);
+      if (!isNaN(rawNum)) {
+        matched = branches.find((b) => {
+          const bId = String(b.branchId ?? b['Branch Id'] ?? b.id ?? '').trim();
+          const bNum = parseInt(bId, 10);
+          return !isNaN(bNum) && bNum === rawNum;
+        });
+      }
+    }
+
+    if (matched) {
+      return matched.Name || matched.name || matched.branchName || `Branch ${raw}`;
+    }
+  }
+
+  // 3. Fallback defaults if master list isn't ready or code not present
+  const rawNum = parseInt(raw, 10);
+  if (raw === '' || raw === '0' || rawNum === 0 || raw.toLowerCase() === 'main' || raw.toLowerCase() === 'central') {
+    const b0 = Array.isArray(branches) ? branches.find((b) => String(b.branchId ?? b['Branch Id'] ?? b.id) === '0') : null;
+    return b0?.Name || b0?.name || 'Main Diagnostic Lab (Central)';
+  }
+
+  if (raw === '1' || raw === '01' || rawNum === 1) {
+    const b1 = Array.isArray(branches) ? branches.find((b) => String(b.branchId ?? b['Branch Id'] ?? b.id) === '1') : null;
+    return b1?.Name || b1?.name || 'New Life Care Diagnostic Branch 1';
+  }
+
+  if (raw === '2' || raw === '02' || rawNum === 2) {
+    const b2 = Array.isArray(branches) ? branches.find((b) => String(b.branchId ?? b['Branch Id'] ?? b.id) === '2') : null;
+    return b2?.Name || b2?.name || 'New Life Care Collection Center - Station Road';
+  }
+
+  return raw ? `Branch ${raw}` : 'Main Diagnostic Lab (Central)';
+}

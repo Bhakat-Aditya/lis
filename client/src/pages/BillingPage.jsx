@@ -427,7 +427,7 @@ export default function BillingPage() {
   return (
     <section className="space-y-5">
       <Helmet>
-        <title>Billing Management & Accounts Ledger | Lab Expert LIS</title>
+        <title>Billing Management & Accounts Ledger | New Life Care Diagnostic Centre</title>
         <meta
           name="description"
           content="Manage diagnostic invoices, collect patient deposits, analyze discounts, round off, and UPI/Cash reconciliation."

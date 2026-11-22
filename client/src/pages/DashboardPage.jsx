@@ -343,7 +343,7 @@ export default function DashboardPage({ onOpenNewPatient }) {
   return (
     <section className="space-y-4 pb-12 overflow-x-hidden">
       <Helmet>
-        <title>Analytics Overview & Operations | New Life Care Midnapore</title>
+        <title>Analytics Overview & Operations | New Life Care Diagnostic Centre - Midnapore</title>
         <meta
           name="description"
           content="Comprehensive clinical laboratory analytics overview, daily statistics, 9-day patient volume, gender ratio, billing breakdown, test results, department volume, and live worklist."

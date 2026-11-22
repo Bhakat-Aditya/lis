@@ -191,3 +191,188 @@ export const getMe = async (req, res, next) => {
     next(err);
   }
 };
+
+/**
+ * 1. API_PASSWORD_UPDATE = "PASSWORDUPDATE"
+ * After Login only, POST API Gateway. Required Parameter: password (new password)
+ */
+export const updatePassword = async (req, res, next) => {
+  try {
+    const { password, confirmPassword } = req.body;
+
+    if (!password || !String(password).trim()) {
+      return res.status(400).json({
+        STATUS: 'FAILED',
+        StatusCode: '400',
+        Message: 'New password is required',
+      });
+    }
+
+    if (confirmPassword && String(password).trim() !== String(confirmPassword).trim()) {
+      return res.status(400).json({
+        STATUS: 'FAILED',
+        StatusCode: '400',
+        Message: 'Passwords do not match. Please re-enter matching passwords.',
+      });
+    }
+
+    const sid = req.user?.upstreamSid;
+    const rawIp =
+      req.body.ip ||
+      req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+      req.headers['x-real-ip'] ||
+      req.socket?.remoteAddress ||
+      req.ip ||
+      '';
+    let ip = rawIp.replace(/^.*:/, '') || rawIp;
+    if (ip === '1' || ip === '::1' || ip === 'localhost' || !ip) {
+      ip = '127.0.0.1';
+    }
+    const userAgent = req.body.userAgent || req.headers['user-agent'] || 'Mozilla/5.0';
+
+    const upstreamRes = await upstreamService.passwordUpdate(password, sid, ip, userAgent);
+
+    if (upstreamRes?.STATUS === 'SUCCESS' || upstreamRes?.StatusCode === '0000') {
+      return res.json({
+        STATUS: 'SUCCESS',
+        StatusCode: '0000',
+        Message: upstreamRes.Message || 'Password updated successfully',
+        payLoadJSON: upstreamRes.payLoadJSON || null,
+      });
+    }
+
+    return res.status(400).json({
+      STATUS: 'FAILED',
+      StatusCode: upstreamRes?.StatusCode || '400',
+      Message: upstreamRes?.Message || 'Failed to update password. Upstream returned an error.',
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * 2. API_PASSWORD_FORGET = "PASSWORDFORGET"
+ * Before login screen, POST API Gateway. Required Parameter: loginid, ip, userAgent
+ */
+export const forgetPassword = async (req, res, next) => {
+  try {
+    const loginId = req.body.loginid || req.body.loginId;
+
+    if (!loginId || !String(loginId).trim()) {
+      return res.status(400).json({
+        STATUS: 'FAILED',
+        StatusCode: '400',
+        Message: 'Login ID / Operator ID is required',
+      });
+    }
+
+    const rawIp =
+      req.body.ip ||
+      req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+      req.headers['x-real-ip'] ||
+      req.socket?.remoteAddress ||
+      req.ip ||
+      '';
+    let ip = rawIp.replace(/^.*:/, '') || rawIp;
+    if (ip === '1' || ip === '::1' || ip === 'localhost' || !ip) {
+      ip = '127.0.0.1';
+    }
+    const userAgent = req.body.userAgent || req.headers['user-agent'] || 'Mozilla/5.0';
+
+    const upstreamRes = await upstreamService.passwordForget(loginId, ip, userAgent);
+
+    if (upstreamRes?.STATUS === 'SUCCESS' || upstreamRes?.StatusCode === '0000') {
+      return res.json({
+        STATUS: 'SUCCESS',
+        StatusCode: '0000',
+        Message: upstreamRes.Message || 'Verification OTP sent successfully',
+        payLoadJSON: upstreamRes.payLoadJSON || null,
+        isTestUser: Boolean(upstreamRes.isTestUser),
+      });
+    }
+
+    return res.status(400).json({
+      STATUS: 'FAILED',
+      StatusCode: upstreamRes?.StatusCode || '400',
+      Message: upstreamRes?.Message || 'Failed to send OTP. Please verify Operator ID.',
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * 3. API_PASSWORD_RESET = "PASSWORDRESET"
+ * Before login screen, POST API Gateway. Required Parameter: loginid, otp, password, ip, userAgent
+ */
+export const resetPassword = async (req, res, next) => {
+  try {
+    const loginId = req.body.loginid || req.body.loginId;
+    const { otp, password, confirmPassword } = req.body;
+
+    if (!loginId || !String(loginId).trim()) {
+      return res.status(400).json({
+        STATUS: 'FAILED',
+        StatusCode: '400',
+        Message: 'Login ID / Operator ID is required',
+      });
+    }
+
+    if (!otp || !String(otp).trim()) {
+      return res.status(400).json({
+        STATUS: 'FAILED',
+        StatusCode: '400',
+        Message: 'Verification OTP is required',
+      });
+    }
+
+    if (!password || !String(password).trim()) {
+      return res.status(400).json({
+        STATUS: 'FAILED',
+        StatusCode: '400',
+        Message: 'New password is required',
+      });
+    }
+
+    if (confirmPassword && String(password).trim() !== String(confirmPassword).trim()) {
+      return res.status(400).json({
+        STATUS: 'FAILED',
+        StatusCode: '400',
+        Message: 'Passwords do not match. Please re-enter matching passwords.',
+      });
+    }
+
+    const rawIp =
+      req.body.ip ||
+      req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+      req.headers['x-real-ip'] ||
+      req.socket?.remoteAddress ||
+      req.ip ||
+      '';
+    let ip = rawIp.replace(/^.*:/, '') || rawIp;
+    if (ip === '1' || ip === '::1' || ip === 'localhost' || !ip) {
+      ip = '127.0.0.1';
+    }
+    const userAgent = req.body.userAgent || req.headers['user-agent'] || 'Mozilla/5.0';
+
+    const upstreamRes = await upstreamService.passwordReset(loginId, otp, password, ip, userAgent);
+
+    if (upstreamRes?.STATUS === 'SUCCESS' || upstreamRes?.StatusCode === '0000') {
+      return res.json({
+        STATUS: 'SUCCESS',
+        StatusCode: '0000',
+        Message: upstreamRes.Message || 'Password reset successfully',
+        payLoadJSON: upstreamRes.payLoadJSON || null,
+      });
+    }
+
+    return res.status(400).json({
+      STATUS: 'FAILED',
+      StatusCode: upstreamRes?.StatusCode || '400',
+      Message: upstreamRes?.Message || 'Failed to reset password. Please check your OTP and try again.',
+    });
+  } catch (err) {
+    next(err);
+  }
+};

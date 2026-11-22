@@ -131,14 +131,14 @@ export default function ResultsTableView({
       <div className="overflow-x-auto max-h-[calc(100vh-250px)]">
         <table className="w-full table-fixed text-left border-collapse text-xs">
           <colgroup>
-            <col style={{ width: '34px' }} />
-            <col style={{ width: '27%' }} />
-            <col style={{ width: '75px' }} />
-            <col style={{ width: '21%' }} />
-            <col style={{ width: '55px' }} />
-            <col style={{ width: '85px' }} />
+            <col style={{ width: '32px' }} />
+            <col style={{ width: '30%' }} />
+            <col style={{ width: '70px' }} />
             <col style={{ width: '22%' }} />
-            <col style={{ width: '116px' }} />
+            <col style={{ width: '55px' }} />
+            <col style={{ width: '80px' }} />
+            <col style={{ width: '135px' }} />
+            <col style={{ width: '105px' }} />
           </colgroup>
           <thead className="sticky top-0 bg-slate-100/95 backdrop-blur-xs z-20 border-b border-slate-200 select-none shadow-2xs">
             <tr className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider">
@@ -148,7 +148,7 @@ export default function ResultsTableView({
               <th className="py-2 px-2">Observed Reading</th>
               <th className="py-2 px-1">Unit</th>
               <th className="py-2 px-1">Ref Range</th>
-              <th className="py-2 px-2">Clinical Evaluation & Gauge</th>
+              <th className="py-2 px-1.5 text-left text-[9.5px]">Clinical Evaluation & Gauge</th>
               <th className="py-2 px-2 text-right">Action</th>
             </tr>
           </thead>
@@ -427,7 +427,7 @@ export default function ResultsTableView({
                   </td>
 
                   {/* Clinical Evaluation & Mini Gauge */}
-                  <td className="py-1 px-2 overflow-hidden">
+                  <td className="py-1 px-1.5 overflow-hidden">
                     {evalRes.status !== 'EMPTY' ? (
                       <div className="flex items-center gap-1.5 min-w-0 flex-wrap sm:flex-nowrap">
                         <span

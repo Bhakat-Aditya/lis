@@ -238,7 +238,7 @@ export default function ResultsPage() {
   return (
     <section className="space-y-3">
       <Helmet>
-        <title>Laboratory Results Entry Workstation | Lab Expert LIS</title>
+        <title>Laboratory Results Entry Workstation | New Life Care Diagnostic Centre</title>
         <meta
           name="description"
           content="Technician workstation for recording, calculating, and analyzing diagnostic hematology, biochemistry, and serology parameters."

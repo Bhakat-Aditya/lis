@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useAuth } from '../context/context.auth.jsx';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import api from '../services/api.js';
 import {
-  ShieldCheck,
   Lock,
   User,
   KeyRound,
@@ -11,14 +11,12 @@ import {
   Eye,
   EyeOff,
   Activity,
-  Sparkles,
   FlaskConical,
   Building2,
   CheckCircle2,
   ArrowRight,
+  ArrowLeft,
   Headphones,
-  FileCheck2,
-  Stethoscope,
 } from 'lucide-react';
 
 export default function LoginPage() {
@@ -26,6 +24,9 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const sessionLogoutReason = searchParams.get('reason') || '';
+
+  // Auth Modes: 'login' | 'forget' | 'reset'
+  const [authMode, setAuthMode] = useState('login');
 
   // Clean, normal login state - ZERO auto-filled credentials
   const [loginId, setLoginId] = useState('');
@@ -35,6 +36,14 @@ export default function LoginPage() {
   const [showTotp, setShowTotp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+
+  // Password Reset Specific States
+  const [resetOtp, setResetOtp] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Track page load time to block any automated password-manager instant auto-submits
   const [mountTime] = useState(() => Date.now());
@@ -74,266 +83,747 @@ export default function LoginPage() {
     }
   };
 
+  /**
+   * 2. API_PASSWORD_FORGET = "PASSWORDFORGET"
+   * Request OTP for password recovery
+   */
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    if (!loginId.trim()) {
+      setError('Please provide your Operator ID / Username.');
+      return;
+    }
+
+    setError('');
+    setSuccessMsg('');
+    setLoading(true);
+
+    try {
+      const res = await api.post('/auth/password/forget', {
+        loginid: loginId.trim(),
+      });
+
+      setLoading(false);
+
+      if (res.data?.STATUS === 'SUCCESS' || res.data?.StatusCode === '0000') {
+        setSuccessMsg(
+          res.data?.Message ||
+          'Verification OTP sent successfully! Please enter the code below to reset password.'
+        );
+        setAuthMode('reset');
+      } else {
+        setError(res.data?.Message || 'Failed to send OTP.');
+      }
+    } catch (err) {
+      setLoading(false);
+      setError(
+        err.response?.data?.Message ||
+        err.message ||
+        'Unable to reach authentication server. Please check your network.'
+      );
+    }
+  };
+
+  /**
+   * 3. API_PASSWORD_RESET = "PASSWORDRESET"
+   * Submit OTP and set new password
+   */
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    if (!loginId.trim()) {
+      setError('Please provide your Operator ID.');
+      return;
+    }
+    if (!resetOtp.trim()) {
+      setError('Please enter the verification OTP.');
+      return;
+    }
+    if (!newPassword) {
+      setError('Please enter your new password.');
+      return;
+    }
+    if (newPassword.length < 4) {
+      setError('New password must be at least 4 characters long.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match. Please verify both password fields.');
+      return;
+    }
+
+    setError('');
+    setSuccessMsg('');
+    setLoading(true);
+
+    try {
+      const res = await api.post('/auth/password/reset', {
+        loginid: loginId.trim(),
+        otp: resetOtp.trim(),
+        password: newPassword.trim(),
+        confirmPassword: confirmPassword.trim(),
+      });
+
+      setLoading(false);
+
+      if (res.data?.STATUS === 'SUCCESS' || res.data?.StatusCode === '0000') {
+        setSuccessMsg(
+          res.data?.Message ||
+          'Password reset successfully! Please sign in with your new password.'
+        );
+        setAuthMode('login');
+        setPassword('');
+        setResetOtp('');
+        setNewPassword('');
+        setConfirmPassword('');
+      } else {
+        setError(res.data?.Message || 'Failed to reset password.');
+      }
+    } catch (err) {
+      setLoading(false);
+      setError(
+        err.response?.data?.Message ||
+        err.message ||
+        'Unable to reset password. Please check your OTP and try again.'
+      );
+    }
+  };
+
   return (
-    <main className="min-h-screen w-full bg-slate-950 flex flex-col justify-between items-center relative overflow-x-hidden selection:bg-blue-500 selection:text-white font-sans">
+    <main className="min-h-screen w-full bg-slate-950 flex flex-col justify-between relative overflow-x-hidden selection:bg-blue-500 selection:text-white font-sans">
       <Helmet>
-        <title>Staff Portal Login | New Life Care Midnapore</title>
+        <title>Staff Portal Login | New Life Care Diagnostic Centre - Midnapore</title>
         <meta
           name="description"
-          content="Secure authorized staff and clinician authentication gateway for New Life Care Midnapore Laboratory Information System (LIS)."
+          content="Secure authorized staff and clinician authentication gateway for New Life Care Diagnostic Centre, Location: Midnapore."
         />
       </Helmet>
 
-      {/* Atmospheric Ambient Glows & Medical Grid Texture */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none select-none">
-        {/* Soft Radial Backlight Orbs */}
-        <div className="absolute -top-40 -left-32 w-[520px] h-[520px] bg-blue-600/20 rounded-full blur-[140px]" />
-        <div className="absolute top-1/3 -right-40 w-[560px] h-[560px] bg-emerald-500/15 rounded-full blur-[150px]" />
-        <div className="absolute -bottom-32 left-1/3 w-[600px] h-[600px] bg-indigo-600/15 rounded-full blur-[160px]" />
+      {/* Photorealistic Indian Diagnostic Reception Background */}
+      <div
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat pointer-events-none select-none transition-transform duration-1000 scale-[1.01]"
+        style={{
+          backgroundImage: `url('/images/clinical-reception-bg.jpg')`,
+        }}
+      />
 
-        {/* Subtle Precision Laboratory Grid */}
-        <div
-          className="absolute inset-0 opacity-[0.035]"
-          style={{
-            backgroundImage:
-              'linear-gradient(#FFFFFF 1px, transparent 1px), linear-gradient(to right, #FFFFFF 1px, transparent 1px)',
-            backgroundSize: '36px 36px',
-          }}
+      {/* Cinematic High-Contrast Medical Gradient Overlays */}
+      <div className="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-950/85 to-slate-950/90 pointer-events-none" />
+      <div className="absolute inset-0 bg-radial-[at_top_left] from-blue-900/30 via-transparent to-black/60 pointer-events-none" />
+
+      {/* Subtle Diagnostic Logo Watermark in background */}
+      <div className="absolute -left-20 top-1/2 -translate-y-1/2 w-[650px] h-[650px] pointer-events-none opacity-[0.06] select-none">
+        <img
+          src="/logo.jpg"
+          alt="Watermark"
+          className="w-full h-full object-contain filter grayscale invert"
         />
-
-        {/* Subtle Animated Cardiac ECG Pulse Path in Background */}
-        <svg
-          className="absolute bottom-16 left-0 right-0 w-full h-32 opacity-15 pointer-events-none"
-          preserveAspectRatio="none"
-          viewBox="0 0 1200 120"
-        >
-          <path
-            d="M0,60 L280,60 L310,60 L325,10 L340,110 L355,40 L370,80 L385,60 L420,60 L700,60 L730,60 L745,10 L760,110 L775,40 L790,80 L805,60 L840,60 L1200,60"
-            fill="none"
-            stroke="url(#ecgGradient)"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <defs>
-            <linearGradient id="ecgGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.1" />
-              <stop offset="30%" stopColor="#38BDF8" stopOpacity="0.8" />
-              <stop offset="70%" stopColor="#10B981" stopOpacity="0.8" />
-              <stop offset="100%" stopColor="#6366F1" stopOpacity="0.1" />
-            </linearGradient>
-          </defs>
-        </svg>
       </div>
 
+      {/* Subtle Precision Laboratory Grid */}
+      <div
+        className="absolute inset-0 opacity-[0.035] pointer-events-none"
+        style={{
+          backgroundImage:
+            'linear-gradient(#FFFFFF 1px, transparent 1px), linear-gradient(to right, #FFFFFF 1px, transparent 1px)',
+          backgroundSize: '36px 36px',
+        }}
+      />
+
+      {/* Subtle Animated Cardiac ECG Pulse Path in Background */}
+      <svg
+        className="absolute bottom-16 left-0 right-0 w-full h-28 opacity-15 pointer-events-none"
+        preserveAspectRatio="none"
+        viewBox="0 0 1200 120"
+      >
+        <path
+          d="M0,60 L280,60 L310,60 L325,10 L340,110 L355,40 L370,80 L385,60 L420,60 L700,60 L730,60 L745,10 L760,110 L775,40 L790,80 L805,60 L840,60 L1200,60"
+          fill="none"
+          stroke="url(#ecgGradient)"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <defs>
+          <linearGradient id="ecgGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.1" />
+            <stop offset="30%" stopColor="#38BDF8" stopOpacity="0.8" />
+            <stop offset="70%" stopColor="#10B981" stopOpacity="0.8" />
+            <stop offset="100%" stopColor="#6366F1" stopOpacity="0.1" />
+          </linearGradient>
+        </defs>
+      </svg>
+
       {/* Top Clinical Header Banner */}
-      <header className="w-full px-6 py-4 flex items-center justify-between z-10 relative">
+      <header className="w-full px-6 py-4 flex items-center justify-between z-10 relative border-b border-white/10 bg-slate-950/40 backdrop-blur-md">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-cyan-500 p-0.5 shadow-lg shadow-blue-500/20">
-            <div className="w-full h-full bg-slate-900/90 rounded-[14px] flex items-center justify-center text-white">
-              <FlaskConical className="w-5 h-5 text-cyan-400" />
-            </div>
-          </div>
+          <img
+            src="/logo.jpg"
+            alt="New Life Care Diagnostic Centre"
+            className="w-11 h-11 rounded-full object-contain bg-white shadow-lg shadow-blue-500/20 shrink-0"
+          />
           <div>
             <span className="text-sm font-extrabold text-white tracking-tight block">
-              NEW LIFE CARE MIDNAPORE
+              NEW LIFE CARE DIAGNOSTIC CENTRE
             </span>
-            <span className="text-[10px] font-medium text-slate-400 block tracking-wider uppercase">
-              Clinical Laboratory Information System
+            <span className="text-[10px] font-medium text-slate-300 block tracking-wider uppercase">
+              Location: Midnapore (কেরানীতলা, মেদিনীপুর শহর)
             </span>
           </div>
         </div>
 
-        <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/80 border border-slate-800 text-[11px] font-semibold text-slate-300">
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/90 border border-slate-700/80 text-[11px] font-semibold text-slate-200 shadow-xs">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span>Core Node: Midnapore Central</span>
+          <span className="hidden sm:inline">NABL M(EL)T Aligned &bull; ISO 9001:2015</span>
+          <span className="sm:hidden">NABL Aligned</span>
         </div>
       </header>
 
-      {/* Central Hero Form Container */}
-      <section className="w-full max-w-md px-4 py-6 z-10 relative my-auto">
-        <div className="backdrop-blur-2xl bg-white/[0.98] dark:bg-slate-900/[0.92] border border-white/80 dark:border-slate-800/90 rounded-3xl shadow-2xl shadow-black/40 overflow-hidden transition-all duration-300">
-          {/* Card Brand Header */}
-          <div className="pt-8 pb-6 px-7 text-center relative border-b border-slate-100 dark:border-slate-800/80">
-            {/* Glowing Icon Crest */}
-            <div className="inline-flex items-center justify-center relative mb-4">
-              <div className="absolute -inset-3 rounded-full bg-blue-500/20 blur-md animate-pulse" />
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-cyan-500 text-white flex items-center justify-center shadow-xl shadow-blue-600/30 relative">
-                <Activity className="w-8 h-8 text-white drop-shadow-sm" />
-              </div>
+      {/* Main Two-Column Split: Showcase on Left, Login Form on Right */}
+      <div className="w-full flex-1 flex flex-col lg:flex-row items-center justify-between z-10 relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 gap-8 my-auto">
+        {/* Left Column: Authentic Clinical Showcase & Brand Identity */}
+        <div className="hidden lg:flex lg:w-7/12 flex-col justify-center space-y-6 pr-6">
+          {/* Clinic Logo Emblem with Glowing Accent */}
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <div className="absolute -inset-2 bg-gradient-to-r from-red-500/30 to-blue-500/30 rounded-full blur-md animate-pulse" />
+              <img
+                src="/logo.jpg"
+                alt="New Life Care Diagnostic Centre"
+                className="w-24 h-24 rounded-full object-contain bg-white p-1 shadow-2xl relative border-2 border-white/80 shrink-0"
+              />
             </div>
-
-            <h1 className="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight uppercase">
-              NEW LIFE CARE MIDNAPORE
-            </h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">
-              Authorized Clinician &amp; Diagnostic Portal Access
-            </p>
-
-            <div className="mt-3.5 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/50 text-[10.5px] font-bold text-emerald-700 dark:text-emerald-400">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-              <span>256-Bit SSL Encrypted Verification</span>
+            <div className="space-y-1">
+              <div className="inline-flex items-center gap-2 px-3 py-0.5 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-300 text-[11px] font-bold uppercase tracking-wider">
+                <span>24 x 7 Diagnostic Services</span>
+              </div>
+              <h1 className="text-3xl font-black text-white tracking-tight drop-shadow-md">
+                NEW LIFE CARE
+              </h1>
+              <h2 className="text-xl font-extrabold text-blue-400 tracking-wide uppercase">
+                DIAGNOSTIC CENTRE
+              </h2>
+              <p className="text-sm font-semibold text-slate-300">
+                নিউ লাইফ কেয়ার ডায়াগনস্টিক সেন্টার
+              </p>
             </div>
           </div>
 
-          {/* Form Content */}
-          <div className="p-7 space-y-4">
-            {sessionLogoutReason && !error && (
-              <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 rounded-xl text-xs flex items-center gap-2.5 font-medium shadow-xs animate-in fade-in duration-200">
-                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>{sessionLogoutReason}</span>
-              </div>
-            )}
+          {/* Accreditation Banner Badge */}
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-900/60 via-slate-900/70 to-red-950/40 border border-white/10 backdrop-blur-md shadow-lg space-y-1.5">
+            <div className="flex items-center gap-2 text-xs font-bold text-amber-300 uppercase tracking-wide">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>NABL M(EL)T Accredited &amp; ISO 9001 : 2015 Certified Laboratory</span>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              State-of-the-art pathology, automated biochemistry analyzers, digital imaging, and computer-interfaced laboratory information systems serving Midnapore Town and clinical network.
+            </p>
+          </div>
 
-            {error && (
-              <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-xl text-xs flex items-center justify-between gap-2 font-medium shadow-xs animate-in fade-in shake duration-200">
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                  <span>{error}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setError('')}
-                  className="text-rose-500 hover:text-rose-700 text-xs font-bold cursor-pointer ml-1"
-                >
-                  ✕
-                </button>
+          {/* Clinical Capabilities Grid */}
+          <div className="grid grid-cols-2 gap-3 pt-1">
+            <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80 backdrop-blur-xs flex items-start gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-red-500/20 text-red-400 flex items-center justify-center shrink-0">
+                <FlaskConical className="w-4 h-4" />
               </div>
-            )}
-
-            <form onSubmit={handleSubmit} autoComplete="off" className="space-y-4">
-              {/* Username Input */}
-              <div className="space-y-1.5">
-                <label
-                  htmlFor="loginId"
-                  className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider"
-                >
-                  Operator ID / Username
-                </label>
-                <div className="relative">
-                  <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-                    <User className="w-4 h-4" />
-                  </div>
-                  <input
-                    id="loginId"
-                    type="text"
-                    placeholder="Enter staff login ID"
-                    value={loginId}
-                    onChange={(e) => {
-                      setLoginId(e.target.value);
-                      if (error) setError('');
-                    }}
-                    autoComplete="off"
-                    data-lpignore="true"
-                    autoFocus
-                    required
-                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 text-xs font-semibold transition-all focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-600 focus:bg-white dark:focus:bg-slate-800 shadow-2xs"
-                  />
-                </div>
+              <div>
+                <div className="text-xs font-bold text-white">Blood &amp; Pathology</div>
+                <div className="text-[11px] text-slate-400">Complete automated profiles</div>
               </div>
+            </div>
 
-              {/* Password Input with Show/Hide Toggle */}
-              <div className="space-y-1.5">
-                <label
-                  htmlFor="password"
-                  className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider"
-                >
-                  Access Password
-                </label>
-                <div className="relative">
-                  <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-                    <Lock className="w-4 h-4" />
-                  </div>
-                  <input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Enter access password"
-                    value={password}
-                    onChange={(e) => {
-                      setPassword(e.target.value);
-                      if (error) setError('');
-                    }}
-                    autoComplete="new-password"
-                    data-lpignore="true"
-                    required
-                    className="w-full pl-10 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 text-xs font-semibold transition-all focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-600 focus:bg-white dark:focus:bg-slate-800 shadow-2xs"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((prev) => !prev)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg cursor-pointer transition-colors"
-                    title={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showPassword ? (
-                      <EyeOff className="w-4 h-4" />
-                    ) : (
-                      <Eye className="w-4 h-4" />
-                    )}
-                  </button>
-                </div>
+            <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80 backdrop-blur-xs flex items-start gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
+                <Activity className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-white">Digital X-Ray &amp; ECG</div>
+                <div className="text-[11px] text-slate-400">Computerized imaging</div>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80 backdrop-blur-xs flex items-start gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                <Building2 className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-white">Health Packages</div>
+                <div className="text-[11px] text-slate-400">Comprehensive screening</div>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80 backdrop-blur-xs flex items-start gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">
+                <Lock className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-white">Direct LIS Barcode</div>
+                <div className="text-[11px] text-slate-400">Zero sample mix-up sync</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Direct Contact & Location info */}
+          <div className="flex flex-wrap items-center gap-4 text-xs text-slate-300 pt-2 border-t border-white/10">
+            <div className="flex items-center gap-1.5">
+              <Building2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+              <span className="font-medium">Location: Keranitola, Midnapore Town</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Headphones className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span className="font-medium">Desk: 9733525031 / 9647393949</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: Login Form Container Anchored on Right Side */}
+        <div className="w-full lg:w-5/12 max-w-md ml-auto">
+          <div className="backdrop-blur-2xl bg-white/[0.98] dark:bg-slate-900/[0.92] border border-white/80 dark:border-slate-800/90 rounded-3xl shadow-2xl shadow-black/50 overflow-hidden transition-all duration-300">
+            {/* Card Brand Header */}
+            <div className="pt-6 pb-5 px-7 text-center relative border-b border-slate-100 dark:border-slate-800/80">
+              {/* Glowing Icon Crest */}
+              <div className="inline-flex items-center justify-center relative mb-3">
+                <div className="absolute -inset-2 rounded-full bg-blue-500/20 blur-md animate-pulse" />
+                <img
+                  src="/logo.jpg"
+                  alt="New Life Care Diagnostic Centre"
+                  className="w-16 h-16 rounded-full object-contain bg-white p-0.5 shadow-xl shadow-blue-600/30 relative"
+                />
               </div>
 
-              {/* Dynamic 2FA TOTP (Shows only if prompted by backend security) */}
-              {showTotp && (
-                <div className="p-3.5 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-2xl space-y-2 animate-in fade-in duration-200">
-                  <label
-                    htmlFor="totp"
-                    className="block text-[10.5px] font-extrabold text-blue-950 dark:text-blue-300 uppercase tracking-wider"
-                  >
-                    Two-Factor Authentication (2FA TOTP)
-                  </label>
-                  <div className="relative">
-                    <KeyRound className="w-4 h-4 text-blue-600 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    <input
-                      id="totp"
-                      type="text"
-                      maxLength={6}
-                      placeholder="Enter 6-digit authenticator code"
-                      value={totp}
-                      onChange={(e) => setTotp(e.target.value.replace(/\D/g, ''))}
-                      className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-700 rounded-xl text-center font-mono text-sm font-bold tracking-widest text-blue-900 dark:text-blue-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <p className="text-[10px] text-blue-700 dark:text-blue-300">
-                    Open your Google Authenticator or registered 2FA app to provide the current verification code.
-                  </p>
+              <h2 className="text-base font-extrabold text-slate-900 dark:text-white tracking-tight uppercase">
+                NEW LIFE CARE DIAGNOSTIC CENTRE
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">
+                Location: Midnapore &bull; Staff Portal Login
+              </p>
+            </div>
+
+            {/* Form Content */}
+            <div className="p-7 space-y-4">
+              {sessionLogoutReason && !error && (
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 rounded-xl text-xs flex items-center gap-2.5 font-medium shadow-xs animate-in fade-in duration-200">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>{sessionLogoutReason}</span>
                 </div>
               )}
 
-              {/* Submit Action Button */}
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full mt-2 py-3 px-4 rounded-xl font-extrabold text-xs text-white bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:via-indigo-700 hover:to-blue-800 shadow-md shadow-blue-600/30 hover:shadow-lg hover:shadow-blue-600/40 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Verifying Clinical Credentials...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Sign In to Clinical Portal</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </form>
-          </div>
+              {error && (
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-xl text-xs flex items-center justify-between gap-2 font-medium shadow-xs animate-in fade-in shake duration-200">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>{error}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setError('')}
+                    className="text-rose-500 hover:text-rose-700 text-xs font-bold cursor-pointer ml-1"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
 
-          {/* Card Footer: Clinical Credentials Notice */}
-          <div className="py-3 px-6 bg-slate-50 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800 text-center text-[10.5px] text-slate-500 dark:text-slate-400">
-            <span>Staff access is monitored and logged in compliance with clinical laboratory auditing protocols.</span>
+              {successMsg && (
+                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 rounded-xl text-xs flex items-center justify-between gap-2 font-medium shadow-xs animate-in fade-in duration-200">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>{successMsg}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSuccessMsg('')}
+                    className="text-emerald-600 hover:text-emerald-800 text-xs font-bold cursor-pointer ml-1"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {/* View 1: Standard Login Form */}
+              {authMode === 'login' && (
+                <form onSubmit={handleSubmit} autoComplete="off" className="space-y-4">
+                  {/* Username Input */}
+                  <div className="space-y-1.5">
+                    <label
+                      htmlFor="loginId"
+                      className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider"
+                    >
+                      Operator ID / Username
+                    </label>
+                    <div className="relative">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                        <User className="w-4 h-4" />
+                      </div>
+                      <input
+                        id="loginId"
+                        type="text"
+                        placeholder="Enter staff login ID"
+                        value={loginId}
+                        onChange={(e) => {
+                          setLoginId(e.target.value);
+                          if (error) setError('');
+                        }}
+                        autoComplete="off"
+                        data-lpignore="true"
+                        autoFocus
+                        required
+                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 text-xs font-semibold transition-all focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-600 focus:bg-white dark:focus:bg-slate-800 shadow-2xs"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Password Input with Show/Hide Toggle */}
+                  <div className="space-y-1.5">
+                    <label
+                      htmlFor="password"
+                      className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider"
+                    >
+                      Access Password
+                    </label>
+                    <div className="relative">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                        <Lock className="w-4 h-4" />
+                      </div>
+                      <input
+                        id="password"
+                        type={showPassword ? 'text' : 'password'}
+                        placeholder="Enter access password"
+                        value={password}
+                        onChange={(e) => {
+                          setPassword(e.target.value);
+                          if (error) setError('');
+                        }}
+                        autoComplete="new-password"
+                        data-lpignore="true"
+                        required
+                        className="w-full pl-10 pr-10 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 text-xs font-semibold transition-all focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-600 focus:bg-white dark:focus:bg-slate-800 shadow-2xs"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((prev) => !prev)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg cursor-pointer transition-colors"
+                        title={showPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showPassword ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Forgot Password Link */}
+                  <div className="flex items-center justify-end -mt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthMode('forget');
+                        setError('');
+                        setSuccessMsg('');
+                      }}
+                      className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors cursor-pointer"
+                    >
+                      Forgot Password?
+                    </button>
+                  </div>
+
+                  {/* Dynamic 2FA TOTP (Shows only if prompted by backend security) */}
+                  {showTotp && (
+                    <div className="p-3.5 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-2xl space-y-2 animate-in fade-in duration-200">
+                      <label
+                        htmlFor="totp"
+                        className="block text-[10.5px] font-extrabold text-blue-950 dark:text-blue-300 uppercase tracking-wider"
+                      >
+                        Two-Factor Authentication (2FA TOTP)
+                      </label>
+                      <div className="relative">
+                        <KeyRound className="w-4 h-4 text-blue-600 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        <input
+                          id="totp"
+                          type="text"
+                          maxLength={6}
+                          placeholder="Enter 6-digit authenticator code"
+                          value={totp}
+                          onChange={(e) => setTotp(e.target.value.replace(/\D/g, ''))}
+                          className="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-700 rounded-xl text-center font-mono text-sm font-bold tracking-widest text-blue-900 dark:text-blue-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <p className="text-[10px] text-blue-700 dark:text-blue-300">
+                        Open your Google Authenticator or registered 2FA app to provide the current verification code.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Submit Action Button */}
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full mt-2 py-3 px-4 rounded-xl font-extrabold text-xs text-white bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:via-indigo-700 hover:to-blue-800 shadow-md shadow-blue-600/30 hover:shadow-lg hover:shadow-blue-600/40 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {loading ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>Verifying Clinical Credentials...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Sign In to Clinical Portal</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
+                </form>
+              )}
+
+              {/* View 2: Forgot Password - Request OTP (API_PASSWORD_FORGET) */}
+              {authMode === 'forget' && (
+                <form onSubmit={handleForgotPassword} autoComplete="off" className="space-y-4">
+                  <div className="p-3 bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800 rounded-xl space-y-1">
+                    <div className="flex items-center gap-2 text-blue-900 dark:text-blue-200 font-bold text-xs">
+                      <KeyRound className="w-4 h-4 text-blue-600" />
+                      <span>Password Recovery</span>
+                    </div>
+                    <p className="text-[11px] text-blue-700 dark:text-blue-300">
+                      Enter your Operator ID to request a verification OTP.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label
+                      htmlFor="forgetLoginId"
+                      className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider"
+                    >
+                      Operator ID / Username
+                    </label>
+                    <div className="relative">
+                      <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                        <User className="w-4 h-4" />
+                      </div>
+                      <input
+                        id="forgetLoginId"
+                        type="text"
+                        placeholder="Enter staff login ID (e.g. exsuper3)"
+                        value={loginId}
+                        onChange={(e) => {
+                          setLoginId(e.target.value);
+                          if (error) setError('');
+                        }}
+                        autoFocus
+                        required
+                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-blue-500/25 focus:border-blue-600"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full mt-2 py-3 px-4 rounded-xl font-extrabold text-xs text-white bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:via-indigo-700 hover:to-blue-800 shadow-md shadow-blue-600/30 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {loading ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>Sending Verification OTP...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Send Verification OTP</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
+
+                  <div className="flex items-center justify-center pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthMode('login');
+                        setError('');
+                        setSuccessMsg('');
+                      }}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      <span>Back to Sign In</span>
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* View 3: Reset Password - Enter OTP & New Password (API_PASSWORD_RESET) */}
+              {authMode === 'reset' && (
+                <form onSubmit={handleResetPassword} autoComplete="off" className="space-y-3.5">
+                  <div className="p-3 bg-purple-50/70 dark:bg-purple-950/40 border border-purple-200/80 dark:border-purple-800 rounded-xl space-y-1">
+                    <div className="flex items-center gap-2 text-purple-900 dark:text-purple-200 font-bold text-xs">
+                      <KeyRound className="w-4 h-4 text-purple-600" />
+                      <span>Set New Password</span>
+                    </div>
+                    <p className="text-[11px] text-purple-700 dark:text-purple-300">
+                      Resetting password for Operator: <strong className="font-bold">{loginId}</strong>
+                    </p>
+                  </div>
+
+                  {/* Verification OTP */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label
+                        htmlFor="resetOtp"
+                        className="block text-[10.5px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider"
+                      >
+                        Verification OTP
+                      </label>
+                      {loginId.toLowerCase() === 'exsuper3' && (
+                        <span className="text-[10px] font-bold text-amber-700 bg-amber-50 dark:bg-amber-950/50 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800">
+                          Test Hint: Current time HHMM (e.g. 0446)
+                        </span>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        id="resetOtp"
+                        type="text"
+                        placeholder="Enter verification OTP"
+                        value={resetOtp}
+                        onChange={(e) => {
+                          setResetOtp(e.target.value);
+                          if (error) setError('');
+                        }}
+                        autoFocus
+                        required
+                        className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-purple-500/25 focus:border-purple-600"
+                      />
+                    </div>
+                  </div>
+
+                  {/* New Password */}
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="newPassword"
+                      className="block text-[10.5px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider"
+                    >
+                      New Access Password
+                    </label>
+                    <div className="relative">
+                      <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        id="newPassword"
+                        type={showNewPassword ? 'text' : 'password'}
+                        placeholder="Enter new access password"
+                        value={newPassword}
+                        onChange={(e) => {
+                          setNewPassword(e.target.value);
+                          if (error) setError('');
+                        }}
+                        required
+                        className="w-full pl-10 pr-10 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-purple-500/25 focus:border-purple-600"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword((p) => !p)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg cursor-pointer transition-colors"
+                        title={showNewPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Confirm New Password */}
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="confirmPassword"
+                      className="block text-[10.5px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider"
+                    >
+                      Confirm New Password
+                    </label>
+                    <div className="relative">
+                      <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        id="confirmPassword"
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        placeholder="Re-enter new access password"
+                        value={confirmPassword}
+                        onChange={(e) => {
+                          setConfirmPassword(e.target.value);
+                          if (error) setError('');
+                        }}
+                        required
+                        className="w-full pl-10 pr-10 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-purple-500/25 focus:border-purple-600"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword((p) => !p)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg cursor-pointer transition-colors"
+                        title={showConfirmPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Submit Reset Button */}
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full mt-2 py-3 px-4 rounded-xl font-extrabold text-xs text-white bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-700 hover:via-indigo-700 hover:to-purple-800 shadow-md shadow-purple-600/30 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {loading ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>Resetting Password...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Reset Password</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
+
+                  <div className="flex items-center justify-between pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthMode('forget');
+                        setError('');
+                      }}
+                      className="text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 cursor-pointer"
+                    >
+                      Resend OTP
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthMode('login');
+                        setError('');
+                        setSuccessMsg('');
+                      }}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      <span>Back to Sign In</span>
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+
+            {/* Card Footer: Clinical Credentials Notice */}
+            <div className="py-3 px-6 bg-slate-50 dark:bg-slate-800/40 border-t border-slate-100 dark:border-slate-800 text-center text-[10.5px] text-slate-500 dark:text-slate-400">
+              <span>Staff access is monitored and logged in compliance with clinical laboratory auditing protocols.</span>
+            </div>
           </div>
         </div>
-      </section>
+      </div>
 
       {/* Global Bottom Quality & Center Standards Footer */}
-      <footer className="w-full py-4 px-6 z-10 text-center text-slate-400 text-xs flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-900/60 bg-slate-950/80 backdrop-blur-md">
+      <footer className="w-full py-3 px-6 z-10 text-center text-slate-400 text-xs flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-900/60 bg-slate-950/80 backdrop-blur-md">
         <div className="flex items-center gap-2">
           <Building2 className="w-3.5 h-3.5 text-blue-400" />
           <span className="text-[11px] font-semibold text-slate-300">
-            New Life Care Midnapore • Main Diagnostic Lab Center, Keranitola
+            New Life Care Diagnostic Centre • Location: Midnapore, Keranitola
           </span>
         </div>
 
@@ -345,7 +835,7 @@ export default function LoginPage() {
           <span>•</span>
           <span className="flex items-center gap-1">
             <Headphones className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Desk: +91 86702 07475</span>
+            <span>Desk: +91 97335 25031 / 96473 93949</span>
           </span>
         </div>
       </footer>

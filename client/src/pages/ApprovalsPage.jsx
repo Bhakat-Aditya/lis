@@ -119,7 +119,7 @@ export default function ApprovalsPage() {
   return (
     <div className="space-y-4">
       <Helmet>
-        <title>Doctor Verifications & Pathologist Sign-Off | Lab Expert LIS</title>
+        <title>Doctor Verifications & Pathologist Sign-Off | New Life Care Diagnostic Centre</title>
         <meta
           name="description"
           content="Authorized pathologist review, clinical correlation, and digital verification sign-off workstation."

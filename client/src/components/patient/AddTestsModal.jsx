@@ -134,7 +134,7 @@ export default function AddTestsModal({ isOpen, onClose, patient, reports = [], 
       if (res.data?.STATUS === 'SUCCESS' || res.data?.StatusCode === '0000') {
         if (onTestsAdded) onTestsAdded();
         onClose();
-        navigate(`/patients/${cleanPid}?tab=billing`);
+        navigate(`/patients/${cleanPid}`);
       } else {
         setError(res.data?.Message || 'Failed to add tests');
       }

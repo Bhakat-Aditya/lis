@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api.js';
 import {
   User,
   Phone,
   Calendar,
+  Clock,
   Settings,
   CheckCircle,
   AlertTriangle,
@@ -40,7 +41,7 @@ import {
 import { formatDisplayDate, formatAgeDisplay } from '../../utils/dateUtils.js';
 import { useMaster } from '../../context/context.master.jsx';
 import { useAuth } from '../../context/context.auth.jsx';
-import { groupInvestigationsIntoLots } from '../../utils/labTestUtils.js';
+import { groupInvestigationsIntoLots, getBranchDisplayName } from '../../utils/labTestUtils.js';
 import PatientEmrHistory from './PatientEmrHistory.jsx';
 import ReportActivityLog from './ReportActivityLog.jsx';
 import PatientJourneyTimeline from './PatientJourneyTimeline.jsx';
@@ -77,7 +78,23 @@ export default function PatientProfileView({
 }) {
   const [activeTab, setActiveTab] = useState('tests'); // 'tests' | 'timeline' | 'deposits'
   const [showWhatsAppDropdown, setShowWhatsAppDropdown] = useState(false);
+  const [showReportMenu, setShowReportMenu] = useState(false);
+  const reportMenuRef = useRef(null);
   const [journeyData, setJourneyData] = useState(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (reportMenuRef.current && !reportMenuRef.current.contains(e.target)) {
+        setShowReportMenu(false);
+      }
+    };
+    if (showReportMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showReportMenu]);
 
   if (!patient) {
     return (
@@ -93,7 +110,7 @@ export default function PatientProfileView({
     : rawPid;
   const navigate = useNavigate();
   const { canViewPatientLogs, canViewPatientEmr } = useAuth();
-  const { tests: catalogTests = [], profiles: catalogProfiles = [], packages: catalogPackages = [], templates: catalogTemplates = [] } = useMaster();
+  const { tests: catalogTests = [], profiles: catalogProfiles = [], packages: catalogPackages = [], templates: catalogTemplates = [], branches = [] } = useMaster();
   const [expandedLots, setExpandedLots] = useState({});
 
   useEffect(() => {
@@ -396,6 +413,14 @@ export default function PatientProfileView({
             </div>
 
             <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-indigo-600 shrink-0" />
+              <span className="font-semibold text-slate-500 w-28 shrink-0">Report Time:</span>
+              <span className={patient.reportTime ? "font-semibold text-slate-800" : "text-slate-400 font-normal italic"}>
+                {patient.reportTime || 'Pending'}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
               <User className="w-4 h-4 text-sky-600 shrink-0" />
               <span className="font-semibold text-slate-500 w-28 shrink-0">Referred By:</span>
               <span className="font-semibold text-slate-800 truncate">
@@ -405,8 +430,10 @@ export default function PatientProfileView({
 
             <div className="flex items-center gap-2">
               <span className="w-4 h-4 text-sky-600 font-bold text-center shrink-0">🏥</span>
-              <span className="font-semibold text-slate-500 w-28 shrink-0">Center:</span>
-              <span className="font-semibold text-slate-800">{patient.center || patient.branch || 'Main'}</span>
+              <span className="font-semibold text-slate-500 w-28 shrink-0">Branch:</span>
+              <span className="font-semibold text-slate-800">
+                {getBranchDisplayName(patient, branches)}
+              </span>
             </div>
           </div>
         </div>
@@ -513,26 +540,66 @@ export default function PatientProfileView({
               <span className="truncate">Add Deposit</span>
             </button>
 
-            {/* 2. Print Invoice (Vibrant Amber) */}
+            {/* 2. View Invoice (Vibrant Amber) - Opens billing/invoice panel directly */}
             <button
               onClick={onPrintInvoice}
               className="flex items-center justify-center gap-1.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
-              title="Open official AWS Invoice PDF in a new tab"
+              title="View official Diagnostic Billing & Invoice panel"
             >
               <Printer className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">Print Invoice</span>
+              <span className="truncate">View Invoice</span>
             </button>
 
-            {/* 2b. AWS Report PDF (Vibrant Teal) */}
+            {/* 2b. View Report (Vibrant Teal) with With Header / Without Header options */}
             {onPrintReport && (
-              <button
-                onClick={onPrintReport}
-                className="flex items-center justify-center gap-1.5 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
-                title="Open official AWS Diagnostic Report PDF in a new tab"
-              >
-                <FileText className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">AWS Report PDF</span>
-              </button>
+              <div className="relative" ref={reportMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowReportMenu((prev) => !prev)}
+                  className="w-full flex items-center justify-center gap-1 bg-teal-600 hover:bg-teal-700 active:scale-95 text-white font-bold text-xs py-2 px-2.5 rounded-xl shadow-xs transition-all cursor-pointer outline-none focus:outline-none select-none [-webkit-tap-highlight-color:transparent]"
+                  title="Choose header option to view official Report"
+                >
+                  <FileText className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">View Report</span>
+                  <ChevronDown className={`w-3 h-3 shrink-0 transition-transform duration-200 ${showReportMenu ? 'rotate-180' : ''}`} />
+                </button>
+
+                {showReportMenu && (
+                  <div className="absolute left-0 right-0 top-full mt-1.5 z-40 bg-white border border-teal-200 rounded-xl shadow-xl py-1.5 min-w-[175px] animate-in fade-in zoom-in-95 duration-150">
+                    <div className="px-3 py-1 text-[10px] font-bold text-teal-800 uppercase tracking-wider bg-teal-50 border-b border-teal-100 mb-1">
+                      Choose Header Option
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowReportMenu(false);
+                        onPrintReport(true);
+                      }}
+                      className="w-full px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-teal-50 hover:text-teal-900 flex items-center gap-2 transition-colors cursor-pointer"
+                    >
+                      <FileCheck className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                      <div>
+                        <div className="font-bold text-slate-800">With Header</div>
+                        <div className="text-[10px] text-slate-400 font-normal">Header: true (Official logo)</div>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowReportMenu(false);
+                        onPrintReport(false);
+                      }}
+                      className="w-full px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-teal-50 hover:text-teal-900 flex items-center gap-2 transition-colors cursor-pointer"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                      <div>
+                        <div className="font-bold text-slate-800">Without Header</div>
+                        <div className="text-[10px] text-slate-400 font-normal">Header: false (Letterhead stationery)</div>
+                      </div>
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
 
             {/* 3. Add Discount (Vibrant Rose) */}

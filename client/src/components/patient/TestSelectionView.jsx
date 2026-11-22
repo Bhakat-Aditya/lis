@@ -732,39 +732,6 @@ export default function TestSelectionView({
       return;
     }
 
-    // Pre-open the new tab synchronously during user click to guarantee popup blockers do not intercept it
-    let billWindow = null;
-    try {
-      billWindow = window.open('', '_blank');
-      if (billWindow) {
-        billWindow.document.write(`
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <title>Opening Diagnostic Bill - ${cleanPid || pid}</title>
-              <style>
-                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f8fafc; color: #1e293b; text-align: center; }
-                .card { background: white; padding: 32px 48px; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
-                .spinner { width: 36px; height: 36px; border: 3px solid #e2e8f0; border-top-color: #059669; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
-                @keyframes spin { to { transform: rotate(360deg); } }
-                h2 { margin: 0 0 8px; font-size: 18px; color: #0f172a; }
-                p { margin: 0; font-size: 13px; color: #64748b; }
-              </style>
-            </head>
-            <body>
-              <div class="card">
-                <div class="spinner"></div>
-                <h2>Recording Order & Loading Bill...</h2>
-                <p>Please wait while investigations are synchronized with AWS.</p>
-              </div>
-            </body>
-          </html>
-        `);
-      }
-    } catch (e) {
-      console.warn('Popup tab note:', e);
-    }
-
     setSaving(true);
     setSaveError('');
     setSaveSuccess('');
@@ -793,27 +760,21 @@ export default function TestSelectionView({
 
       if (res.data?.STATUS === 'SUCCESS' || res.data?.StatusCode === '0000') {
         const targetPid = res.data?.patientId || cleanPid || pid;
-        // Open bill preview inline in the new tab via blob viewer (does NOT download to disk)
-        openBillingPdf(targetPid, {
-          existingWindow: billWindow,
-          preview: true,
-        });
-
-        setSaveSuccess(`Added ${newTests.length} investigation lot(s) successfully! Official AWS bill preview opened in a new tab.`);
         
         // Immediately mark newly added items as booked so they transition without duplicate or delete trash icon
         setSelectedTests((prev) =>
           prev.map((t) => (t.isNew ? { ...t, isNew: false, isRepeat: false } : t))
         );
 
-        // Refresh patient data in the background without switching portal tabs
+        // Refresh patient data in the background
         if (onRefresh) await onRefresh();
+
+        // Redirect directly to Patient Overview (not to billing section)
+        navigate(`/patients/${targetPid}`);
       } else {
-        if (billWindow && !billWindow.closed) billWindow.close();
         setSaveError(res.data?.Message || 'Failed to order tests');
       }
     } catch (err) {
-      if (billWindow && !billWindow.closed) billWindow.close();
       setSaveError(err.response?.data?.Message || 'Server error while ordering tests');
     } finally {
       setSaving(false);
@@ -826,7 +787,7 @@ export default function TestSelectionView({
       <div className="bg-white border border-slate-200/90 shadow-xs px-4 py-3 rounded-2xl flex flex-wrap items-center justify-between text-xs font-semibold gap-3">
         <div className="flex flex-wrap items-center gap-2.5 text-slate-700">
           <span className="font-bold text-blue-700 font-mono bg-blue-50 px-2.5 py-0.5 rounded-lg border border-blue-200">
-            Barcode: #{effectivePatient?.slNo || effectivePatient?.barcode || (routeId && !routeId.toUpperCase().startsWith('P') ? routeId : '-')}
+            Barcode: #{effectivePatient?.slNo || effectivePatient?.barcode || '-'}
           </span>
           <span className="text-slate-300">|</span>
           <span className="font-bold text-slate-900">
@@ -1268,7 +1229,7 @@ export default function TestSelectionView({
                     className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-95 text-white font-extrabold text-xs py-2 px-4 rounded-xl shadow-xs transition-all cursor-pointer"
                   >
                     <Save className="w-4 h-4" />
-                    <span>{saving ? 'Saving to AWS & Opening Bill...' : 'Save Tests'}</span>
+                    <span>{saving ? 'Saving Tests...' : 'Save Tests'}</span>
                   </button>
                 </div>
               </div>
@@ -1536,7 +1497,7 @@ export default function TestSelectionView({
                   <Save className="w-4 h-4" />
                   <span>
                     {saving
-                      ? 'Saving to AWS & Opening Bill...'
+                      ? 'Saving Tests...'
                       : pendingLots.length > 0
                       ? `Save Tests (${pendingLots.length} New)`
                       : 'Select Tests Above to Save'}

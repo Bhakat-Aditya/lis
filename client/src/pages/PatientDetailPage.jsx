@@ -10,6 +10,7 @@ import TestSelectionView from '../components/patient/TestSelectionView.jsx';
 import ResultsEntry from '../components/results/ResultsEntry.jsx';
 import PrintableInvoice from '../components/billing/PrintableInvoice.jsx';
 import AwsBillViewer from '../components/billing/AwsBillViewer.jsx';
+import AwsReportViewer from '../components/results/AwsReportViewer.jsx';
 import BillPreviewModal from '../components/billing/BillPreviewModal.jsx';
 import BarcodeModal from '../components/patient/BarcodeModal.jsx';
 import DiscountModal from '../components/patient/DiscountModal.jsx';
@@ -31,6 +32,7 @@ import {
   CreditCard,
   Percent,
   Edit,
+  FileEdit,
   Trash2,
   Loader2,
   AlertCircle,
@@ -340,7 +342,8 @@ export default function PatientDetailPage() {
       ? activePatient
       : {
           patientId: id,
-          slNo: id,
+          slNo: activePatient?.slNo || '',
+          barcode: activePatient?.barcode || activePatient?.slNo || '',
           name: 'Patient',
           gender: 'Male',
           age: '30',
@@ -680,7 +683,7 @@ export default function PatientDetailPage() {
   return (
     <section className="space-y-4 pb-8">
       <Helmet>
-        <title>{patient ? `${patient.name} (${patient?.slNo || patient?.barcode || 'Patient'})` : 'Patient Profile'} | Lab Expert</title>
+        <title>{patient ? `${patient.name} (${patient?.slNo || patient?.barcode || 'Patient'})` : 'Patient Profile'} | New Life Care Diagnostic Centre</title>
         <meta
           name="description"
           content={`Patient record and clinical investigations for ${patient?.name || ''}`}
@@ -707,11 +710,11 @@ export default function PatientDetailPage() {
                 {patient?.name || activePatient?.name || 'Patient'}
               </h1>
               <span className="font-mono text-xs font-bold bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-200">
-                Barcode: {patient?.slNo || patient?.barcode || activePatient?.slNo || activePatient?.barcode || (id && !id.toUpperCase().startsWith('P') ? id : '-')}
+                Barcode: {patient?.slNo || patient?.barcode || activePatient?.slNo || activePatient?.barcode || '-'}
               </span>
             </div>
             <span className="text-[11px] text-slate-500 font-medium">
-              Ref by: <strong className="text-slate-700">{patient?.referedDr || activePatient?.referedDr || 'Self'}</strong> • Reg: {formatDisplayDate(patient?.regDate || patient?.collectionDate || activePatient?.regDate || activePatient?.collectionDate)}{patient?.sampleTime ? ` • Sample: ${patient.sampleTime}` : ''}
+              Ref by: <strong className="text-slate-700">{patient?.referedDr || activePatient?.referedDr || 'Self'}</strong> • Reg: {formatDisplayDate(patient?.regDate || patient?.collectionDate || activePatient?.regDate || activePatient?.collectionDate)}{patient?.sampleTime ? ` • Sample: ${patient.sampleTime}` : ''}{(patient?.reportTime || activePatient?.reportTime) ? ` • Report: ${patient?.reportTime || activePatient?.reportTime}` : ''}
             </span>
           </div>
         </div>
@@ -762,6 +765,17 @@ export default function PatientDetailPage() {
           >
             Billing
           </button>
+          <button
+            type="button"
+            onClick={() => setSearchParams({ tab: 'report', header: 'true' })}
+            className={`py-1.5 px-3.5 rounded-lg text-xs transition-all cursor-pointer ${
+              activeTab === 'report' || activeTab === 'aws-report'
+                ? 'bg-blue-600 text-white font-bold shadow-xs'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/80 font-medium'
+            }`}
+          >
+            View Report
+          </button>
         </div>
       </div>
 
@@ -806,8 +820,8 @@ export default function PatientDetailPage() {
           templates={templates}
           onAddTests={() => setSearchParams({ tab: 'tests' })}
           onFillResults={() => setSearchParams({ tab: 'results' })}
-          onPrintInvoice={handleOpenBillPdf}
-          onPrintReport={() => handleOpenReportPdf(true)}
+          onPrintInvoice={() => setSearchParams({ tab: 'billing' })}
+          onPrintReport={(withHeader = true) => setSearchParams({ tab: 'report', header: String(Boolean(withHeader)) })}
           onReceiveSample={handleReceiveSample}
           onReleaseReport={handleReleaseReport}
           onRecallReport={handleRecallReport}
@@ -922,6 +936,51 @@ export default function PatientDetailPage() {
             refreshKey={billRefreshKey}
             onBack={() => setSearchParams({ tab: 'profile' })}
             title="Official Diagnostic Bill & Receipt (AWS Server)"
+          />
+        </div>
+      )}
+
+      {(activeTab === 'report' || activeTab === 'aws-report') && (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs gap-3">
+            <div>
+              <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <FileText className="w-4 h-4 text-teal-600" />
+                <span>Diagnostic Report Viewer</span>
+              </h4>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Official diagnostic test report directly rendered from AWS server
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSearchParams({ tab: 'results' })}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs rounded-xl border border-blue-200 transition-all cursor-pointer"
+                title="Edit or review individual test results"
+              >
+                <FileEdit className="w-3.5 h-3.5" />
+                <span>Results Bench</span>
+              </button>
+            </div>
+          </div>
+
+          <AwsReportViewer
+            key={`aws-report-${id}-${searchParams.get('header') || 'true'}`}
+            patientId={id}
+            _patient={patient}
+            initialHeader={searchParams.get('header') !== 'false'}
+            onHeaderChange={(newHeader) => {
+              setSearchParams((prev) => {
+                const next = new URLSearchParams(prev);
+                next.set('tab', 'report');
+                next.set('header', String(newHeader));
+                return next;
+              });
+            }}
+            onBack={() => setSearchParams({ tab: 'profile' })}
+            title="Official Diagnostic Report (AWS Server)"
           />
         </div>
       )}
