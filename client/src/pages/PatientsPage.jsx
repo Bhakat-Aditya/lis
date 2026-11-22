@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 
 import { useMaster } from '../context/context.master.jsx';
-import { groupInvestigationsIntoLots } from '../utils/labTestUtils.js';
+import { groupInvestigationsIntoLots, getBranchDisplayName } from '../utils/labTestUtils.js';
 
 import {
   getLocalDateString,
@@ -175,7 +175,7 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
   const fetchAbortRef = useRef(null);
 
   // Master catalog investigations for grouping into packages & groups
-  const { profiles = [], packages = [], tests = [], templates = [] } = useMaster();
+  const { profiles = [], packages = [], tests = [], templates = [], branches = [] } = useMaster();
   const [expandedLotsMap, setExpandedLotsMap] = useState({});
   const [lotsViewMode, setLotsViewMode] = useState({}); // pid -> 'grouped' | 'flat'
 
@@ -623,19 +623,16 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                   <div className="text-[11px] font-bold text-slate-700 leading-tight">Reg / Sample Time</div>
                   <div className="text-[9px] font-medium text-slate-400">Date & Collection</div>
                 </th>
-                <th className="py-2.5 px-2 w-8 text-center text-slate-500">M</th>
-                <th className="py-2.5 px-2 w-8 text-center text-slate-500">P</th>
                 <th className="py-2.5 px-2 w-8 text-center text-slate-500">₹</th>
                 <th className="py-2.5 px-3 w-28 text-center">Status</th>
                 <th className="py-2.5 px-2 w-16 text-center">Action</th>
-                <th className="py-2.5 px-2 w-12 text-center text-slate-500">More</th>
               </tr>
             </thead>
 
             <tbody className="divide-y divide-slate-100 text-slate-800">
               {loading ? (
                 <tr>
-                  <td colSpan="13" className="py-12 text-center text-slate-400">
+                  <td colSpan="10" className="py-12 text-center text-slate-400">
                     <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-indigo-600" />
                     <span className="font-semibold text-xs">Loading patient worklist...</span>
                   </td>
@@ -733,9 +730,9 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                           {p.referedDr || 'Self'}
                         </td>
 
-                        {/* Center */}
-                        <td className="py-2.5 px-3 text-xs text-slate-600 font-medium">
-                          {p.center || 'Main'}
+                        {/* Center / Branch */}
+                        <td className="py-2.5 px-3 text-xs text-slate-600 font-medium truncate max-w-[160px]" title={getBranchDisplayName(p, branches)}>
+                          {getBranchDisplayName(p, branches)}
                         </td>
 
                         {/* Reg Date & Sample Time: Clearly separated without confusion */}
@@ -773,16 +770,6 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                           </div>
                         </td>
 
-                        {/* M */}
-                        <td className="py-2.5 px-2 text-center text-xs text-slate-600 font-medium">
-                          {p.mCount ?? 0}
-                        </td>
-
-                        {/* P */}
-                        <td className="py-2.5 px-2 text-center text-xs text-slate-600 font-medium">
-                          {p.pCount ?? 0}
-                        </td>
-
                         {/* ₹ Payment status badge matching screenshot */}
                         <td className="py-2.5 px-2 text-center">
                           {isPaid ? (
@@ -814,52 +801,13 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                           {renderPatientStatus(p.status)}
                         </td>
 
-                        {/* Action Buttons: Open & Edit */}
-                        <td className="py-2.5 px-2 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={(e) => handleOpenPatient(p, e)}
-                              className="bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-bold px-2.5 py-1 rounded-lg transition-all cursor-pointer shadow-xs"
-                            >
-                              Open
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingPatient(p);
-                              }}
-                              title="Edit Patient Details"
-                              className="p-1 text-slate-500 hover:text-blue-600 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-lg transition-all cursor-pointer shadow-2xs"
-                            >
-                              <Edit className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDeletingPatient(p);
-                              }}
-                              title="Delete Patient Record"
-                              className="p-1 text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 hover:border-rose-300 rounded-lg transition-all cursor-pointer shadow-2xs"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-
-                        {/* More Accordion Button matching screenshot */}
+                        {/* Action Button: Open */}
                         <td className="py-2.5 px-2 text-center">
                           <button
-                            onClick={(e) => handleToggleRow(pid, e)}
-                            className="p-1 hover:bg-slate-200 rounded text-slate-600 transition-colors cursor-pointer"
-                            title="Expand Details"
+                            onClick={(e) => handleOpenPatient(p, e)}
+                            className="bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-bold px-3 py-1 rounded-lg transition-all cursor-pointer shadow-xs"
                           >
-                            {isExpanded ? (
-                              <ChevronUp className="w-4 h-4" />
-                            ) : (
-                              <ChevronDown className="w-4 h-4" />
-                            )}
+                            Open
                           </button>
                         </td>
                       </tr>
@@ -867,7 +815,7 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                       {/* Expanded Accordion Drawer (Screenshot 1 Row 18) */}
                       {isExpanded && (
                         <tr>
-                          <td colSpan="13" className="p-3 bg-slate-50 border-y border-slate-200">
+                          <td colSpan="10" className="p-3 bg-slate-50 border-y border-slate-200">
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
                               {/* Card 1: Patient Details */}
                               <div className="space-y-2 border-r border-slate-100 pr-3">
@@ -909,6 +857,12 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                                     <span className="text-slate-400">Sample Time:</span>{' '}
                                     <strong className={p.sampleTime ? 'text-slate-800' : 'text-slate-400 font-normal italic'}>
                                       {p.sampleTime || 'Pending Collection'}
+                                    </strong>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-400">Report Time:</span>{' '}
+                                    <strong className={p.reportTime ? 'text-slate-800' : 'text-slate-400 font-normal italic'}>
+                                      {p.reportTime || 'Pending'}
                                     </strong>
                                   </div>
                                   <div className="flex items-center gap-1.5 pt-0.5">
@@ -1311,7 +1265,7 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
                 })
               ) : (
                 <tr>
-                  <td colSpan="13" className="py-12 text-center text-slate-500">
+                  <td colSpan="10" className="py-12 text-center text-slate-500">
                     <p className="font-semibold text-sm text-slate-700 mb-1">
                       {searchTerm
                         ? `No patient records found matching "${searchTerm}"`

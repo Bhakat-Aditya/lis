@@ -1229,7 +1229,7 @@ export default function TestSelectionView({
                     className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-95 text-white font-extrabold text-xs py-2 px-4 rounded-xl shadow-xs transition-all cursor-pointer"
                   >
                     <Save className="w-4 h-4" />
-                    <span>{saving ? 'Saving to AWS & Opening Bill...' : 'Save Tests'}</span>
+                    <span>{saving ? 'Saving Tests...' : 'Save Tests'}</span>
                   </button>
                 </div>
               </div>
@@ -1497,7 +1497,7 @@ export default function TestSelectionView({
                   <Save className="w-4 h-4" />
                   <span>
                     {saving
-                      ? 'Saving to AWS & Opening Bill...'
+                      ? 'Saving Tests...'
                       : pendingLots.length > 0
                       ? `Save Tests (${pendingLots.length} New)`
                       : 'Select Tests Above to Save'}

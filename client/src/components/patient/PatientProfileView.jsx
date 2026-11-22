@@ -5,6 +5,7 @@ import {
   User,
   Phone,
   Calendar,
+  Clock,
   Settings,
   CheckCircle,
   AlertTriangle,
@@ -40,7 +41,7 @@ import {
 import { formatDisplayDate, formatAgeDisplay } from '../../utils/dateUtils.js';
 import { useMaster } from '../../context/context.master.jsx';
 import { useAuth } from '../../context/context.auth.jsx';
-import { groupInvestigationsIntoLots } from '../../utils/labTestUtils.js';
+import { groupInvestigationsIntoLots, getBranchDisplayName } from '../../utils/labTestUtils.js';
 import PatientEmrHistory from './PatientEmrHistory.jsx';
 import ReportActivityLog from './ReportActivityLog.jsx';
 import PatientJourneyTimeline from './PatientJourneyTimeline.jsx';
@@ -109,7 +110,7 @@ export default function PatientProfileView({
     : rawPid;
   const navigate = useNavigate();
   const { canViewPatientLogs, canViewPatientEmr } = useAuth();
-  const { tests: catalogTests = [], profiles: catalogProfiles = [], packages: catalogPackages = [], templates: catalogTemplates = [] } = useMaster();
+  const { tests: catalogTests = [], profiles: catalogProfiles = [], packages: catalogPackages = [], templates: catalogTemplates = [], branches = [] } = useMaster();
   const [expandedLots, setExpandedLots] = useState({});
 
   useEffect(() => {
@@ -412,6 +413,14 @@ export default function PatientProfileView({
             </div>
 
             <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-indigo-600 shrink-0" />
+              <span className="font-semibold text-slate-500 w-28 shrink-0">Report Time:</span>
+              <span className={patient.reportTime ? "font-semibold text-slate-800" : "text-slate-400 font-normal italic"}>
+                {patient.reportTime || 'Pending'}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
               <User className="w-4 h-4 text-sky-600 shrink-0" />
               <span className="font-semibold text-slate-500 w-28 shrink-0">Referred By:</span>
               <span className="font-semibold text-slate-800 truncate">
@@ -421,8 +430,10 @@ export default function PatientProfileView({
 
             <div className="flex items-center gap-2">
               <span className="w-4 h-4 text-sky-600 font-bold text-center shrink-0">🏥</span>
-              <span className="font-semibold text-slate-500 w-28 shrink-0">Center:</span>
-              <span className="font-semibold text-slate-800">{patient.center || patient.branch || 'Main'}</span>
+              <span className="font-semibold text-slate-500 w-28 shrink-0">Branch:</span>
+              <span className="font-semibold text-slate-800">
+                {getBranchDisplayName(patient, branches)}
+              </span>
             </div>
           </div>
         </div>

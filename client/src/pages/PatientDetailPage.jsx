@@ -714,7 +714,7 @@ export default function PatientDetailPage() {
               </span>
             </div>
             <span className="text-[11px] text-slate-500 font-medium">
-              Ref by: <strong className="text-slate-700">{patient?.referedDr || activePatient?.referedDr || 'Self'}</strong> • Reg: {formatDisplayDate(patient?.regDate || patient?.collectionDate || activePatient?.regDate || activePatient?.collectionDate)}{patient?.sampleTime ? ` • Sample: ${patient.sampleTime}` : ''}
+              Ref by: <strong className="text-slate-700">{patient?.referedDr || activePatient?.referedDr || 'Self'}</strong> • Reg: {formatDisplayDate(patient?.regDate || patient?.collectionDate || activePatient?.regDate || activePatient?.collectionDate)}{patient?.sampleTime ? ` • Sample: ${patient.sampleTime}` : ''}{(patient?.reportTime || activePatient?.reportTime) ? ` • Report: ${patient?.reportTime || activePatient?.reportTime}` : ''}
             </span>
           </div>
         </div>

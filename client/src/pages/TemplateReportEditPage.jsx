@@ -634,6 +634,14 @@ export default function TemplateReportEditPage() {
                     </span>
                   </>
                 )}
+                {patient?.reportTime && (
+                  <>
+                    <span>•</span>
+                    <span className="text-[11px] text-indigo-700 font-semibold">
+                      Report: {patient.reportTime}
+                    </span>
+                  </>
+                )}
               </div>
             </div>
           </div>
