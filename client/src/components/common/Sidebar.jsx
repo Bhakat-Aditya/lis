@@ -183,20 +183,28 @@ export default function Sidebar({ onOpenNewPatient }) {
     >
       {/* Scrollable Upper Navigation & Action Area */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
-        {/* Lab Expert Brand Header */}
-        <div className="px-4 py-3 flex items-center justify-between border-b border-slate-100 sticky top-0 bg-white z-10">
+        {/* New Life Care Diagnostic Centre Brand Header */}
+        <div className="px-3.5 py-3 flex items-center justify-between border-b border-slate-100 sticky top-0 bg-white z-10">
           <div className="flex items-center gap-2.5 overflow-hidden">
-            {/* Clean Medical Emblem */}
-            <div className="w-8 h-8 shrink-0 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold shadow-xs">
-              <FlaskConical className="w-4 h-4" />
-            </div>
+            {/* Authentic Brand Logo */}
+            <img
+              src="/logo.jpg"
+              alt="New Life Care Diagnostic Centre"
+              className="w-9 h-9 shrink-0 rounded-full object-contain bg-white border border-slate-100 shadow-2xs"
+            />
             {!collapsed && (
               <div className="leading-tight truncate">
-                <span className="font-extrabold text-sm tracking-tight text-slate-900 block truncate">
+                <span
+                  className="font-extrabold text-xs tracking-tight text-slate-900 block truncate"
+                  title="New Life Care Diagnostic Centre"
+                >
                   New Life Care
                 </span>
-                <span className="text-[10px] font-semibold text-blue-600 block truncate">
-                  Midnapore LIS Portal
+                <span
+                  className="text-[10px] font-semibold text-blue-600 block truncate"
+                  title="Diagnostic Centre • Location: Midnapore"
+                >
+                  Diagnostic Centre • Midnapore
                 </span>
               </div>
             )}

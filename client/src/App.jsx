@@ -32,7 +32,7 @@ const ProtectedLayout = () => {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-3 text-slate-500">
         <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-        <span className="text-xs font-semibold tracking-wide">Initializing Lab Expert Portal...</span>
+        <span className="text-xs font-semibold tracking-wide">Initializing New Life Care Diagnostic Centre Portal...</span>
       </div>
     );
   }

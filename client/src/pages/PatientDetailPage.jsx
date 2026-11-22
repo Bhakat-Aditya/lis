@@ -683,7 +683,7 @@ export default function PatientDetailPage() {
   return (
     <section className="space-y-4 pb-8">
       <Helmet>
-        <title>{patient ? `${patient.name} (${patient?.slNo || patient?.barcode || 'Patient'})` : 'Patient Profile'} | Lab Expert</title>
+        <title>{patient ? `${patient.name} (${patient?.slNo || patient?.barcode || 'Patient'})` : 'Patient Profile'} | New Life Care Diagnostic Centre</title>
         <meta
           name="description"
           content={`Patient record and clinical investigations for ${patient?.name || ''}`}

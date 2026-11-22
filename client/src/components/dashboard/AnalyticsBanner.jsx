@@ -104,21 +104,23 @@ export default function AnalyticsBanner({
         {/* Row 1: Hospital Lab Identity & Live Telemetry Information */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center text-white shadow-xs shrink-0">
-              <Activity className="w-4 h-4" />
-            </div>
+            <img
+              src="/logo.jpg"
+              alt="New Life Care Diagnostic Centre"
+              className="w-9 h-9 rounded-full object-contain bg-white border border-slate-200/80 shadow-xs shrink-0"
+            />
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-sm font-black text-slate-900 tracking-tight">
-                  New Life Care Midnapore
+                  New Life Care Diagnostic Centre
                 </h2>
                 <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                   Live Portal
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 font-medium">
-                Hospital Information & Diagnostic Laboratory System
+              <p className="text-[11px] text-slate-500 font-medium">
+                Location: Midnapore • Diagnostic Laboratory Information System
               </p>
             </div>
           </div>

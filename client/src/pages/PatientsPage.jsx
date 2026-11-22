@@ -439,10 +439,10 @@ export default function PatientsPage({ onOpenNewPatient, onPatientsLoaded, refre
   return (
     <section className="space-y-3 pb-8">
       <Helmet>
-        <title>Patient Directory | Lab Expert</title>
+        <title>Patient Directory | New Life Care Diagnostic Centre</title>
         <meta
           name="description"
-          content="Diagnostic worklist and patient records management in Lab Expert."
+          content="Diagnostic worklist and patient records management in New Life Care Diagnostic Centre."
         />
       </Helmet>
 
