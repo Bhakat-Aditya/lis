@@ -29,6 +29,26 @@ import {
 } from 'lucide-react';
 import { openUpstreamTemplateEditor } from '../../utils/templateSequence.js';
 
+const getVowelBadgeClass = (vowel) => {
+  const v = String(vowel || 'CITRT').trim().toUpperCase();
+  switch (v) {
+    case 'FLURD':
+      return 'bg-slate-100 text-slate-800 border-slate-300';
+    case 'CLOT':
+      return 'bg-rose-50 text-rose-700 border-rose-200';
+    case 'EDTA':
+      return 'bg-purple-50 text-purple-700 border-purple-200';
+    case 'CITRT':
+      return 'bg-sky-50 text-sky-700 border-sky-200';
+    case 'URINE':
+      return 'bg-amber-50 text-amber-800 border-amber-200';
+    case 'STOOL':
+      return 'bg-emerald-50 text-emerald-800 border-emerald-200';
+    default:
+      return 'bg-sky-50 text-sky-700 border-sky-200';
+  }
+};
+
 const MASTER_GROUPS = [
   {
     id: 'test_catalog',
@@ -601,14 +621,15 @@ export default function MasterDataManager() {
           {activeTab === 'tests' && (
             <table className="w-full table-fixed text-left text-xs border-collapse">
               <colgroup>
-                <col className="w-[7%]" />
-                <col className="w-[28%]" />
-                <col className="w-[10%]" />
-                <col className="w-[14%]" />
+                <col className="w-[6%]" />
+                <col className="w-[25%]" />
                 <col className="w-[9%]" />
+                <col className="w-[13%]" />
+                <col className="w-[8%]" />
                 <col className="w-[11%]" />
                 <col className="w-[8%]" />
-                <col className="w-[6%]" />
+                <col className="w-[8%]" />
+                <col className="w-[5%]" />
                 <col className="w-[7%]" />
               </colgroup>
               <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
@@ -619,6 +640,7 @@ export default function MasterDataManager() {
                   <th className="py-2.5 px-3 truncate">Department</th>
                   <th className="py-2.5 px-3 truncate">Unit</th>
                   <th className="py-2.5 px-3 truncate">Sample Type</th>
+                  <th className="py-2.5 px-3 truncate">Vowel</th>
                   <th className="py-2.5 px-3 truncate">Rate (₹)</th>
                   <th className="py-2.5 px-3 truncate">Status</th>
                   <th className="py-2.5 px-3 text-right">Action</th>
@@ -635,7 +657,8 @@ export default function MasterDataManager() {
                     const dept = String(t['Dept Id'] || '').toLowerCase();
                     const deptName = String(deptMap.get(String(t['Dept Id'])) || '').toLowerCase();
                     const sampleType = String(t['Sample Type'] || t.sampleType || '').toLowerCase();
-                    return name.includes(q) || id.includes(q) || shortName.includes(q) || dept.includes(q) || deptName.includes(q) || sampleType.includes(q);
+                    const vowel = String(t.Vowel || t.vowel || '').toLowerCase();
+                    return name.includes(q) || id.includes(q) || shortName.includes(q) || dept.includes(q) || deptName.includes(q) || sampleType.includes(q) || vowel.includes(q);
                   })
                   .map((t) => {
                     const resolvedDept = deptMap.get(String(t['Dept Id'])) || t['Dept Id'] || '-';
@@ -668,6 +691,11 @@ export default function MasterDataManager() {
                         <td className="py-2 px-3">
                           <span className="text-slate-600 text-[11px] truncate block" title={t['Sample Type'] || 'Serum'}>
                             {t['Sample Type'] || 'Serum'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border truncate inline-block ${getVowelBadgeClass(t.Vowel || t.vowel)}`} title={t.Vowel || t.vowel || 'CITRT'}>
+                            {t.Vowel || t.vowel || 'CITRT'}
                           </span>
                         </td>
                         <td className="py-2 px-3">
@@ -1072,11 +1100,13 @@ export default function MasterDataManager() {
           {activeTab === 'profiles' && (
             <table className="w-full table-fixed text-left text-xs border-collapse">
               <colgroup>
-                <col className="w-[9%]" />
-                <col className="w-[21%]" />
-                <col className="w-[14%]" />
-                <col className="w-[36%]" />
                 <col className="w-[8%]" />
+                <col className="w-[20%]" />
+                <col className="w-[9%]" />
+                <col className="w-[8%]" />
+                <col className="w-[12%]" />
+                <col className="w-[24%]" />
+                <col className="w-[7%]" />
                 <col className="w-[5%]" />
                 <col className="w-[7%]" />
               </colgroup>
@@ -1084,6 +1114,8 @@ export default function MasterDataManager() {
                 <tr>
                   <th className="py-2.5 px-3 truncate">Profile ID</th>
                   <th className="py-2.5 px-3 truncate">Profile Name</th>
+                  <th className="py-2.5 px-3 truncate">Short Name</th>
+                  <th className="py-2.5 px-3 truncate">Vowel</th>
                   <th className="py-2.5 px-3 truncate">Department</th>
                   <th className="py-2.5 px-3 truncate">Included Tests</th>
                   <th className="py-2.5 px-3 truncate">Rate (₹)</th>
@@ -1098,11 +1130,13 @@ export default function MasterDataManager() {
                     const q = searchTerm.toLowerCase().trim();
                     const name = String(p.Name || p.name || '').toLowerCase();
                     const id = String(p['Profile Id'] || '').toLowerCase();
+                    const shortName = String(p['Short Name'] || p.shortName || '').toLowerCase();
+                    const vowel = String(p.Vowel || p.vowel || '').toLowerCase();
                     const dept = String(p['Dept Id'] || '').toLowerCase();
                     const deptName = String(deptMap.get(String(p['Dept Id'])) || '').toLowerCase();
                     const testIds = String(p['Test Id List'] || '').split(',').map((s) => s.trim()).filter(Boolean);
                     const testNamesStr = testIds.map((tId) => testMap.get(tId) || tId).join(' ').toLowerCase();
-                    return name.includes(q) || id.includes(q) || dept.includes(q) || deptName.includes(q) || testNamesStr.includes(q);
+                    return name.includes(q) || id.includes(q) || shortName.includes(q) || vowel.includes(q) || dept.includes(q) || deptName.includes(q) || testNamesStr.includes(q);
                   })
                   .map((p) => {
                     const resolvedDept = deptMap.get(String(p['Dept Id'])) || p['Dept Id'] || '-';
@@ -1117,6 +1151,16 @@ export default function MasterDataManager() {
                         <td className="py-2 px-3">
                           <span className="font-semibold text-slate-800 text-[11px] leading-tight truncate block" title={p.Name}>
                             {p.Name}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className="text-slate-600 font-semibold text-[11px] font-mono truncate block" title={p['Short Name'] || p.shortName || '-'}>
+                            {p['Short Name'] || p.shortName || '-'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border truncate inline-block ${getVowelBadgeClass(p.Vowel || p.vowel)}`} title={p.Vowel || p.vowel || 'CITRT'}>
+                            {p.Vowel || p.vowel || 'CITRT'}
                           </span>
                         </td>
                         <td className="py-2 px-3">

@@ -45,6 +45,9 @@ const SAMPLE_TYPE_OPTIONS = [
   'Other',
 ];
 
+export const VOWEL_OPTIONS = ['FLURD', 'CLOT', 'EDTA', 'CITRT', 'URINE', 'STOOL'];
+export const DEFAULT_VOWEL = 'CITRT';
+
 const ACCESS_ROLE_OPTIONS = [
   'Super',
   'Settings',
@@ -431,6 +434,7 @@ export default function MasterEditModal({
         TEST_SHORT_NAME: item?.['Short Name'] || item?.shortName || '',
         TEST_DEPTID: item?.['Dept Id'] || item?.deptId || departments[0]?.['Dept Id'] || 'D1',
         TEST_SAMPLE: existingSample || 'Serum',
+        TEST_VOWEL: item?.Vowel || item?.vowel || item?.TEST_VOWEL || DEFAULT_VOWEL,
         TEST_METHOD_ID: item?.['Method Id'] || item?.methodId || methods[0]?.['Method Id'] || 'M1',
         TEST_UNIT_ID: item?.['Unit Id'] || item?.unitId || units[0]?.['Unit Id'] || 'U1',
         TEST_STATUS: item?.Status || item?.status || 'Active',
@@ -457,6 +461,8 @@ export default function MasterEditModal({
       setFormData({
         PROFILE_ID: getExistingOrNextId(['Profile Id', 'profileId', 'id'], 'PROFILE_LIST', profiles),
         PROFILE_NAME: item?.Name || item?.name || '',
+        PROFILE_SHORT_NAME: (item?.['Short Name'] || item?.shortName || item?.PROFILE_SHORT_NAME || '').slice(0, 10),
+        PROFILE_VOWEL: item?.Vowel || item?.vowel || item?.PROFILE_VOWEL || DEFAULT_VOWEL,
         PROFILE_DEPTID: item?.['Dept Id'] || item?.deptId || departments[0]?.['Dept Id'] || 'D1',
         PROFILE_STATUS: item?.Status || item?.status || 'Active',
         PROFILE_RATE: item?.Rate || item?.rate || '',
@@ -762,10 +768,10 @@ export default function MasterEditModal({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                  Short Code / Abbreviation
+                  Short Code / Abbr
                 </label>
                 <input
                   type="text"
@@ -805,6 +811,23 @@ export default function MasterEditModal({
                   {availableSampleTypes.map((s) => (
                     <option key={s} value={s}>
                       {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Vowel (Default: CITRT) *
+                </label>
+                <select
+                  value={formData.TEST_VOWEL || DEFAULT_VOWEL}
+                  onChange={(e) => handleChange('TEST_VOWEL', e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-bold text-indigo-700"
+                >
+                  {VOWEL_OPTIONS.map((v) => (
+                    <option key={v} value={v}>
+                      {v}
                     </option>
                   ))}
                 </select>
@@ -1094,7 +1117,7 @@ export default function MasterEditModal({
         {/* 2. PROFILES FORM */}
         {category === 'profiles' && (
           <div className="space-y-3.5">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
                   Profile ID {isEditing ? '(Locked)' : '*'}
@@ -1125,9 +1148,28 @@ export default function MasterEditModal({
                   className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg focus:ring-1 focus:ring-indigo-500 font-semibold"
                 />
               </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase">
+                    Short Name
+                  </label>
+                  <span className="text-[10px] font-mono text-slate-400">
+                    {(formData.PROFILE_SHORT_NAME || '').length}/10
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  maxLength={10}
+                  value={formData.PROFILE_SHORT_NAME || ''}
+                  onChange={(e) => handleChange('PROFILE_SHORT_NAME', e.target.value.slice(0, 10))}
+                  placeholder="Max 10 chars"
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg uppercase font-semibold text-slate-800"
+                />
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
                   Department *
@@ -1145,6 +1187,39 @@ export default function MasterEditModal({
                 </select>
               </div>
 
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Vowel (Default: CITRT) *
+                </label>
+                <select
+                  value={formData.PROFILE_VOWEL || DEFAULT_VOWEL}
+                  onChange={(e) => handleChange('PROFILE_VOWEL', e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-bold text-indigo-700"
+                >
+                  {VOWEL_OPTIONS.map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Status
+                </label>
+                <select
+                  value={formData.PROFILE_STATUS || 'Active'}
+                  onChange={(e) => handleChange('PROFILE_STATUS', e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-bold"
+                >
+                  <option value="Active">Active</option>
+                  <option value="Deactive">Deactive</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
                   Standard Rate (₹) *
@@ -1189,20 +1264,6 @@ export default function MasterEditModal({
                   className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-bold"
                 />
               </div>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                Status
-              </label>
-              <select
-                value={formData.PROFILE_STATUS || 'Active'}
-                onChange={(e) => handleChange('PROFILE_STATUS', e.target.value)}
-                className="w-full sm:w-1/3 px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-bold"
-              >
-                <option value="Active">Active</option>
-                <option value="Deactive">Deactive</option>
-              </select>
             </div>
 
             {/* Test Selection for Profile */}

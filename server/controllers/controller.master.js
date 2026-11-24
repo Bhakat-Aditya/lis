@@ -284,6 +284,7 @@ export const updateTest = async (req, res, next) => {
       TEST_RATE1: req.body.TEST_RATE1 ?? req.body.rate1 ?? req.body.Rate1 ?? '',
       TEST_RATE2: req.body.TEST_RATE2 ?? req.body.rate2 ?? req.body.Rate2 ?? '',
       TEST_COMMENT: req.body.TEST_COMMENT ?? req.body.comment ?? req.body.Comment ?? '',
+      TEST_VOWEL: req.body.TEST_VOWEL ?? req.body.vowel ?? req.body.Vowel ?? 'CITRT',
       rg0l: req.body.rg0l ?? '',
       rg0h: req.body.rg0h ?? '',
       rg1l: req.body.rg1l ?? '',
@@ -299,6 +300,7 @@ export const updateTest = async (req, res, next) => {
       rg6l: req.body.rg6l ?? '',
       rg6h: req.body.rg6h ?? '',
       ...req.body,
+      TEST_VOWEL: req.body.TEST_VOWEL ?? req.body.vowel ?? req.body.Vowel ?? 'CITRT',
     };
     const upstreamRes = await upstreamService.post('UPDATETEST', params, null, req.user?.upstreamSid);
     if (upstreamRes?.STATUS === 'FAILED' || (upstreamRes?.StatusCode && upstreamRes?.StatusCode !== '0000')) {
@@ -318,6 +320,8 @@ export const updateTest = async (req, res, next) => {
 
 export const updateProfile = async (req, res, next) => {
   try {
+    const vowelVal = req.body.PROFILE_VOWEL ?? req.body.vowel ?? req.body.Vowel ?? 'CITRT';
+    const shortNameVal = String(req.body.PROFILE_SHORT_NAME ?? req.body.shortName ?? req.body['Short Name'] ?? '').trim().slice(0, 10);
     const params = {
       PROFILE_ID: req.body.PROFILE_ID ?? req.body.id ?? req.body['Profile Id'] ?? '',
       PROFILE_DEPTID: req.body.PROFILE_DEPTID ?? req.body.deptId ?? req.body['Dept Id'] ?? '',
@@ -327,7 +331,11 @@ export const updateProfile = async (req, res, next) => {
       PROFILE_RATE1: req.body.PROFILE_RATE1 ?? req.body.rate1 ?? req.body.Rate1 ?? '',
       PROFILE_RATE2: req.body.PROFILE_RATE2 ?? req.body.rate2 ?? req.body.Rate2 ?? '',
       PROFILE_TEST_ID_LIST: req.body.PROFILE_TEST_ID_LIST ?? req.body.testIdList ?? req.body['Test Id List'] ?? '',
+      PROFILE_VOWEL: vowelVal,
+      PROFILE_SHORT_NAME: shortNameVal,
       ...req.body,
+      PROFILE_VOWEL: vowelVal,
+      PROFILE_SHORT_NAME: shortNameVal,
     };
     const upstreamRes = await upstreamService.post('UPDATEPROFILE', params, null, req.user?.upstreamSid);
     if (upstreamRes?.STATUS === 'FAILED' || (upstreamRes?.StatusCode && upstreamRes?.StatusCode !== '0000')) {

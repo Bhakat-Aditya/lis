@@ -499,6 +499,8 @@ export const DEFAULT_PROFILES = [
   {
     'Profile Id': '1', id: '1',
     Name: 'Complete Blood Count (CBC Profile)', name: 'Complete Blood Count (CBC Profile)',
+    'Short Name': 'CBC', shortName: 'CBC',
+    Vowel: 'EDTA', vowel: 'EDTA',
     'Dept Id': '1', deptId: '1',
     Rate: '350', rate: '350', Status: 'Active', status: 'Active',
     'Test Id List': '101,102,103,104,105,106,107,108,109,110,111,112,113,114',
@@ -506,6 +508,8 @@ export const DEFAULT_PROFILES = [
   {
     'Profile Id': '2', id: '2',
     Name: 'Liver Function Test (LFT Comprehensive)', name: 'Liver Function Test (LFT Comprehensive)',
+    'Short Name': 'LFT', shortName: 'LFT',
+    Vowel: 'CLOT', vowel: 'CLOT',
     'Dept Id': '2', deptId: '2',
     Rate: '650', rate: '650', Status: 'Active', status: 'Active',
     'Test Id List': '130,131,132,133,134,135,136,137,138,139',
@@ -513,6 +517,8 @@ export const DEFAULT_PROFILES = [
   {
     'Profile Id': '3', id: '3',
     Name: 'Kidney / Renal Function Test (KFT / RFT with Electrolytes)', name: 'Kidney / Renal Function Test (KFT / RFT with Electrolytes)',
+    'Short Name': 'KFT', shortName: 'KFT',
+    Vowel: 'CLOT', vowel: 'CLOT',
     'Dept Id': '2', deptId: '2',
     Rate: '650', rate: '650', Status: 'Active', status: 'Active',
     'Test Id List': '140,141,142,143,144,145',
@@ -520,6 +526,8 @@ export const DEFAULT_PROFILES = [
   {
     'Profile Id': '4', id: '4',
     Name: 'Lipid Profile (Full Heart Health Panel)', name: 'Lipid Profile (Full Heart Health Panel)',
+    'Short Name': 'LIPID', shortName: 'LIPID',
+    Vowel: 'CLOT', vowel: 'CLOT',
     'Dept Id': '2', deptId: '2',
     Rate: '550', rate: '550', Status: 'Active', status: 'Active',
     'Test Id List': '150,151,152,153,154',
@@ -527,6 +535,8 @@ export const DEFAULT_PROFILES = [
   {
     'Profile Id': '5', id: '5',
     Name: 'Thyroid Function Profile (T3, T4, TSH Panel)', name: 'Thyroid Function Profile (T3, T4, TSH Panel)',
+    'Short Name': 'TFT', shortName: 'TFT',
+    Vowel: 'CLOT', vowel: 'CLOT',
     'Dept Id': '9', deptId: '9',
     Rate: '450', rate: '450', Status: 'Active', status: 'Active',
     'Test Id List': '160,161,162',
@@ -534,6 +544,8 @@ export const DEFAULT_PROFILES = [
   {
     'Profile Id': '6', id: '6',
     Name: 'Diabetic Assessment Profile', name: 'Diabetic Assessment Profile',
+    'Short Name': 'DIABETIC', shortName: 'DIABETIC',
+    Vowel: 'FLURD', vowel: 'FLURD',
     'Dept Id': '2', deptId: '2',
     Rate: '500', rate: '500', Status: 'Active', status: 'Active',
     'Test Id List': '120,121,123',
@@ -541,6 +553,8 @@ export const DEFAULT_PROFILES = [
   {
     'Profile Id': '7', id: '7',
     Name: 'Acute Fever Workup Panel', name: 'Acute Fever Workup Panel',
+    'Short Name': 'FEVER', shortName: 'FEVER',
+    Vowel: 'EDTA', vowel: 'EDTA',
     'Dept Id': '4', deptId: '4',
     Rate: '850', rate: '850', Status: 'Active', status: 'Active',
     'Test Id List': '101,102,114,170,171,172,174',
@@ -548,6 +562,8 @@ export const DEFAULT_PROFILES = [
   {
     'Profile Id': '8', id: '8',
     Name: 'Coagulation Screening Panel', name: 'Coagulation Screening Panel',
+    'Short Name': 'COAG', shortName: 'COAG',
+    Vowel: 'CITRT', vowel: 'CITRT',
     'Dept Id': '8', deptId: '8',
     Rate: '500', rate: '500', Status: 'Active', status: 'Active',
     'Test Id List': '108,180,181',
@@ -607,7 +623,20 @@ export const ALL_CLINICAL_DEFAULTS = {
   BRANCH_LIST: DEFAULT_BRANCHES,
   REFERANCE_LIST: DEFAULT_REFERANCES,
   USER_LIST: DEFAULT_USERS,
-  TEST_LIST: DEFAULT_TESTS,
+  TEST_LIST: DEFAULT_TESTS.map((t) => {
+    let v = t.Vowel || t.vowel;
+    if (!v) {
+      const st = String(t['Sample Type'] || t.sampleType || '').toLowerCase();
+      if (st.includes('fluoride')) v = 'FLURD';
+      else if (st.includes('edta') || st.includes('whole blood')) v = 'EDTA';
+      else if (st.includes('citrate')) v = 'CITRT';
+      else if (st.includes('urine')) v = 'URINE';
+      else if (st.includes('stool')) v = 'STOOL';
+      else if (st.includes('serum') || st.includes('clot')) v = 'CLOT';
+      else v = 'CITRT';
+    }
+    return { ...t, Vowel: v, vowel: v };
+  }),
   PROFILE_LIST: DEFAULT_PROFILES,
   PKG_LIST: DEFAULT_PACKAGES,
 };

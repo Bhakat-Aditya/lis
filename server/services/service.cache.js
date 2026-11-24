@@ -100,7 +100,18 @@ export const API_MAPPING = {
   },
   [CACHE_KEYS.PROFILE_LIST]: {
     api: 'GETPROFILELIST',
-    extract: (data) => data?.payLoadJSON?.profiles || [],
+    extract: (data) =>
+      (data?.payLoadJSON?.profiles || []).map((p) => {
+        const v = String(p?.Vowel ?? p?.vowel ?? p?.PROFILE_VOWEL ?? 'CITRT').trim().toUpperCase() || 'CITRT';
+        const sn = String(p?.['Short Name'] ?? p?.shortName ?? p?.PROFILE_SHORT_NAME ?? '').trim().slice(0, 10);
+        return {
+          ...p,
+          Vowel: v,
+          vowel: v,
+          'Short Name': sn,
+          shortName: sn,
+        };
+      }),
   },
   [CACHE_KEYS.PKG_LIST]: {
     api: 'GETPACKAGELIST',
@@ -108,7 +119,15 @@ export const API_MAPPING = {
   },
   [CACHE_KEYS.TEST_LIST]: {
     api: 'GETTESTLIST',
-    extract: (data) => data?.payLoadJSON?.tests || [],
+    extract: (data) =>
+      (data?.payLoadJSON?.tests || []).map((t) => {
+        const v = String(t?.Vowel ?? t?.vowel ?? t?.TEST_VOWEL ?? 'CITRT').trim().toUpperCase() || 'CITRT';
+        return {
+          ...t,
+          Vowel: v,
+          vowel: v,
+        };
+      }),
   },
   [CACHE_KEYS.TEMPLATE_LIST]: {
     api: 'GETTEMPLATELIST',
