@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { upstreamService, UPSTREAM_ERROR_MAP } from '../services/service.upstream.js';
-import { invalidateReportCache, getCachedReport } from './controller.report.js';
+import { invalidateReportCache, getCachedReport, resolveDepartmentId } from './controller.report.js';
 import { invalidatePatientListCache, fetchUpstreamPatientList, resolvePatientIdBySlNo } from './controller.patient.js';
 
 // In-flight deduplication and short-lived caching for billing list and bill JSON (15s TTL)
@@ -532,6 +532,7 @@ export const updateBill = async (req, res, next) => {
             'UPDATEREPORT',
             {
               ...matchedRep,
+              deptName: resolveDepartmentId(matchedRep.deptId || matchedRep.deptName || 'D1'),
               patientId: cleanPatientId,
               rate: String(item.amount),
             },

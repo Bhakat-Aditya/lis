@@ -53,6 +53,7 @@ import {
   getTestOperationPermissions,
   formatUnitName,
   getDepartmentDisplayName,
+  resolveDepartmentId,
 } from '../../utils/labTestUtils.js';
 import { useMaster } from '../../context/context.master.jsx';
 
@@ -457,7 +458,8 @@ export default function ResultsEntry({
         unit: report.unit,
         comment: commentToSave,
         profileName: report.profileName || '',
-        deptName: report.deptName || 'D1',
+        deptName: resolveDepartmentId(report.deptId || report.deptName || report.department || 'D1', masterDepartments),
+        deptId: resolveDepartmentId(report.deptId || report.deptName || report.department || 'D1', masterDepartments),
       });
 
       if (res.data?.STATUS === 'FAILED' || (res.data?.StatusCode && res.data.StatusCode !== '0000')) {
@@ -531,7 +533,8 @@ export default function ResultsEntry({
           unit: report.unit,
           comment: commentToSave,
           profileName: report.profileName || '',
-          deptName: report.deptName || 'D1',
+          deptName: resolveDepartmentId(report.deptId || report.deptName || report.department || 'D1', masterDepartments),
+          deptId: resolveDepartmentId(report.deptId || report.deptName || report.department || 'D1', masterDepartments),
         });
 
         if (res.data?.STATUS === 'FAILED' || (res.data?.StatusCode && res.data.StatusCode !== '0000')) {
@@ -650,7 +653,8 @@ export default function ResultsEntry({
             unit: report.unit,
             comment: current.comment !== undefined ? current.comment : (report.comment || ''),
             profileName: report.profileName || '',
-            deptName: report.deptName || 'D1',
+            deptName: resolveDepartmentId(report.deptId || report.deptName || report.department || 'D1', masterDepartments),
+            deptId: resolveDepartmentId(report.deptId || report.deptName || report.department || 'D1', masterDepartments),
           });
         }
       }
@@ -934,7 +938,7 @@ export default function ResultsEntry({
             reportId: report.reportId,
             testName: report.testName,
             profileName: report.profileName || '',
-            deptName: report.deptName || '',
+            deptName: resolveDepartmentId(report.deptId || report.deptName || report.department || 'D1', masterDepartments),
             sampleId: report.sampleId || '',
             rate: report.rate || '',
             sampletype: report.sampleType || '',
@@ -980,7 +984,7 @@ export default function ResultsEntry({
         reportId: report.reportId,
         testName: report.testName,
         profileName: report.profileName || '',
-        deptName: report.deptName || '',
+        deptName: resolveDepartmentId(report.deptId || report.deptName || report.department || 'D1', masterDepartments),
         sampleId: report.sampleId || '',
         rate: report.rate || '',
         sampletype: report.sampleType || '',

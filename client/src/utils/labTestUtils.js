@@ -1306,7 +1306,7 @@ export const STATIC_UNIT_MAP = {
   u1: 'mg%',
   u2: 'mg/dl',
   u3: 'ng/ml',
-  u4: 'IU/ml',
+  u4: 'μIU/ml',
   u5: 'ml/minute',
   u6: 'u/ml',
   u7: '/cumm',
@@ -1332,10 +1332,25 @@ export const STATIC_UNIT_MAP = {
   '50': 'ulU/mL',
   '51': 'pg/ml',
   '52': 'ng/dl',
+  '53': 'μIU/ml',
   '54': 'mg/g creatinine',
   '55': 'mIU/ml',
   '56': 'mg/Lit',
 };
+
+/**
+ * Sanitizes scientific measurement unit strings, fixing replacement characters
+ * (like \uFFFD from mis-decoded latin1 / UTF-8 transfers) and standardizing Greek 'μ' (U+03BC / U+00B5).
+ */
+export function sanitizeScientificUnit(text) {
+  if (!text) return '';
+  return String(text)
+    .replace(/[\uFFFD\u00BF\uFEFF]/g, 'μ')
+    .replace(/^\?iu/i, 'μIU')
+    .replace(/^iu\/ml$/i, 'μIU/ml')
+    .replace(/uIu\/ml/i, 'μIU/ml')
+    .trim();
+}
 
 /**
  * Formats any raw unit identifier into its human-readable clinical unit name.
@@ -1343,7 +1358,7 @@ export const STATIC_UNIT_MAP = {
  */
 export function formatUnitName(rawUnit, masterUnits = []) {
   if (!rawUnit && rawUnit !== 0) return '';
-  const clean = String(rawUnit).trim();
+  let clean = sanitizeScientificUnit(String(rawUnit));
   if (!clean || clean === '-') return clean;
 
   // 1. Dynamic lookup against active masterUnits catalog if provided
@@ -1356,7 +1371,7 @@ export function formatUnitName(rawUnit, masterUnits = []) {
       return uId === cleanLower || (uNoU && cleanNoU && uNoU === cleanNoU);
     });
     if (found && (found.Name || found.name)) {
-      const foundName = String(found.Name || found.name).trim();
+      const foundName = sanitizeScientificUnit(String(found.Name || found.name));
       if (foundName) return foundName;
     }
   }
@@ -1364,11 +1379,11 @@ export function formatUnitName(rawUnit, masterUnits = []) {
   // 2. High-speed lookup against static unit catalog
   const lower = clean.toLowerCase();
   if (STATIC_UNIT_MAP[lower]) {
-    return STATIC_UNIT_MAP[lower];
+    return sanitizeScientificUnit(STATIC_UNIT_MAP[lower]);
   }
   const noU = lower.replace(/^u/i, '');
   if (STATIC_UNIT_MAP[noU]) {
-    return STATIC_UNIT_MAP[noU];
+    return sanitizeScientificUnit(STATIC_UNIT_MAP[noU]);
   }
 
   return clean;
@@ -1409,6 +1424,121 @@ const STATIC_DEPT_MAP = {
   'd10': 'Molecular Biology',
   'mol': 'Molecular Biology',
 };
+
+/**
+ * Canonical reverse map from department codes/names/aliases to standard Department ID ('D1', 'D2', etc.)
+ */
+export const STATIC_DEPT_TO_ID_MAP = {
+  '1': 'D1',
+  'd1': 'D1',
+  'hema': 'D1',
+  'hematology': 'D1',
+  'haematology': 'D1',
+  'dept haematology tests': 'D1',
+  'dept hematology tests': 'D1',
+  '2': 'D2',
+  'd2': 'D2',
+  'bio': 'D2',
+  'biochemistry': 'D2',
+  'dept biochemistry tests': 'D2',
+  '3': 'D3',
+  'd3': 'D3',
+  'cpath': 'D3',
+  'clinical pathology': 'D3',
+  'pathology': 'D3',
+  '4': 'D4',
+  'd4': 'D4',
+  'sero': 'D4',
+  'serology': 'D4',
+  'immunology': 'D4',
+  'serology & immunology': 'D4',
+  '5': 'D5',
+  'd5': 'D5',
+  'micro': 'D5',
+  'microbiology': 'D5',
+  'culture': 'D5',
+  '6': 'D6',
+  'd6': 'D6',
+  'histo': 'D6',
+  'histopathology': 'D6',
+  '7': 'D7',
+  'd7': 'D7',
+  'cyto': 'D7',
+  'cytology': 'D7',
+  '8': 'D8',
+  'd8': 'D8',
+  'coag': 'D8',
+  'coagulation': 'D8',
+  '9': 'D9',
+  'd9': 'D9',
+  'endo': 'D9',
+  'endocrinology': 'D9',
+  'hormones': 'D9',
+  'endocrinology & hormones': 'D9',
+  '10': 'D10',
+  'd10': 'D10',
+  'mol': 'D10',
+  'molecular': 'D10',
+  'molecular biology': 'D10',
+};
+
+/**
+ * Resolves any raw department string, name, or code into canonical Department ID ('D1', 'D2', etc.)
+ * e.g. 'DEPT HAEMATOLOGY TESTS' -> 'D1', 'Haematology' -> 'D1', '1' -> 'D1', 'D1' -> 'D1', 'Biochemistry' -> 'D2'
+ */
+export function resolveDepartmentId(rawDept, masterDepartments = []) {
+  if (!rawDept && rawDept !== 0) return 'D1';
+  const clean = String(rawDept).trim();
+  if (!clean || clean === '-') return 'D1';
+
+  // 1. If already standard D-prefixed ID like D1, D2, D10
+  if (/^d\d+$/i.test(clean)) {
+    return clean.toUpperCase();
+  }
+  // 2. If pure number like 1, 2, 10
+  if (/^\d+$/.test(clean)) {
+    return `D${clean}`;
+  }
+
+  const lower = clean.toLowerCase();
+
+  // 3. Check against static inverse map
+  if (STATIC_DEPT_TO_ID_MAP[lower]) {
+    return STATIC_DEPT_TO_ID_MAP[lower];
+  }
+
+  // 4. Dynamic lookup against active masterDepartments catalog if provided
+  if (Array.isArray(masterDepartments) && masterDepartments.length > 0) {
+    const found = masterDepartments.find((d) => {
+      const dName = String(d.Name || d.name || '').toLowerCase().trim();
+      const dShort = String(d['Short Name'] || d.shortName || '').toLowerCase().trim();
+      return (
+        dName === lower ||
+        (dName && (lower.includes(dName) || dName.includes(lower))) ||
+        (dShort && dShort === lower)
+      );
+    });
+    if (found) {
+      const dId = String(found['Dept Id'] || found.id || found.deptId || '').trim();
+      if (/^d\d+$/i.test(dId)) return dId.toUpperCase();
+      if (/^\d+$/.test(dId)) return `D${dId}`;
+    }
+  }
+
+  // 5. Keyword substring matching for common diagnostic departments
+  if (lower.includes('haem') || lower.includes('hem') || lower.includes('blood') || lower.includes('cbc')) return 'D1';
+  if (lower.includes('bio') || lower.includes('chem') || lower.includes('lft') || lower.includes('kft') || lower.includes('lipid')) return 'D2';
+  if (lower.includes('cpath') || lower.includes('path') || lower.includes('urine') || lower.includes('stool')) return 'D3';
+  if (lower.includes('sero') || lower.includes('immun') || lower.includes('widal') || lower.includes('elisa') || lower.includes('hiv') || lower.includes('hbsag')) return 'D4';
+  if (lower.includes('micro') || lower.includes('culture') || lower.includes('sensitiv')) return 'D5';
+  if (lower.includes('histo') || lower.includes('biopsy')) return 'D6';
+  if (lower.includes('cyto') || lower.includes('fnac') || lower.includes('pap')) return 'D7';
+  if (lower.includes('coag') || /\bpt\b/i.test(lower) || /\binr\b/i.test(lower) || /\baptt\b/i.test(lower)) return 'D8';
+  if (lower.includes('endo') || lower.includes('hormon') || lower.includes('thyroid') || /\b(t3|t4|tsh)\b/i.test(lower)) return 'D9';
+  if (lower.includes('mol') || /\bpcr\b/i.test(lower) || /\bdna\b/i.test(lower) || /\brna\b/i.test(lower)) return 'D10';
+
+  return 'D1';
+}
 
 /**
  * Resolves a raw department identifier (e.g. 'D1', '1', 'D2') to a clean, human-readable Department Name.

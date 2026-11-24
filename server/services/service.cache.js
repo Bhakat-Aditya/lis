@@ -92,7 +92,17 @@ export const API_MAPPING = {
   },
   [CACHE_KEYS.UNIT_LIST]: {
     api: 'GETUNITLIST',
-    extract: (data) => data?.payLoadJSON?.units || [],
+    extract: (data) =>
+      (data?.payLoadJSON?.units || []).map((u) => {
+        let name = String(u.Name ?? u.name ?? '');
+        name = name.replace(/[\uFFFD\u00BF\uFEFF]/g, 'μ').replace(/^\?iu/i, 'μIU');
+        if (/^iu\/ml$/i.test(name)) name = 'μIU/ml';
+        return {
+          ...u,
+          Name: name,
+          name,
+        };
+      }),
   },
   [CACHE_KEYS.METHOD_LIST]: {
     api: 'GETMETHODLIST',

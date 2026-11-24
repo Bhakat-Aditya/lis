@@ -16,7 +16,7 @@ export const STATIC_UNIT_MAP = {
   u1: 'mg%',
   u2: 'mg/dl',
   u3: 'ng/ml',
-  u4: 'IU/ml',
+  u4: 'μIU/ml',
   u5: 'ml/minute',
   u6: 'u/ml',
   u7: '/cumm',
@@ -42,6 +42,7 @@ export const STATIC_UNIT_MAP = {
   '50': 'ulU/mL',
   '51': 'pg/ml',
   '52': 'ng/dl',
+  '53': 'μIU/ml',
   '54': 'mg/g creatinine',
   '55': 'mIU/ml',
   '56': 'mg/Lit',
@@ -49,11 +50,13 @@ export const STATIC_UNIT_MAP = {
 
 export const resolveReadableUnit = (raw, customMap = {}) => {
   if (!raw && raw !== 0) return '';
-  const clean = String(raw).trim();
+  let clean = String(raw).trim();
+  clean = clean.replace(/[\uFFFD\u00BF\uFEFF]/g, 'μ').replace(/^\?iu/i, 'μIU');
   if (!clean || clean === '-') return clean;
   const lower = clean.toLowerCase();
   const noU = lower.replace(/^u/i, '');
-  return customMap[lower] || customMap[noU] || STATIC_UNIT_MAP[lower] || STATIC_UNIT_MAP[noU] || clean;
+  const res = customMap[lower] || customMap[noU] || STATIC_UNIT_MAP[lower] || STATIC_UNIT_MAP[noU] || clean;
+  return String(res).replace(/[\uFFFD\u00BF\uFEFF]/g, 'μ');
 };
 
 export const STATIC_DEPT_MAP = {
@@ -101,6 +104,114 @@ export const resolveReadableDept = (raw, customMap = {}) => {
   if (STATIC_DEPT_MAP[noD]) return STATIC_DEPT_MAP[noD];
   if (!/^d\d+$/i.test(clean) && !/^\d+$/.test(clean)) return clean;
   return clean;
+};
+
+export const STATIC_DEPT_TO_ID_MAP = {
+  '1': 'D1',
+  'd1': 'D1',
+  'hema': 'D1',
+  'hematology': 'D1',
+  'haematology': 'D1',
+  'dept haematology tests': 'D1',
+  'dept hematology tests': 'D1',
+  '2': 'D2',
+  'd2': 'D2',
+  'bio': 'D2',
+  'biochemistry': 'D2',
+  'dept biochemistry tests': 'D2',
+  '3': 'D3',
+  'd3': 'D3',
+  'cpath': 'D3',
+  'clinical pathology': 'D3',
+  'pathology': 'D3',
+  '4': 'D4',
+  'd4': 'D4',
+  'sero': 'D4',
+  'serology': 'D4',
+  'immunology': 'D4',
+  'serology & immunology': 'D4',
+  '5': 'D5',
+  'd5': 'D5',
+  'micro': 'D5',
+  'microbiology': 'D5',
+  'culture': 'D5',
+  '6': 'D6',
+  'd6': 'D6',
+  'histo': 'D6',
+  'histopathology': 'D6',
+  '7': 'D7',
+  'd7': 'D7',
+  'cyto': 'D7',
+  'cytology': 'D7',
+  '8': 'D8',
+  'd8': 'D8',
+  'coag': 'D8',
+  'coagulation': 'D8',
+  '9': 'D9',
+  'd9': 'D9',
+  'endo': 'D9',
+  'endocrinology': 'D9',
+  'hormones': 'D9',
+  'endocrinology & hormones': 'D9',
+  '10': 'D10',
+  'd10': 'D10',
+  'mol': 'D10',
+  'molecular': 'D10',
+  'molecular biology': 'D10',
+};
+
+export const resolveDepartmentId = (raw, masterDepartments = []) => {
+  if (!raw && raw !== 0) return 'D1';
+  const clean = String(raw).trim();
+  if (!clean || clean === '-') return 'D1';
+
+  // 1. If already standard D-prefixed ID like D1, D2, D10
+  if (/^d\d+$/i.test(clean)) {
+    return clean.toUpperCase();
+  }
+  // 2. If pure number like 1, 2, 10
+  if (/^\d+$/.test(clean)) {
+    return `D${clean}`;
+  }
+
+  const lower = clean.toLowerCase();
+
+  // 3. Static inverse lookup
+  if (STATIC_DEPT_TO_ID_MAP[lower]) {
+    return STATIC_DEPT_TO_ID_MAP[lower];
+  }
+
+  // 4. Check against masterDepartments
+  if (Array.isArray(masterDepartments) && masterDepartments.length > 0) {
+    const found = masterDepartments.find((d) => {
+      const dName = String(d.Name || d.name || '').toLowerCase().trim();
+      const dShort = String(d['Short Name'] || d.shortName || '').toLowerCase().trim();
+      return (
+        dName === lower ||
+        (dName && (lower.includes(dName) || dName.includes(lower))) ||
+        (dShort && dShort === lower)
+      );
+    });
+    if (found) {
+      const dId = String(found['Dept Id'] || found.id || found.deptId || '').trim();
+      if (/^d\d+$/i.test(dId)) return dId.toUpperCase();
+      if (/^\d+$/.test(dId)) return `D${dId}`;
+    }
+  }
+
+  // 5. Keyword substring matching
+  if (lower.includes('haem') || lower.includes('hem') || lower.includes('blood') || lower.includes('cbc')) return 'D1';
+  if (lower.includes('bio') || lower.includes('chem') || lower.includes('lft') || lower.includes('kft') || lower.includes('lipid')) return 'D2';
+  if (lower.includes('cpath') || lower.includes('path') || lower.includes('urine') || lower.includes('stool')) return 'D3';
+  if (lower.includes('sero') || lower.includes('immun') || lower.includes('widal') || lower.includes('elisa') || lower.includes('hiv') || lower.includes('hbsag')) return 'D4';
+  if (lower.includes('micro') || lower.includes('culture') || lower.includes('sensitiv')) return 'D5';
+  if (lower.includes('histo') || lower.includes('biopsy')) return 'D6';
+  if (lower.includes('cyto') || lower.includes('fnac') || lower.includes('pap')) return 'D7';
+  if (lower.includes('coag') || /\bpt\b/i.test(lower) || /\binr\b/i.test(lower) || /\baptt\b/i.test(lower)) return 'D8';
+  if (lower.includes('endo') || lower.includes('hormon') || lower.includes('thyroid') || /\b(t3|t4|tsh)\b/i.test(lower)) return 'D9';
+  if (lower.includes('mol') || /\bpcr\b/i.test(lower) || /\bdna\b/i.test(lower) || /\brna\b/i.test(lower)) return 'D10';
+
+  return 'D1';
 };
 
 export const invalidateReportCache = (patientId) => {
@@ -336,6 +447,7 @@ export const getPatientReport = async (req, res, next) => {
       const resolvedUnitName = resolveReadableUnit(rawUnit, unitMap);
 
       const rawDept = String(r.deptName || r.deptId || '').trim();
+      const resolvedDeptId = resolveDepartmentId(rawDept, masterDepartments);
       const resolvedDeptName = resolveReadableDept(rawDept, deptMap);
 
       return {
@@ -345,7 +457,7 @@ export const getPatientReport = async (req, res, next) => {
         unitCode: rawUnit,
         unitName: resolvedUnitName,
         deptName: resolvedDeptName || r.deptName || 'Haematology',
-        deptId: rawDept || 'D1',
+        deptId: resolvedDeptId,
         ...(statusOverride ? { status: statusOverride, isDeleted: isDel } : {}),
         possibleCalculate: (
           r.possibleCalculate !== undefined ? toBoolFlag(r.possibleCalculate, false) :
@@ -514,7 +626,7 @@ export const getPatientReport = async (req, res, next) => {
         resultJsonParsed: parsed,
         deptName: resolvedTmplDept || t.deptName || t.department || 'DEPT HAEMATOLOGY TESTS - Template',
         department: resolvedTmplDept || t.department || 'DEPT HAEMATOLOGY TESTS - Template',
-        deptId: rawTmplDept || 'D1',
+        deptId: resolveDepartmentId(rawTmplDept || 'D1', masterDepartments),
         possibleDownload: t.possibleDownload !== undefined
           ? toBoolFlag(t.possibleDownload, true)
           : true,
@@ -862,11 +974,15 @@ export const updateReport = async (req, res, next) => {
       }
     }
 
-    // Resolve Master IDs for method and unit using static / in-memory cache only (no extra upstream calls)
+    // Resolve Master IDs for method, unit, and department using static / in-memory cache only (no extra upstream calls)
     let finalMethodId = String(method || '').trim();
     let finalUnitId = String(resolvedUnit || '').trim();
+    let finalDeptId = resolveDepartmentId(req.body.deptId || deptName || 'D1');
 
     try {
+      const masterDepts = cacheService.memoryStore?.get(CACHE_KEYS.DEPT_LIST)?.data || [];
+      finalDeptId = resolveDepartmentId(req.body.deptId || deptName || 'D1', masterDepts);
+
       if (finalMethodId || finalUnitId) {
         const masterMethods = cacheService.memoryStore?.get(CACHE_KEYS.METHOD_LIST)?.data || [];
         const masterUnits = cacheService.memoryStore?.get(CACHE_KEYS.UNIT_LIST)?.data || [];
@@ -938,6 +1054,9 @@ export const updateReport = async (req, res, next) => {
           if (!finalResultData) {
             finalResultData = String(existingRep.resultData || existingRep.ResultData || '').trim();
           }
+          if (finalDeptId === 'D1' && (existingRep.deptId || existingRep.deptName)) {
+            finalDeptId = resolveDepartmentId(existingRep.deptId || existingRep.deptName);
+          }
         }
       } catch (e) {
         // non-blocking fallback
@@ -946,7 +1065,7 @@ export const updateReport = async (req, res, next) => {
 
     const params = {
       profileName: profileName || '',
-      deptName: req.body.deptId || deptName || 'D1',
+      deptName: finalDeptId,
       reportId,
       patientId: cleanPatientId,
       sampleId: sampleId || '',
@@ -973,6 +1092,12 @@ export const updateReport = async (req, res, next) => {
         rep.resultData = finalResultData;
         rep.comment = comment || '';
         rep.status = 'SAVED';
+        rep.deptId = finalDeptId;
+        rep.method = finalMethodId;
+        rep.unit = finalUnitId;
+        rep.unitref = finalUnitId;
+        rep.sampletype = resolvedSampleType;
+        rep.sampleType = resolvedSampleType;
       }
     }
 
@@ -1890,7 +2015,7 @@ export const deleteReport = async (req, res, next) => {
     await reportOverrideService.markDeleted(cleanPatientId, cleanReportId, {
       testName,
       profileName,
-      deptName,
+      deptName: resolveDepartmentId(deptName),
       rate,
     });
 

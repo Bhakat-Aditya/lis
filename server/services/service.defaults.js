@@ -72,6 +72,22 @@ export const DEFAULT_UNITS = [
   { 'Unit Id': '18', id: '18', Name: 'Index', name: 'Index', Status: 'Active', status: 'Active' },
   { 'Unit Id': '19', id: '19', Name: 'mEq/L', name: 'mEq/L', Status: 'Active', status: 'Active' },
   { 'Unit Id': '20', id: '20', Name: 'million/cumm', name: 'million/cumm', Status: 'Active', status: 'Active' },
+  { 'Unit Id': '41', id: '41', Name: 'mm/hrs', name: 'mm/hrs', Status: 'Active', status: 'Active' },
+  { 'Unit Id': '42', id: '42', Name: 'Sec', name: 'Sec', Status: 'Active', status: 'Active' },
+  { 'Unit Id': '43', id: '43', Name: 'U/L', name: 'U/L', Status: 'Active', status: 'Active' },
+  { 'Unit Id': '44', id: '44', Name: 'U/g of HB', name: 'U/g of HB', Status: 'Active', status: 'Active' },
+  { 'Unit Id': '45', id: '45', Name: 'mmol/L', name: 'mmol/L', Status: 'Active', status: 'Active' },
+  { 'Unit Id': '46', id: '46', Name: 'g/dl', name: 'g/dl', Status: 'Active', status: 'Active' },
+  { 'Unit Id': '47', id: '47', Name: 'OD', name: 'OD', Status: 'Active', status: 'Active' },
+  { 'Unit Id': '48', id: '48', Name: 'Pan Bio Unit', name: 'Pan Bio Unit', Status: 'Active', status: 'Active' },
+  { 'Unit Id': '49', id: '49', Name: 'ug/dl', name: 'ug/dl', Status: 'Active', status: 'Active' },
+  { 'Unit Id': '50', id: '50', Name: 'ulU/mL', name: 'ulU/mL', Status: 'Active', status: 'Active' },
+  { 'Unit Id': '51', id: '51', Name: 'pg/ml', name: 'pg/ml', Status: 'Active', status: 'Active' },
+  { 'Unit Id': '52', id: '52', Name: 'ng/dl', name: 'ng/dl', Status: 'Active', status: 'Active' },
+  { 'Unit Id': '53', id: '53', Name: 'μIU/ml', name: 'μIU/ml', Status: 'Active', status: 'Active' },
+  { 'Unit Id': '54', id: '54', Name: 'mg/g creatinine', name: 'mg/g creatinine', Status: 'Active', status: 'Active' },
+  { 'Unit Id': '55', id: '55', Name: 'mIU/ml', name: 'mIU/ml', Status: 'Active', status: 'Active' },
+  { 'Unit Id': '56', id: '56', Name: 'mg/Lit', name: 'mg/Lit', Status: 'Active', status: 'Active' },
 ];
 
 export const DEFAULT_METHODS = [

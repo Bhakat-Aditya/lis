@@ -3,7 +3,7 @@ import Modal from '../common/Modal.jsx';
 import api from '../../services/api.js';
 import { useMaster } from '../../context/context.master.jsx';
 import { Save, X, Loader2, FlaskConical, AlertCircle, CheckCircle } from 'lucide-react';
-import { formatUnitName, getDepartmentDisplayName } from '../../utils/labTestUtils.js';
+import { formatUnitName, getDepartmentDisplayName, sanitizeScientificUnit, resolveDepartmentId } from '../../utils/labTestUtils.js';
 
 // Standard specimen types common in clinical diagnostics
 const DEFAULT_SAMPLE_TYPES = [
@@ -99,7 +99,6 @@ export default function EditIndividualReportModal({
 
   const [isCustomSampleType, setIsCustomSampleType] = useState(false);
   const [isCustomMethod, setIsCustomMethod] = useState(false);
-  const [isCustomUnit, setIsCustomUnit] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -130,12 +129,6 @@ export default function EditIndividualReportModal({
           String(m['Method Id'] || m.id || '').trim().toLowerCase() === String(initialMethodId).toLowerCase()
       );
       setIsCustomMethod(Boolean(initialMethodId) && !hasMatchingMethod);
-
-      const hasMatchingUnit = masterUnits.some(
-        (u) =>
-          String(u['Unit Id'] || u.id || '').trim().toLowerCase() === String(initialUnitId).toLowerCase()
-      );
-      setIsCustomUnit(Boolean(initialUnitId) && !hasMatchingUnit);
 
       setError('');
       setSuccess('');
@@ -197,8 +190,8 @@ export default function EditIndividualReportModal({
         sampleId: report.sampleId || patient?.slNo || '',
         testName: formData.testName.trim(),
         rate: existingRate,
-        sampletype: formData.sampleType.trim() || 'Serum',
-        sampleType: formData.sampleType.trim() || 'Serum',
+        sampletype: formData.sampleType.trim() || report.sampleType || report.sampletype || '-',
+        sampleType: formData.sampleType.trim() || report.sampleType || report.sampletype || '-',
         method: finalMethodId,
         refRange: formData.refRange.trim(),
         unitref: finalUnitId,
@@ -206,7 +199,8 @@ export default function EditIndividualReportModal({
         unit: finalUnitId,
         comment: formData.comment.trim(),
         profileName: report.profileName || '',
-        deptName: report.deptId || report.deptName || 'D1',
+        deptName: resolveDepartmentId(report.deptId || report.deptName || report.department || 'D1', masterDepartments),
+        deptId: resolveDepartmentId(report.deptId || report.deptName || report.department || 'D1', masterDepartments),
       };
 
       const res = await api.post('/reports/update', payload);
@@ -422,55 +416,25 @@ export default function EditIndividualReportModal({
               <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                 UNIT (MASTER ID)
               </label>
-              {!isCustomUnit ? (
-                <select
-                  value={formData.unit}
-                  onChange={(e) => {
-                    if (e.target.value === '__CUSTOM__') {
-                      setIsCustomUnit(true);
-                      setFormData((prev) => ({ ...prev, unit: '' }));
-                    } else {
-                      handleInputChange('unit', e.target.value);
-                    }
-                  }}
-                  className="w-full px-3 py-2 text-xs font-semibold text-slate-800 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all cursor-pointer font-mono"
-                >
-                  <option value="">Select Unit (None)</option>
-                  {masterUnits.map((u) => {
-                    const uId = String(u['Unit Id'] || u.id || '').trim();
-                    const uName = String(u.Name || u.name || '').trim() || formatUnitName(uId);
-                    if (!uId) return null;
-                    return (
-                      <option key={uId} value={uId}>
-                        {uName}
-                      </option>
-                    );
-                  })}
-                  <option value="__CUSTOM__">+ Custom Unit...</option>
-                </select>
-              ) : (
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={formData.unit}
-                    onChange={(e) => handleInputChange('unit', e.target.value)}
-                    placeholder="Enter unit (e.g. mg/dl)"
-                    className="w-full pl-3 pr-6 py-2 text-xs font-semibold text-slate-800 bg-white border border-blue-400 rounded-xl focus:ring-2 focus:ring-blue-500/20 outline-none font-mono"
-                    autoFocus
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsCustomUnit(false);
-                      handleInputChange('unit', '');
-                    }}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
-                    title="Back to list"
-                  >
-                    ×
-                  </button>
-                </div>
-              )}
+              <select
+                value={formData.unit}
+                onChange={(e) => handleInputChange('unit', e.target.value)}
+                style={{ fontFamily: 'Arial, sans-serif' }}
+                className="w-full px-3 py-2 text-xs font-semibold text-slate-800 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all cursor-pointer font-sans"
+              >
+                <option value="" style={{ fontFamily: 'Arial, sans-serif' }}>Select Unit (None)</option>
+                {masterUnits.map((u) => {
+                  const uId = String(u['Unit Id'] || u.id || '').trim();
+                  const rawName = String(u.Name || u.name || '').trim() || formatUnitName(uId);
+                  const uName = sanitizeScientificUnit(rawName);
+                  if (!uId) return null;
+                  return (
+                    <option key={uId} value={uId} style={{ fontFamily: 'Arial, sans-serif' }}>
+                      {uName}
+                    </option>
+                  );
+                })}
+              </select>
             </div>
           </div>
 
