@@ -14,37 +14,78 @@ const inFlightReports = new Map();
 
 export const STATIC_UNIT_MAP = {
   u1: 'mg%',
+  '1': 'mg%',
   u2: 'mg/dl',
+  '2': 'mg/dl',
   u3: 'ng/ml',
+  '3': 'ng/ml',
   u4: 'μIU/ml',
+  '4': 'μIU/ml',
   u5: 'ml/minute',
+  '5': 'ml/minute',
   u6: 'u/ml',
+  '6': 'u/ml',
   u7: '/cumm',
+  '7': '/cumm',
   u8: 'millions/cumm',
+  '8': 'millions/cumm',
   u9: 'lakhs/cumm',
+  '9': 'lakhs/cumm',
   u10: '%',
+  '10': '%',
   u11: 'fl',
+  '11': 'fl',
   u12: 'pg',
+  '12': 'pg',
   u13: 'gm/dl',
+  '13': 'gm/dl',
   u14: 'mm/hrs',
+  '14': 'mm/hrs',
   u15: 'mg / L',
+  '15': 'mg / L',
   u16: '10^9/L',
+  '16': '10^9/L',
+  u17: 'gm%',
+  '17': 'gm%',
+  u18: 'Index',
+  '18': 'Index',
+  u19: 'mEq/L',
+  '19': 'mEq/L',
+  u20: 'million/cumm',
+  '20': 'million/cumm',
   u28: '-',
+  '28': '-',
+  u41: 'mm/hrs',
   '41': 'mm/hrs',
+  u42: 'Sec',
   '42': 'Sec',
+  u43: 'U/L',
   '43': 'U/L',
+  u44: 'U/g of HB',
   '44': 'U/g of HB',
+  u45: 'mmol/L',
   '45': 'mmol/L',
+  u46: 'g/dl',
   '46': 'g/dl',
+  u47: 'OD',
   '47': 'OD',
+  u48: 'Pan Bio Unit',
   '48': 'Pan Bio Unit',
+  u49: 'ug/dl',
   '49': 'ug/dl',
+  u50: 'ulU/mL',
   '50': 'ulU/mL',
+  u51: 'pg/ml',
   '51': 'pg/ml',
+  u52: 'ng/dl',
   '52': 'ng/dl',
+  u53: 'μIU/ml',
   '53': 'μIU/ml',
+  u54: 'mg/g creatinine',
   '54': 'mg/g creatinine',
+  u55: 'mIU/ml',
   '55': 'mIU/ml',
+  u56: 'mg/Lit',
   '56': 'mg/Lit',
 };
 
@@ -55,8 +96,61 @@ export const resolveReadableUnit = (raw, customMap = {}) => {
   if (!clean || clean === '-') return clean;
   const lower = clean.toLowerCase();
   const noU = lower.replace(/^u/i, '');
-  const res = customMap[lower] || customMap[noU] || STATIC_UNIT_MAP[lower] || STATIC_UNIT_MAP[noU] || clean;
+  const withU = `u${noU}`;
+  const res =
+    customMap[lower] ||
+    customMap[noU] ||
+    customMap[withU] ||
+    STATIC_UNIT_MAP[lower] ||
+    STATIC_UNIT_MAP[noU] ||
+    STATIC_UNIT_MAP[withU] ||
+    clean;
   return String(res).replace(/[\uFFFD\u00BF\uFEFF]/g, 'μ');
+};
+
+/**
+ * Resolves any raw unit input (numeric ID like '55', code like 'U2', or unit string like 'mIU/ml')
+ * into the human-readable clinical unit name (e.g. 'mIU/ml').
+ * Ensures upstream UPDATEREPORT ALWAYS receives the actual unit string, NEVER the master/numeric ID.
+ */
+export const resolveActualUnitName = (raw, masterUnits = []) => {
+  if (!raw && raw !== 0) return '';
+  let clean = String(raw).trim();
+  clean = clean.replace(/[\uFFFD\u00BF\uFEFF]/g, 'μ').replace(/^\?iu/i, 'μIU');
+  if (!clean || clean === '-') return clean;
+
+  const lower = clean.toLowerCase();
+  const noU = lower.replace(/^u/i, '');
+  const withU = `u${noU}`;
+
+  // 1. Look up in active masterUnits catalog
+  if (Array.isArray(masterUnits) && masterUnits.length > 0) {
+    const byId = masterUnits.find((u) => {
+      const uId = String(u['Unit Id'] ?? u.id ?? '').trim().toLowerCase();
+      const uNoU = uId.replace(/^u/i, '');
+      return uId === lower || uId === noU || (uNoU && clean === uNoU);
+    });
+    if (byId && (byId.Name || byId.name)) {
+      return String(byId.Name || byId.name).replace(/[\uFFFD\u00BF\uFEFF]/g, 'μ').trim();
+    }
+
+    const byName = masterUnits.find((u) => {
+      const name = String(u.Name ?? u.name ?? '').trim().toLowerCase();
+      return name === lower;
+    });
+    if (byName && (byName.Name || byName.name)) {
+      return String(byName.Name || byName.name).replace(/[\uFFFD\u00BF\uFEFF]/g, 'μ').trim();
+    }
+  }
+
+  // 2. Look up in STATIC_UNIT_MAP
+  const staticFound = STATIC_UNIT_MAP[lower] || STATIC_UNIT_MAP[noU] || STATIC_UNIT_MAP[withU];
+  if (staticFound) {
+    return String(staticFound).replace(/[\uFFFD\u00BF\uFEFF]/g, 'μ').trim();
+  }
+
+  // 3. Return sanitized text
+  return clean;
 };
 
 export const STATIC_DEPT_MAP = {
@@ -974,64 +1068,32 @@ export const updateReport = async (req, res, next) => {
       }
     }
 
-    // Resolve Master IDs for method, unit, and department using static / in-memory cache only (no extra upstream calls)
+    // Resolve Master IDs for method, and clinical unit name for unit/unitref, using in-memory cache/static maps
     let finalMethodId = String(method || '').trim();
-    let finalUnitId = String(resolvedUnit || '').trim();
     let finalDeptId = resolveDepartmentId(req.body.deptId || deptName || 'D1');
 
+    const masterDepts = cacheService.memoryStore?.get(CACHE_KEYS.DEPT_LIST)?.data || [];
+    const masterMethods = cacheService.memoryStore?.get(CACHE_KEYS.METHOD_LIST)?.data || [];
+    const masterUnits = cacheService.memoryStore?.get(CACHE_KEYS.UNIT_LIST)?.data || [];
+
     try {
-      const masterDepts = cacheService.memoryStore?.get(CACHE_KEYS.DEPT_LIST)?.data || [];
       finalDeptId = resolveDepartmentId(req.body.deptId || deptName || 'D1', masterDepts);
 
-      if (finalMethodId || finalUnitId) {
-        const masterMethods = cacheService.memoryStore?.get(CACHE_KEYS.METHOD_LIST)?.data || [];
-        const masterUnits = cacheService.memoryStore?.get(CACHE_KEYS.UNIT_LIST)?.data || [];
-
-        if (finalMethodId && masterMethods.length > 0) {
-          const cleanM = finalMethodId.toLowerCase();
-          const matchById = masterMethods.find(
-            (m) =>
-              String(m['Method Id'] || m.id || '').trim().toLowerCase() === cleanM ||
-              String(m['Method Id'] || m.id || '').replace(/^M/i, '').toLowerCase() === cleanM.replace(/^M/i, '')
+      if (finalMethodId && masterMethods.length > 0) {
+        const cleanM = finalMethodId.toLowerCase();
+        const matchById = masterMethods.find(
+          (m) =>
+            String(m['Method Id'] || m.id || '').trim().toLowerCase() === cleanM ||
+            String(m['Method Id'] || m.id || '').replace(/^M/i, '').toLowerCase() === cleanM.replace(/^M/i, '')
+        );
+        if (matchById) {
+          finalMethodId = String(matchById['Method Id'] || matchById.id || '').trim();
+        } else {
+          const matchByName = masterMethods.find(
+            (m) => String(m.Name || m.name || '').toLowerCase().trim() === cleanM
           );
-          if (matchById) {
-            finalMethodId = String(matchById['Method Id'] || matchById.id || '').trim();
-          } else {
-            const matchByName = masterMethods.find(
-              (m) => String(m.Name || m.name || '').toLowerCase().trim() === cleanM
-            );
-            if (matchByName) {
-              finalMethodId = String(matchByName['Method Id'] || matchByName.id || '').trim();
-            }
-          }
-        }
-
-        if (finalUnitId) {
-          const cleanU = finalUnitId.toLowerCase();
-          if (masterUnits.length > 0) {
-            const matchById = masterUnits.find(
-              (u) =>
-                String(u['Unit Id'] || u.id || '').trim().toLowerCase() === cleanU ||
-                String(u['Unit Id'] || u.id || '').replace(/^U/i, '').toLowerCase() === cleanU.replace(/^U/i, '')
-            );
-            if (matchById) {
-              finalUnitId = String(matchById['Unit Id'] || matchById.id || '').trim();
-            } else {
-              const matchByName = masterUnits.find(
-                (u) => String(u.Name || u.name || '').toLowerCase().trim() === cleanU
-              );
-              if (matchByName) {
-                finalUnitId = String(matchByName['Unit Id'] || matchByName.id || '').trim();
-              }
-            }
-          }
-          if (!finalUnitId || finalUnitId === cleanU) {
-            const invertedEntry = Object.entries(STATIC_UNIT_MAP).find(
-              ([, v]) => v.toLowerCase().trim() === cleanU
-            );
-            if (invertedEntry) {
-              finalUnitId = invertedEntry[0].toUpperCase();
-            }
+          if (matchByName) {
+            finalMethodId = String(matchByName['Method Id'] || matchByName.id || '').trim();
           }
         }
       }
@@ -1039,10 +1101,13 @@ export const updateReport = async (req, res, next) => {
       // Non-blocking
     }
 
+    // Resolve UNIT to ACTUAL clinical unit name (e.g. 'mIU/ml', 'mg/dl'), NEVER the numeric/master ID (e.g. '55')
+    let finalUnitName = resolveActualUnitName(resolvedUnit || resolvedUnitRef, masterUnits);
+
     let finalRate = rate !== undefined && rate !== null ? String(rate).trim() : '';
     let finalResultData = resultData !== undefined && resultData !== null ? String(resultData) : '';
 
-    if (!finalRate || !finalResultData) {
+    if (!finalRate || !finalResultData || !finalUnitName) {
       try {
         const cached = reportCache.get(cleanPatientId);
         const repList = cached?.data?.reports || [];
@@ -1057,6 +1122,9 @@ export const updateReport = async (req, res, next) => {
           if (finalDeptId === 'D1' && (existingRep.deptId || existingRep.deptName)) {
             finalDeptId = resolveDepartmentId(existingRep.deptId || existingRep.deptName);
           }
+          if (!finalUnitName) {
+            finalUnitName = resolveActualUnitName(existingRep.unit || existingRep.unitref || existingRep.unitName || '', masterUnits);
+          }
         }
       } catch (e) {
         // non-blocking fallback
@@ -1068,16 +1136,16 @@ export const updateReport = async (req, res, next) => {
       deptName: finalDeptId,
       reportId,
       patientId: cleanPatientId,
-      sampleId: sampleId || '',
+      sampleId: String(sampleId || '').trim(),
       testName: testName || '',
       rate: finalRate,
       sampletype: resolvedSampleType,
       sampleType: resolvedSampleType,
       method: finalMethodId,
       refRange: refRange || '',
-      unitref: finalUnitId,
+      unitref: finalUnitName,
       resultData: finalResultData,
-      unit: finalUnitId,
+      unit: finalUnitName,
       comment: comment || '',
     };
 
@@ -1094,8 +1162,9 @@ export const updateReport = async (req, res, next) => {
         rep.status = 'SAVED';
         rep.deptId = finalDeptId;
         rep.method = finalMethodId;
-        rep.unit = finalUnitId;
-        rep.unitref = finalUnitId;
+        rep.unit = finalUnitName;
+        rep.unitref = finalUnitName;
+        rep.unitName = finalUnitName;
         rep.sampletype = resolvedSampleType;
         rep.sampleType = resolvedSampleType;
       }

@@ -71,7 +71,7 @@ export default function ResultsEntry({
   templates = [],
   onRefresh,
 }) {
-  const { tests: masterTests = [], templates: masterTemplateCatalog = [], departments: masterDepartments = [] } = useMaster();
+  const { tests: masterTests = [], templates: masterTemplateCatalog = [], departments: masterDepartments = [], units: masterUnits = [] } = useMaster();
   const [showTemplatesSection, setShowTemplatesSection] = useState(true);
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [deletedTemplateIds, setDeletedTemplateIds] = useState(() => new Set());
@@ -442,6 +442,9 @@ export default function ResultsEntry({
     const current = resultsState[report.reportId] || {};
     const valToSave = current.resultData !== undefined ? current.resultData : (report.resultData || '');
     const commentToSave = current.comment !== undefined ? current.comment : (report.comment || '');
+    const resolvedUnit =
+      formatUnitName(report.unit || report.unitName || report.unitref, masterUnits) ||
+      String(report.unit || report.unitref || '').trim();
 
     try {
       const res = await api.post('/reports/update', {
@@ -453,9 +456,9 @@ export default function ResultsEntry({
         sampletype: report.sampleType || 'Serum',
         method: report.method || '',
         refRange: report.refRange,
-        unitref: report.unit,
+        unitref: resolvedUnit,
         resultData: valToSave,
-        unit: report.unit,
+        unit: resolvedUnit,
         comment: commentToSave,
         profileName: report.profileName || '',
         deptName: resolveDepartmentId(report.deptId || report.deptName || report.department || 'D1', masterDepartments),
@@ -473,6 +476,9 @@ export default function ResultsEntry({
           r.reportId === report.reportId
             ? {
                 ...r,
+                unit: resolvedUnit,
+                unitref: resolvedUnit,
+                unitName: resolvedUnit,
                 resultData: valToSave,
                 comment: commentToSave,
                 status: 'SAVED',
@@ -518,6 +524,9 @@ export default function ResultsEntry({
         const current = resultsState[report.reportId] || {};
         const valToSave = current.resultData !== undefined ? current.resultData : (report.resultData || '');
         const commentToSave = current.comment !== undefined ? current.comment : (report.comment || '');
+        const resolvedUnit =
+          formatUnitName(report.unit || report.unitName || report.unitref, masterUnits) ||
+          String(report.unit || report.unitref || '').trim();
 
         const res = await api.post('/reports/update', {
           reportId: report.reportId,
@@ -528,9 +537,9 @@ export default function ResultsEntry({
           sampletype: report.sampleType || 'Serum',
           method: report.method || '',
           refRange: report.refRange,
-          unitref: report.unit,
+          unitref: resolvedUnit,
           resultData: valToSave,
-          unit: report.unit,
+          unit: resolvedUnit,
           comment: commentToSave,
           profileName: report.profileName || '',
           deptName: resolveDepartmentId(report.deptId || report.deptName || report.department || 'D1', masterDepartments),
@@ -548,8 +557,14 @@ export default function ResultsEntry({
         prev.map((r) => {
           if (savedIds.has(r.reportId)) {
             const current = resultsState[r.reportId] || {};
+            const rUnit =
+              formatUnitName(r.unit || r.unitName || r.unitref, masterUnits) ||
+              String(r.unit || r.unitref || '').trim();
             return {
               ...r,
+              unit: rUnit,
+              unitref: rUnit,
+              unitName: rUnit,
               resultData: current.resultData !== undefined ? current.resultData : r.resultData,
               comment: current.comment !== undefined ? current.comment : r.comment,
               status: 'SAVED',
@@ -639,6 +654,9 @@ export default function ResultsEntry({
       if (dirtyToSave.length > 0) {
         for (const report of dirtyToSave) {
           const current = resultsState[report.reportId] || {};
+          const resolvedUnit =
+            formatUnitName(report.unit || report.unitName || report.unitref, masterUnits) ||
+            String(report.unit || report.unitref || '').trim();
           await api.post('/reports/update', {
             reportId: report.reportId,
             patientId: patient.patientId,
@@ -648,9 +666,9 @@ export default function ResultsEntry({
             sampletype: report.sampleType || 'Serum',
             method: report.method || '',
             refRange: report.refRange,
-            unitref: report.unit,
+            unitref: resolvedUnit,
             resultData: current.resultData !== undefined ? current.resultData : (report.resultData || ''),
-            unit: report.unit,
+            unit: resolvedUnit,
             comment: current.comment !== undefined ? current.comment : (report.comment || ''),
             profileName: report.profileName || '',
             deptName: resolveDepartmentId(report.deptId || report.deptName || report.department || 'D1', masterDepartments),

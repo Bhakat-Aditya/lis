@@ -1304,37 +1304,78 @@ export function getTestOperationPermissions(report = {}, masterTests = []) {
  */
 export const STATIC_UNIT_MAP = {
   u1: 'mg%',
+  '1': 'mg%',
   u2: 'mg/dl',
+  '2': 'mg/dl',
   u3: 'ng/ml',
+  '3': 'ng/ml',
   u4: 'μIU/ml',
+  '4': 'μIU/ml',
   u5: 'ml/minute',
+  '5': 'ml/minute',
   u6: 'u/ml',
+  '6': 'u/ml',
   u7: '/cumm',
+  '7': '/cumm',
   u8: 'millions/cumm',
+  '8': 'millions/cumm',
   u9: 'lakhs/cumm',
+  '9': 'lakhs/cumm',
   u10: '%',
+  '10': '%',
   u11: 'fl',
+  '11': 'fl',
   u12: 'pg',
+  '12': 'pg',
   u13: 'gm/dl',
+  '13': 'gm/dl',
   u14: 'mm/hrs',
+  '14': 'mm/hrs',
   u15: 'mg / L',
+  '15': 'mg / L',
   u16: '10^9/L',
+  '16': '10^9/L',
+  u17: 'gm%',
+  '17': 'gm%',
+  u18: 'Index',
+  '18': 'Index',
+  u19: 'mEq/L',
+  '19': 'mEq/L',
+  u20: 'million/cumm',
+  '20': 'million/cumm',
   u28: '-',
+  '28': '-',
+  u41: 'mm/hrs',
   '41': 'mm/hrs',
+  u42: 'Sec',
   '42': 'Sec',
+  u43: 'U/L',
   '43': 'U/L',
+  u44: 'U/g of HB',
   '44': 'U/g of HB',
+  u45: 'mmol/L',
   '45': 'mmol/L',
+  u46: 'g/dl',
   '46': 'g/dl',
+  u47: 'OD',
   '47': 'OD',
+  u48: 'Pan Bio Unit',
   '48': 'Pan Bio Unit',
+  u49: 'ug/dl',
   '49': 'ug/dl',
+  u50: 'ulU/mL',
   '50': 'ulU/mL',
+  u51: 'pg/ml',
   '51': 'pg/ml',
+  u52: 'ng/dl',
   '52': 'ng/dl',
+  u53: 'μIU/ml',
   '53': 'μIU/ml',
+  u54: 'mg/g creatinine',
   '54': 'mg/g creatinine',
+  u55: 'mIU/ml',
   '55': 'mIU/ml',
+  u56: 'mg/Lit',
   '56': 'mg/Lit',
 };
 
@@ -1361,29 +1402,36 @@ export function formatUnitName(rawUnit, masterUnits = []) {
   let clean = sanitizeScientificUnit(String(rawUnit));
   if (!clean || clean === '-') return clean;
 
+  const cleanLower = clean.toLowerCase();
+  const cleanNoU = cleanLower.replace(/^u/i, '');
+  const cleanWithU = `u${cleanNoU}`;
+
   // 1. Dynamic lookup against active masterUnits catalog if provided
   if (Array.isArray(masterUnits) && masterUnits.length > 0) {
-    const cleanLower = clean.toLowerCase();
-    const cleanNoU = cleanLower.replace(/^u/i, '');
-    const found = masterUnits.find((u) => {
+    const foundById = masterUnits.find((u) => {
       const uId = String(u['Unit Id'] || u.id || '').trim().toLowerCase();
       const uNoU = uId.replace(/^u/i, '');
-      return uId === cleanLower || (uNoU && cleanNoU && uNoU === cleanNoU);
+      return uId === cleanLower || uId === cleanNoU || (uNoU && cleanNoU && uNoU === cleanNoU);
     });
-    if (found && (found.Name || found.name)) {
-      const foundName = sanitizeScientificUnit(String(found.Name || found.name));
+    if (foundById && (foundById.Name || foundById.name)) {
+      const foundName = sanitizeScientificUnit(String(foundById.Name || foundById.name));
+      if (foundName) return foundName;
+    }
+
+    const foundByName = masterUnits.find((u) => {
+      const name = String(u.Name || u.name || '').trim().toLowerCase();
+      return name === cleanLower;
+    });
+    if (foundByName && (foundByName.Name || foundByName.name)) {
+      const foundName = sanitizeScientificUnit(String(foundByName.Name || foundByName.name));
       if (foundName) return foundName;
     }
   }
 
   // 2. High-speed lookup against static unit catalog
-  const lower = clean.toLowerCase();
-  if (STATIC_UNIT_MAP[lower]) {
-    return sanitizeScientificUnit(STATIC_UNIT_MAP[lower]);
-  }
-  const noU = lower.replace(/^u/i, '');
-  if (STATIC_UNIT_MAP[noU]) {
-    return sanitizeScientificUnit(STATIC_UNIT_MAP[noU]);
+  const staticFound = STATIC_UNIT_MAP[cleanLower] || STATIC_UNIT_MAP[cleanNoU] || STATIC_UNIT_MAP[cleanWithU];
+  if (staticFound) {
+    return sanitizeScientificUnit(staticFound);
   }
 
   return clean;
