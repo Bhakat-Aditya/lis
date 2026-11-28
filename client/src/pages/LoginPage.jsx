@@ -273,7 +273,9 @@ export default function LoginPage() {
 
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/90 border border-slate-700/80 text-[11px] font-semibold text-slate-200 shadow-xs">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="hidden sm:inline">NABL M(EL)T Aligned &bull; ISO 9001:2015</span>
+          <span className="hidden sm:inline">
+            NABL <span className="text-[8px] font-normal tracking-tight opacity-50 px-0.5 inline-block">M(EL)T</span> Aligned &bull; ISO 9001:2015
+          </span>
           <span className="sm:hidden">NABL Aligned</span>
         </div>
       </header>
@@ -310,9 +312,11 @@ export default function LoginPage() {
 
           {/* Accreditation Banner Badge */}
           <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-900/60 via-slate-900/70 to-red-950/40 border border-white/10 backdrop-blur-md shadow-lg space-y-1.5">
-            <div className="flex items-center gap-2 text-xs font-bold text-amber-300 uppercase tracking-wide">
+            <div className="flex items-center gap-2 text-xs font-bold text-white uppercase tracking-wide">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>NABL M(EL)T Accredited &amp; ISO 9001 : 2015 Certified Laboratory</span>
+              <span>
+                NABL <span className="text-[8px] font-normal tracking-tight opacity-50 px-0.5 inline-block">M(EL)T</span> Accredited &amp; ISO 9001 : 2015 Certified Laboratory
+              </span>
             </div>
             <p className="text-xs text-slate-300 leading-relaxed">
               State-of-the-art pathology, automated biochemistry analyzers, digital imaging, and computer-interfaced laboratory information systems serving Midnapore Town and clinical network.
