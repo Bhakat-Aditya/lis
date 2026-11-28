@@ -3,7 +3,7 @@ import Modal from '../common/Modal.jsx';
 import api from '../../services/api.js';
 import { useMaster } from '../../context/context.master.jsx';
 import { Save, X, Loader2, FlaskConical, AlertCircle, CheckCircle } from 'lucide-react';
-import { formatUnitName, getDepartmentDisplayName, sanitizeScientificUnit, resolveDepartmentId } from '../../utils/labTestUtils.js';
+import { formatUnitName, getDepartmentDisplayName, sanitizeScientificUnit, resolveDepartmentId, resolveUnitId } from '../../utils/labTestUtils.js';
 
 // Standard specimen types common in clinical diagnostics
 const DEFAULT_SAMPLE_TYPES = [
@@ -67,17 +67,6 @@ export default function EditIndividualReportModal({
     [masterMethods]
   );
 
-  // Helper function to resolve human-readable Unit Name (e.g. 'mIU/ml', 'mg/dl') from ID or Name
-  const resolveUnitName = useCallback(
-    (val) => {
-      if (!val && val !== 0) return '';
-      const clean = sanitizeScientificUnit(String(val));
-      if (!clean || clean === '-') return clean;
-      return formatUnitName(clean, masterUnits) || clean;
-    },
-    [masterUnits]
-  );
-
   // Form state without price and resultData as requested
   const [formData, setFormData] = useState({
     testName: '',
@@ -100,14 +89,14 @@ export default function EditIndividualReportModal({
     if (isOpen && report) {
       const initialSampleType = report.sampleType || report.sampletype || 'Serum';
       const initialMethodId = resolveMethodId(report.method);
-      const initialUnit = resolveUnitName(report.unit || report.unitName || report.unitref);
+      const initialUnitId = resolveUnitId(report.unitId || report.unitCode || report.unit || report.unitref, masterUnits);
 
       setFormData({
         testName: report.testName || '',
         sampleType: initialSampleType,
         method: initialMethodId,
         refRange: report.refRange || '',
-        unit: initialUnit,
+        unit: initialUnitId,
         comment: report.comment || '',
       });
 
@@ -124,7 +113,7 @@ export default function EditIndividualReportModal({
       setError('');
       setSuccess('');
     }
-  }, [isOpen, report, masterMethods, masterUnits, resolveMethodId, resolveUnitName]);
+  }, [isOpen, report, masterMethods, masterUnits, resolveMethodId]);
 
   if (!isOpen || !report) return null;
 
@@ -152,9 +141,9 @@ export default function EditIndividualReportModal({
         : '';
 
       const finalMethodId = resolveMethodId(formData.method);
-      const finalUnit = resolveUnitName(formData.unit);
+      const finalUnitId = resolveUnitId(formData.unit, masterUnits);
 
-      // Build UPDATEREPORT payload: pass Master ID for method, and clinical unit name for unit & unitref
+      // Build UPDATEREPORT payload: pass Master ID for method and unit (as required by UPDATEREPORT)
       // Preserve existing report rate & resultData without requiring edit in UI
       const existingRate =
         report.rate !== undefined && report.rate !== null && String(report.rate).trim() !== ''
@@ -178,16 +167,17 @@ export default function EditIndividualReportModal({
         api: 'UPDATEREPORT',
         reportId: report.reportId,
         patientId: cleanPid || patientId,
-        sampleId: report.sampleId || patient?.slNo || '',
+        sampleId: String(report.sampleId || patient?.slNo || '').trim(),
         testName: formData.testName.trim(),
         rate: existingRate,
         sampletype: formData.sampleType.trim() || report.sampleType || report.sampletype || '-',
         sampleType: formData.sampleType.trim() || report.sampleType || report.sampletype || '-',
         method: finalMethodId,
         refRange: formData.refRange.trim(),
-        unitref: finalUnit,
+        unitref: finalUnitId,
         resultData: existingResultData,
-        unit: finalUnit,
+        unit: finalUnitId,
+        unitId: finalUnitId,
         comment: formData.comment.trim(),
         profileName: report.profileName || '',
         deptName: resolveDepartmentId(report.deptId || report.deptName || report.department || 'D1', masterDepartments),
@@ -199,7 +189,14 @@ export default function EditIndividualReportModal({
       if (res.data?.STATUS === 'SUCCESS' || res.data?.StatusCode === '0000') {
         setSuccess('Test parameter updated successfully!');
         if (onSaveSuccess) {
-          onSaveSuccess({ ...report, ...payload });
+          onSaveSuccess({
+            ...report,
+            ...payload,
+            unit: formatUnitName(finalUnitId, masterUnits) || report.unit,
+            unitName: formatUnitName(finalUnitId, masterUnits) || report.unitName || report.unit,
+            unitId: finalUnitId,
+            unitCode: finalUnitId,
+          });
         }
         setTimeout(() => {
           onClose();
@@ -405,7 +402,7 @@ export default function EditIndividualReportModal({
 
             <div>
               <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                UNIT
+                UNIT (MASTER ID)
               </label>
               <select
                 value={formData.unit}
@@ -418,16 +415,16 @@ export default function EditIndividualReportModal({
                   const uId = String(u['Unit Id'] || u.id || '').trim();
                   const rawName = String(u.Name || u.name || '').trim() || formatUnitName(uId);
                   const uName = sanitizeScientificUnit(rawName);
-                  if (!uName) return null;
+                  if (!uId) return null;
                   return (
-                    <option key={uId || uName} value={uName} style={{ fontFamily: 'Arial, sans-serif' }}>
+                    <option key={uId} value={uId} style={{ fontFamily: 'Arial, sans-serif' }}>
                       {uName}
                     </option>
                   );
                 })}
-                {Boolean(formData.unit) && !masterUnits.some((u) => sanitizeScientificUnit(u.Name || u.name || formatUnitName(u['Unit Id'] || u.id)) === formData.unit) && (
+                {Boolean(formData.unit) && !masterUnits.some((u) => String(u['Unit Id'] || u.id) === String(formData.unit)) && (
                   <option value={formData.unit} style={{ fontFamily: 'Arial, sans-serif' }}>
-                    {formData.unit}
+                    {formatUnitName(formData.unit, masterUnits) || formData.unit}
                   </option>
                 )}
               </select>

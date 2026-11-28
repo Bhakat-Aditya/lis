@@ -1394,6 +1394,53 @@ export function sanitizeScientificUnit(text) {
 }
 
 /**
+ * Resolves any unit input (clinical unit string like 'ng/ml', 'mIU/ml', or code)
+ * into its Master Unit ID (e.g. '9', '55', 'U13', '2') as required by UPDATEREPORT.
+ */
+export function resolveUnitId(rawUnit, masterUnits = []) {
+  if (!rawUnit && rawUnit !== 0) return '';
+  let clean = sanitizeScientificUnit(String(rawUnit));
+  if (!clean || clean === '-') return clean;
+
+  const cleanLower = clean.toLowerCase();
+  const cleanNoU = cleanLower.replace(/^u/i, '');
+
+  if (Array.isArray(masterUnits) && masterUnits.length > 0) {
+    const matchById = masterUnits.find((u) => {
+      const uId = String(u['Unit Id'] || u.id || '').trim().toLowerCase();
+      const uNoU = uId.replace(/^u/i, '');
+      return uId === cleanLower || uId === cleanNoU || (uNoU && cleanNoU === uNoU);
+    });
+    if (/^\d+$/.test(cleanNoU) && matchById) {
+      return clean.startsWith('U') || clean.startsWith('u')
+        ? clean.toUpperCase()
+        : String(matchById['Unit Id'] || matchById.id).trim();
+    }
+
+    const matchByName = masterUnits.find((u) => {
+      const name = String(u.Name || u.name || '').trim().toLowerCase();
+      return name === cleanLower || name.replace(/[\s/]/g, '') === cleanLower.replace(/[\s/]/g, '');
+    });
+    if (matchByName) {
+      return String(matchByName['Unit Id'] || matchByName.id).trim();
+    }
+  }
+
+  if (STATIC_UNIT_MAP[cleanLower] && /^\d+$/.test(cleanNoU)) {
+    return clean;
+  }
+
+  for (const [k, v] of Object.entries(STATIC_UNIT_MAP)) {
+    const vLower = String(v).toLowerCase().trim();
+    if (vLower === cleanLower || vLower.replace(/[\s/]/g, '') === cleanLower.replace(/[\s/]/g, '')) {
+      return k.toUpperCase();
+    }
+  }
+
+  return clean;
+}
+
+/**
  * Formats any raw unit identifier into its human-readable clinical unit name.
  * Resolves codes like 'U2' -> 'mg/dl', 'U13' -> 'gm/dl', 'U1' -> 'mg%', 'U11' -> 'fl'.
  */

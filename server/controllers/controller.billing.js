@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { upstreamService, UPSTREAM_ERROR_MAP } from '../services/service.upstream.js';
-import { invalidateReportCache, getCachedReport, resolveDepartmentId, resolveActualUnitName } from './controller.report.js';
+import { invalidateReportCache, getCachedReport, resolveDepartmentId, resolveUnitId } from './controller.report.js';
 import { invalidatePatientListCache, fetchUpstreamPatientList, resolvePatientIdBySlNo } from './controller.patient.js';
 
 // In-flight deduplication and short-lived caching for billing list and bill JSON (15s TTL)
@@ -528,7 +528,7 @@ export const updateBill = async (req, res, next) => {
             String(r.profileName || '').toLowerCase().trim() === itName
         );
         if (matchedRep && parseFloat(matchedRep.rate) !== parseFloat(item.amount)) {
-          const resolvedU = resolveActualUnitName(matchedRep.unit || matchedRep.unitref || matchedRep.unitName || '');
+          const finalUId = resolveUnitId(matchedRep.unitId || matchedRep.unitCode || matchedRep.unitref || matchedRep.unit || '');
           await upstreamService.post(
             'UPDATEREPORT',
             {
@@ -536,8 +536,8 @@ export const updateBill = async (req, res, next) => {
               deptName: resolveDepartmentId(matchedRep.deptId || matchedRep.deptName || 'D1'),
               patientId: cleanPatientId,
               rate: String(item.amount),
-              unit: resolvedU || matchedRep.unit || '',
-              unitref: resolvedU || matchedRep.unitref || matchedRep.unit || '',
+              unit: finalUId || matchedRep.unitId || matchedRep.unit || '',
+              unitref: finalUId || matchedRep.unitref || matchedRep.unit || '',
             },
             null,
             req.user?.upstreamSid

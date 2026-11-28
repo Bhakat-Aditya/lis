@@ -7,6 +7,7 @@ import { invalidatePatientListCache, resolvePatientIdBySlNo } from './controller
 import { cacheService, CACHE_KEYS } from '../services/service.cache.js';
 import { orderExamObject } from '../services/service.templateSequence.js';
 import { templateStore } from '../services/service.templateStore.js';
+import { DEFAULT_UNITS } from '../services/service.defaults.js';
 
 // Deduplication and short-lived cache (5s) to eliminate duplicate calls
 const reportCache = new Map();
@@ -109,9 +110,62 @@ export const resolveReadableUnit = (raw, customMap = {}) => {
 };
 
 /**
+ * Resolves any raw unit input (unit string like 'ng/ml', 'mIU/ml', or ID like '55', 'U13')
+ * into the upstream Master Unit ID (e.g. '9', '55', 'U13', '2').
+ * Ensures upstream UPDATEREPORT ALWAYS receives the Master Unit ID, as required by the backend.
+ */
+export const resolveUnitId = (raw, masterUnits = []) => {
+  if (!raw && raw !== 0) return '';
+  let clean = String(raw).trim();
+  clean = clean.replace(/[\uFFFD\u00BF\uFEFF]/g, 'μ').replace(/^\?iu/i, 'μIU');
+  if (!clean || clean === '-') return clean;
+
+  const cleanLower = clean.toLowerCase();
+  const cleanNoU = cleanLower.replace(/^u/i, '');
+
+  const unitsList =
+    Array.isArray(masterUnits) && masterUnits.length > 0
+      ? masterUnits
+      : cacheService.memoryStore?.get(CACHE_KEYS.UNIT_LIST)?.data || DEFAULT_UNITS || [];
+
+  if (Array.isArray(unitsList) && unitsList.length > 0) {
+    const matchById = unitsList.find((u) => {
+      const uId = String(u['Unit Id'] ?? u.id ?? '').trim().toLowerCase();
+      const uNoU = uId.replace(/^u/i, '');
+      return uId === cleanLower || uId === cleanNoU || (uNoU && cleanNoU === uNoU);
+    });
+    if (/^\d+$/.test(cleanNoU) && matchById) {
+      return clean.startsWith('U') || clean.startsWith('u')
+        ? clean.toUpperCase()
+        : String(matchById['Unit Id'] ?? matchById.id).trim();
+    }
+
+    const matchByName = unitsList.find((u) => {
+      const name = String(u.Name ?? u.name ?? '').trim().toLowerCase();
+      return name === cleanLower || name.replace(/[\s/]/g, '') === cleanLower.replace(/[\s/]/g, '');
+    });
+    if (matchByName) {
+      return String(matchByName['Unit Id'] ?? matchByName.id).trim();
+    }
+  }
+
+  if (STATIC_UNIT_MAP[cleanLower] && /^\d+$/.test(cleanNoU)) {
+    return clean;
+  }
+
+  for (const [k, v] of Object.entries(STATIC_UNIT_MAP)) {
+    const vLower = String(v).toLowerCase().trim();
+    if (vLower === cleanLower || vLower.replace(/[\s/]/g, '') === cleanLower.replace(/[\s/]/g, '')) {
+      return k.toUpperCase();
+    }
+  }
+
+  return clean;
+};
+
+/**
  * Resolves any raw unit input (numeric ID like '55', code like 'U2', or unit string like 'mIU/ml')
  * into the human-readable clinical unit name (e.g. 'mIU/ml').
- * Ensures upstream UPDATEREPORT ALWAYS receives the actual unit string, NEVER the master/numeric ID.
  */
 export const resolveActualUnitName = (raw, masterUnits = []) => {
   if (!raw && raw !== 0) return '';
@@ -1101,13 +1155,14 @@ export const updateReport = async (req, res, next) => {
       // Non-blocking
     }
 
-    // Resolve UNIT to ACTUAL clinical unit name (e.g. 'mIU/ml', 'mg/dl'), NEVER the numeric/master ID (e.g. '55')
-    let finalUnitName = resolveActualUnitName(resolvedUnit || resolvedUnitRef, masterUnits);
+    // Resolve UNIT to its MASTER/NUMERIC UNIT ID (e.g. '55', '9', 'U13', '2') as required by UPDATEREPORT
+    let finalUnitId = resolveUnitId(req.body.unitId || resolvedUnit || resolvedUnitRef, masterUnits);
+    let resolvedUnitName = resolveReadableUnit(finalUnitId || resolvedUnit || resolvedUnitRef);
 
     let finalRate = rate !== undefined && rate !== null ? String(rate).trim() : '';
     let finalResultData = resultData !== undefined && resultData !== null ? String(resultData) : '';
 
-    if (!finalRate || !finalResultData || !finalUnitName) {
+    if (!finalRate || !finalResultData || !finalUnitId) {
       try {
         const cached = reportCache.get(cleanPatientId);
         const repList = cached?.data?.reports || [];
@@ -1122,8 +1177,9 @@ export const updateReport = async (req, res, next) => {
           if (finalDeptId === 'D1' && (existingRep.deptId || existingRep.deptName)) {
             finalDeptId = resolveDepartmentId(existingRep.deptId || existingRep.deptName);
           }
-          if (!finalUnitName) {
-            finalUnitName = resolveActualUnitName(existingRep.unit || existingRep.unitref || existingRep.unitName || '', masterUnits);
+          if (!finalUnitId) {
+            finalUnitId = resolveUnitId(existingRep.unitId || existingRep.unitCode || existingRep.unitref || existingRep.unit || existingRep.unitName || '', masterUnits);
+            resolvedUnitName = resolveReadableUnit(finalUnitId);
           }
         }
       } catch (e) {
@@ -1143,9 +1199,9 @@ export const updateReport = async (req, res, next) => {
       sampleType: resolvedSampleType,
       method: finalMethodId,
       refRange: refRange || '',
-      unitref: finalUnitName,
+      unitref: finalUnitId,
       resultData: finalResultData,
-      unit: finalUnitName,
+      unit: finalUnitId,
       comment: comment || '',
     };
 
@@ -1162,9 +1218,11 @@ export const updateReport = async (req, res, next) => {
         rep.status = 'SAVED';
         rep.deptId = finalDeptId;
         rep.method = finalMethodId;
-        rep.unit = finalUnitName;
-        rep.unitref = finalUnitName;
-        rep.unitName = finalUnitName;
+        rep.unit = resolvedUnitName || finalUnitId;
+        rep.unitId = finalUnitId;
+        rep.unitCode = finalUnitId;
+        rep.unitref = finalUnitId;
+        rep.unitName = resolvedUnitName || finalUnitId;
         rep.sampletype = resolvedSampleType;
         rep.sampleType = resolvedSampleType;
       }
